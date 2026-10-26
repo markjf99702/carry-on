@@ -897,6 +897,60 @@ test('cleaning keeps junk out', () => {
   assert.deepEqual(doc.prefs, {});
 });
 
+test('ids that are names every JavaScript object has can’t stop a trip opening or a sync saving', async () => {
+  const JS = ['__proto__', 'constructor', 'toString', 'hasOwnProperty', 'valueOf'];
+  // A link thing that stays home "unless __proto__", and an occasion called "toString" that a suit comes for.
+  const link1 = await encodeList({ bags: [{ id: 'b1', name: 'Clothes' }], items: [{ id: 'i1', name: 'Socks', bag: 'b1', unless: ['__proto__'] }, { id: 'i2', name: 'Shirt', bag: 'b1' }, { id: 'toString', name: 'Tie', bag: 'b1' }], tags: [] });
+  const link2 = await encodeList({ bags: [{ id: 'b1', name: 'Clothes' }, { id: 'constructor', name: 'Shoes' }], items: [{ id: 'i1', name: 'Suit', bag: 'b1', when: ['toString'] }], tags: [{ id: 'toString', name: 'Wedding', icon: '💍' }] });
+  for (const code of [link1, link2]) {
+    const list = await decodeList(code);
+    assert.ok([...list.bags, ...list.items, ...list.tags].every(x => !JS.includes(x.id)), 'none of those ids come in');
+    assert.ok(list.items.every(x => ![...x.when, ...x.unless].some(k => JS.includes(k))));
+    for (const doc of [M.replaceList(starter(), list), M.addList(starter(), list)]) {
+      const d = trip(doc, {});
+      for (const mode of ['go', 'back']) assert.doesNotThrow(() => plan(d, d.trips.t1, mode));
+      assert.ok(allNames(plan(d, d.trips.t1)).includes(list.items[0].name), 'and the thing comes along');
+    }
+  }
+  // A copy that holds one anyway (from before this), on one side of a merge only: what's saved is still JSON.
+  const base = trip(starter(), {});
+  const odd = { ...base, trips: { t1: { ...base.trips.t1, set: { toString: { v: true, t: 5 } }, marks: { 'p:constructor': { v: 1, t: 5 } } } } };
+  for (const m of [M.mergeDocs(odd, base), M.mergeDocs(base, odd)]) {
+    const text = M.canon(m);
+    assert.doesNotThrow(() => JSON.parse(text), text.slice(0, 80));
+    assert.deepEqual(M.cleanDoc(JSON.parse(text)).trips.t1.set, {}, 'and reads back without it');
+  }
+  assert.equal(M.canon({ a: () => 1, b: [undefined, 2] }), '{"a":null,"b":[null,2]}');
+  // Straight from storage or Drive, as JSON reads it.
+  const raw = JSON.parse('{"bags":{"__proto__":{"name":"Bag"},"b1":{"name":"Bag","when":["toString","rain"]}},"items":{"constructor":{"name":"X","bag":"b1"},"i1":{"name":"Y","bag":"toString"}},"tags":{"valueOf":{"name":"V"}},"trips":{"t1":{"start":"2026-11-02","end":"2026-11-03","set":{"__proto__":{"v":true,"t":1}},"marks":{"x:toString":{"v":"skip","t":1},"b:i2":{"v":"toString","t":1}},"extras":{"hasOwnProperty":{"name":"E","bag":"b1"}}}}}');
+  const doc = M.cleanDoc(raw);
+  assert.deepEqual(Object.keys(doc.bags), ['b1']);
+  assert.deepEqual(doc.bags.b1.when, ['rain']);
+  assert.deepEqual(doc.items, {});
+  assert.equal(Object.getPrototypeOf(doc.bags), Object.prototype);
+  assert.deepEqual(Object.keys(doc.tags).filter(k => JS.includes(k)), []);
+  assert.deepEqual([doc.trips.t1.set, doc.trips.t1.marks, doc.trips.t1.extras], [{}, {}, {}]);
+});
+
+test('junk settings and names read back as nothing, or as the same', () => {
+  for (const prefs of [{ home: null }, { laundry: 0 }, { laundry: '' }, { units: false }, { home: 'US' }, { laundry: { v: 0, t: 3 } }]) {
+    const doc = M.cleanDoc({ prefs });
+    assert.ok(laundryOk(doc), JSON.stringify(prefs));
+  }
+  assert.deepEqual(M.cleanDoc({ prefs: { home: null, laundry: 0, units: '' } }).prefs, {});
+  assert.deepEqual(M.cleanDoc({ prefs: { laundry: { v: 0, t: 3 } } }).prefs, { laundry: { v: 1, t: 3 } }, 'a laundry limit of 0 is 1');
+  // A long name is cut whole: no space left at its end, and no emoji cut in half.
+  const long = M.cleanItem({ name: '  ' + 'a'.repeat(79) + ' b', bag: 'b1' }, 'i1').name;
+  assert.equal(long, 'a'.repeat(79));
+  const emoji = M.cleanItem({ name: 'a'.repeat(79) + '😀 and more', bag: 'b1' }, 'i1').name;
+  assert.equal(emoji, 'a'.repeat(79) + '😀');
+  assert.equal(M.cleanBag({ name: 'Bag', icon: '👨‍👩‍👧' }, 'b1').icon, '👨‍👩‍👧');
+  const once = M.cleanDoc({ items: { i1: { name: 'x '.repeat(50) + '🧦'.repeat(40), bag: 'b1' } }, bags: { b1: { name: ' Bag  of   things ' } } });
+  assert.equal(once.bags.b1.name, 'Bag of things');
+  assert.equal(M.canon(M.cleanDoc(once)), M.canon(once), 'cleaning again changes nothing');
+});
+const laundryOk = doc => { const n = qtyOf(doc, { start: T, end: add(T, 9) }, { per: 'day' }); return Number.isInteger(n) && n >= 1; };
+
 // ---------- lists coming in ----------
 
 const KEEP = `Weekend list [updated]

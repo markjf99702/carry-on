@@ -25,8 +25,8 @@ export const AUTO_KEYS = ['abroad', 'plug', 'hot', 'cool', 'cold', 'rain', 'snow
 
 // A condition's name and icon, an occasion's too. Unknown keys (an occasion deleted since) read as gone.
 export function condInfo(doc, k) {
-  if (BY_KEY[k]) return BY_KEY[k];
-  const g = doc.tags[k];
+  if (Object.hasOwn(BY_KEY, k)) return BY_KEY[k];
+  const g = Object.hasOwn(doc.tags, k) ? doc.tags[k] : null;
   return g && !M.gone(g) ? { k, icon: g.icon, name: g.name, group: 'Occasions' } : null;
 }
 

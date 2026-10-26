@@ -26,8 +26,13 @@ export const APP = 'carry-on';
 export const KINDS = ['bag', 'leave', 'back'];
 export const TRAVEL = ['fly', 'drive', 'train'];
 
-const str = (s, max) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
-const idOk = id => typeof id === 'string' && /^[\w-]{1,48}$/.test(id);
+// Spaces run together, and cut to max characters whole, so an emoji isn't split in half.
+const str = (s, max) => Array.from(String(s ?? '').replace(/\s+/g, ' ').trimStart()).slice(0, max).join('').trimEnd();
+// Not a name every JavaScript object already has ('__proto__', 'toString'): read back from an object, it would
+// find that instead. Ids made here never look like one.
+const idOk = id => typeof id === 'string' && /^[\w-]{1,48}$/.test(id) && !(id in Object.prototype);
+// A record of a map by its key, only if the map itself has one.
+const own = (m, k) => (m && Object.hasOwn(m, k) ? m[k] : undefined);
 const tOk = t => (Number.isFinite(+t) && +t >= 0 ? Math.floor(+t) : 0);
 const numOk = (x, lo, hi) => (Number.isFinite(+x) && x !== null && x !== '' ? Math.min(hi, Math.max(lo, +x)) : null);
 const isDay = s => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !isNaN(Date.parse(s + 'T00:00:00Z'));
@@ -136,7 +141,7 @@ function cleanMap(x, clean, keyOk = idOk) {
   for (const [k, v] of Object.entries(obj(x))) { const c = keyOk(k) && clean(v, k); if (c) out[k] = c; }
   return out;
 }
-const markKey = k => /^[prxb]:[\w-]{1,48}$/.test(k);
+const markKey = k => /^[prxb]:/.test(k) && idOk(k.slice(2));
 const cleanExtra = (x, id) => {
   const name = str(x?.name, 80);
   if (!name || !idOk(x.bag)) return null;
@@ -168,17 +173,18 @@ export function cleanDoc(raw) {
   const take = (name, clean) => { if (raw[name] && typeof raw[name] === 'object') doc[name] = { ...(name === 'tags' ? doc.tags : {}), ...cleanMap(raw[name], clean) }; };
   take('bags', cleanBag); take('items', cleanItem); take('tags', cleanTag); take('trips', cleanTrip);
   for (const [k, ok] of Object.entries(PREFS)) {
-    const p = raw.prefs?.[k], v = p && ok(p.v);
+    const p = raw.prefs?.[k], v = p && typeof p === 'object' ? ok(p.v) : undefined;
     if (v !== undefined) doc.prefs[k] = { v, t: tOk(p.t) };
   }
   return doc;
 }
 
-// JSON with the keys sorted, so the same data always gives the same text.
+// JSON with the keys sorted, so the same data always gives the same text. Anything JSON has no word for (a
+// function) is null, so what's saved always reads back.
 export function canon(x) {
   if (Array.isArray(x)) return '[' + x.map(canon).join(',') + ']';
   if (x && typeof x === 'object') return '{' + Object.keys(x).sort().filter(k => x[k] !== undefined).map(k => JSON.stringify(k) + ':' + canon(x[k])).join(',') + '}';
-  return JSON.stringify(x ?? null);
+  return JSON.stringify(x ?? null) ?? 'null';
 }
 
 // ---------- reading ----------
@@ -209,7 +215,7 @@ const details = x => { const o = { ...x }; delete o.del; for (const n of NESTED)
 function mergeMap(a = {}, b = {}) {
   const out = {};
   for (const k of [...new Set([...Object.keys(a), ...Object.keys(b)])].sort()) {
-    const x = a[k], y = b[k];
+    const x = own(a, k), y = own(b, k);
     out[k] = !x ? y : !y ? x : x.del || y.del || x.name !== undefined ? mergeRec(x, y) : newer(x, y) ? x : y;
   }
   return out;
@@ -258,7 +264,7 @@ const untouched = x => x.t === 0;
 //     so that thing still shows.
 export function mergeDocs(local, remote, { first = false } = {}) {
   const out = { app: APP, v: 1 };
-  const bagMap = {}, itemMap = {};
+  const bagMap = Object.create(null), itemMap = Object.create(null);
   for (const name of ['bags', 'items', 'tags', 'trips']) {
     let a = { ...local[name] };
     const b = remote[name];
@@ -267,8 +273,8 @@ export function mergeDocs(local, remote, { first = false } = {}) {
       const same = name === 'bags' ? (x, y) => norm(x.name) === norm(y.name) && x.kind === y.kind : (x, y) => norm(x.name) === norm(y.name) && x.bag === y.bag;
       const taken = new Set();
       for (const [id, x] of Object.entries(a)) {
-        if (gone(x) || b[id]) continue;
-        const match = Object.values(b).find(y => !gone(y) && !a[y.id] && !taken.has(y.id) && same(x, y));
+        if (gone(x) || own(b, id)) continue;
+        const match = Object.values(b).find(y => !gone(y) && !own(a, y.id) && !taken.has(y.id) && same(x, y));
         if (!match) continue;
         taken.add(match.id);
         delete a[id];
@@ -287,7 +293,7 @@ export function mergeDocs(local, remote, { first = false } = {}) {
     }
     const merged = {};
     for (const id of [...new Set([...Object.keys(a), ...Object.keys(b)])].sort()) {
-      const x = a[id], y = b[id];
+      const x = own(a, id), y = own(b, id);
       let m = !x ? y : !y ? x : mergeRec(x, y);
       if (first && name !== 'tags') {
         const keep = [x, y].find(z => z && !gone(z));
@@ -300,7 +306,7 @@ export function mergeDocs(local, remote, { first = false } = {}) {
   }
   const prefs = {};
   for (const k of new Set([...Object.keys(local.prefs || {}), ...Object.keys(remote.prefs || {})])) {
-    const x = local.prefs?.[k], y = remote.prefs?.[k];
+    const x = own(local.prefs, k), y = own(remote.prefs, k);
     prefs[k] = !x ? y : !y ? x : newer(x, y) ? x : y;
   }
   out.prefs = prefs;
