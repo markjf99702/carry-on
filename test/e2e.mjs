@@ -1376,6 +1376,34 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await ctx.close();
 }
 
+// ================= Big enough to tap =================
+// The Web Content Accessibility Guidelines ask for 44 by 44 CSS px (WCAG 2.2, 2.5.5 Target Size, Enhanced); chips and
+// small buttons are 40 tall, as much as the look allows, and everything is well over the 24 of 2.5.8.
+{
+  const { ctx, page } = await phone();
+  await page.click('text=Start with a starter list');
+  await planTrip(page, { where: 'Lisb', from: 3, to: 7 });
+  await page.waitForSelector('.wx-days li');
+  await page.click('.left-head');
+  const under = (sel, w, h) => page.evaluate(([sel, w, h]) => [...document.querySelectorAll(sel)].filter(el => el.getClientRects().length)
+    .map(el => { const r = el.getBoundingClientRect(); return [el.getAttribute('aria-label') || el.textContent.trim(), Math.round(r.width), Math.round(r.height)]; })
+    .filter(([, rw, rh]) => rw < w || rh < h), [sel, w, h]);
+  assert.deepEqual(await under('main .crumb, main .mode button, main label.switch, main .row .more, main .bag-done', 44, 44), []);
+  assert.deepEqual(await under('main .btn.small, main .chip', 0, 40), []);
+  // The weather's and each bag's small round buttons look 36 across, but take a tap 44 across.
+  assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('main .icon-btn.small')].map(b => b.offsetWidth - 2 * parseFloat(getComputedStyle(b, '::before').left)).filter(w => w < 44)), []);
+  await page.click('.needs-head .btn');
+  await until(() => sheetOpen(page), 'the conditions sheet');
+  assert.deepEqual(await under('#sheet .seg.tiny button', 48, 40), [], 'Auto, Yes and No');
+  assert.deepEqual(await under('#sheet .seg:not(.tiny) button, #sheet .sheet-top .icon-btn', 0, 44), []);
+  assert.deepEqual(await under('#sheet .chip', 0, 40), []);
+  await closeSheet(page);
+  await page.click('text=Add something for this trip');
+  await until(() => sheetOpen(page), 'the sheet');
+  assert.deepEqual(await under('#sheet label.check', 0, 44), [], 'Put it on my list for every trip');
+  await ctx.close();
+}
+
 // ================= Two phones, one Google Drive =================
 {
   const g = fakeGoogle();
