@@ -9,7 +9,7 @@ import { drive } from './sync.js';
 import { starterList } from './starter.js';
 import { parsePaste, encodeList, decodeList, guess, bagIcon } from './share.js';
 import { PLUGS, countryName } from './plugs.js';
-import { h, ICONS, toast, sheet, closeSheet, setupSheet, confirmBtn } from './ui.js';
+import { h, ICONS, toast, sheet, closeSheet, setupSheet, confirmBtn, pressedKey, byKey } from './ui.js';
 
 export const SITE = 'https://carry-on.junkdrawer.works/';
 const main = document.getElementById('app');
@@ -53,21 +53,37 @@ function render() {
     if (!history.state || !('from' in history.state)) remember({ from: lastHash, before: lastFrom });
     lastHash = hash; lastFrom = history.state?.from ?? '';
   }
-  // Focus, where the cursor was in a text box, and anything half-typed in an add box come through the redraw.
+  // Focus, where the cursor was in a text box, and anything half-typed in an add box come through the redraw. The
+  // focus goes back to the control with the same key (the one tapped, in Safari), and if that's gone (left off,
+  // packed, deleted), to the nearest one still there.
   const was = document.activeElement;
-  const key = was?.dataset?.key, fid = !moved && !key && main.contains(was) ? was.id : '';
+  const key = moved ? '' : pressedKey(main), fid = !moved && !key && main.contains(was) ? was.id : '';
+  const near = key ? around(byKey(main, key)) : [];
   const caret = was?.selectionStart != null ? [was.selectionStart, was.selectionEnd] : null;
-  const typed = moved ? [] : [...main.querySelectorAll('input[data-key]')].filter(x => x.value).map(x => [x.dataset.key, x.value]);
+  const typed = moved ? [] : [...main.querySelectorAll('input[data-key]:not([type="checkbox"])')].filter(x => x.value).map(x => [x.dataset.key, x.value]);
   const nodes = view(page, decodeURIComponent(id));
   main.replaceChildren(...[nodes].flat(Infinity).filter(Boolean));
-  for (const [k, v] of typed) { const x = main.querySelector(`input[data-key="${CSS.escape(k)}"]`); if (x && !x.value) x.value = v; }
+  for (const [k, v] of typed) { const x = byKey(main, k); if (x && !x.value) x.value = v; }
   if (moved) { current = screen; window.scrollTo(0, scrolls.get(shownTrip) || 0); tripY = scrollY; main.focus({ preventScroll: true }); }
-  const back = key ? main.querySelector(`[data-key="${CSS.escape(key)}"]`) : fid ? main.querySelector('#' + CSS.escape(fid)) : null;
+  const back = key ? byKey(main, key) : fid ? main.querySelector('#' + CSS.escape(fid)) : null;
   if (back) {
     back.focus({ preventScroll: true });
     if (caret && back.setSelectionRange) try { back.setSelectionRange(...caret); } catch { /* not a text box */ }
-  }
+  } else focusFirst(near);
   document.body.dataset.page = page || 'home';
+}
+
+// The keys to try, in order, when the control with the focus goes: the next ones in its bag (or in Left off), then
+// the ones before it, then the bag's folded line and its ⋯, then the rest of the page from there.
+function around(el) {
+  if (!el) return [];
+  const step = list => { const i = list.indexOf(el); return i < 0 ? [] : [...list.slice(i + 1), ...list.slice(0, i).reverse()].map(x => x.dataset.key); };
+  const box = el.closest('.bag, .left');
+  const own = !box ? [] : box.dataset.bag ? ['fold:' + box.dataset.bag, 'bagmore:' + box.dataset.bag] : ['left'];
+  return [...(box ? step([...box.querySelectorAll('.rows [data-key]')]) : []), ...own, ...step([...main.querySelectorAll('[data-key]')])];
+}
+function focusFirst(keys) {
+  for (const k of keys) { const x = byKey(main, k); if (x) { x.focus({ preventScroll: true }); return; } }
 }
 
 function view(page, id) {
@@ -268,7 +284,8 @@ function weatherStrip(t, c) {
     h('div', { class: 'wx-head' },
       h('h2', {}, label),
       h('span', { class: 'muted small' }, busy ? 'Looking it up…' : days.length ? 'Updated ' + ago(t.wx.at) : ''),
-      h('button', { type: 'button', class: 'icon-btn small' + (busy ? ' spin' : ''), 'aria-label': 'Look up the weather again', title: 'Look up the weather again', html: ICONS.refresh, disabled: busy, onclick: () => { maybeWeather(t, true); render(); } })),
+      // Not disabled while it looks: a disabled button can't keep the focus.
+      h('button', { type: 'button', class: 'icon-btn small' + (busy ? ' spin' : ''), 'data-key': 'wx', 'aria-label': 'Look up the weather again', title: 'Look up the weather again', html: ICONS.refresh, 'aria-disabled': busy ? 'true' : null, onclick: () => { if (wxBusy[t.id]) return; maybeWeather(t, true); render(); } })),
     err ? h('p', { class: 'err small' }, err, ' ', days.length ? 'Showing the last lookup.' : 'You can set the weather by hand under Change.') : null,
     // While the first lookup is on its way, the days' room is kept, so they don't push everything down when they come.
     !days.length && busy ? h('ol', { class: 'wx-days wait', 'aria-hidden': 'true' }) : null,
@@ -319,23 +336,23 @@ function tripView(t) {
     h('section', { class: 'needs' },
       h('div', { class: 'needs-head' },
         h('h2', {}, 'This trip calls for'),
-        h('button', { type: 'button', class: 'btn small', onclick: () => condSheet(t.id) }, 'Change')),
+        h('button', { type: 'button', class: 'btn small', 'data-key': 'conds', onclick: () => condSheet(t.id) }, 'Change')),
       h('ul', { class: 'chips' }, onKeys.map(k => {
         const info = R.condInfo(doc(), k);
         return h('li', { class: 'chip on' }, h('span', { 'aria-hidden': 'true' }, info.icon), h('span', {}, h('b', {}, info.name), c.why[k] && c.why[k] !== info.name ? h('small', {}, c.why[k]) : null));
       }))),
     h('div', { class: 'seg mode', role: 'group', 'aria-label': 'Packing to leave or to come home' },
-      h('button', { type: 'button', 'aria-pressed': String(mode === 'go'), onclick: () => { store.setMode(t.id, 'go'); render(); } }, 'Going'),
-      h('button', { type: 'button', 'aria-pressed': String(mode === 'back'), onclick: () => { store.setMode(t.id, 'back'); render(); } }, 'Coming home')),
+      h('button', { type: 'button', 'data-key': 'mode:go', 'aria-pressed': String(mode === 'go'), onclick: () => { store.setMode(t.id, 'go'); render(); } }, 'Going'),
+      h('button', { type: 'button', 'data-key': 'mode:back', 'aria-pressed': String(mode === 'back'), onclick: () => { store.setMode(t.id, 'back'); render(); } }, 'Coming home')),
     h('div', { class: 'progress' },
       h('div', { class: 'meter', 'aria-hidden': 'true' }, h('i', { style: { width: (p.total ? 100 * p.done / p.total : 0) + '%' } })),
       h('p', { class: complete ? 'all' : null }, complete ? h('span', { html: ICONS.check }) : null, h('b', {}, complete ? (mode === 'go' ? 'All packed' : 'All back in the bags') : `${p.done} of ${p.total}`), complete ? '' : mode === 'go' ? ' packed' : ' back in the bags'),
-      h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: hide, onchange: e => { store.hide = e.target.checked; render(); } }), h('span', {}, 'Hide done'))),
+      h('label', { class: 'switch' }, h('input', { type: 'checkbox', 'data-key': 'hide', checked: hide, onchange: e => { store.hide = e.target.checked; render(); } }), h('span', {}, 'Hide done'))),
     mode === 'back' && !Object.keys(t.marks || {}).some(k => k.startsWith('p:') && t.marks[k].v === 1)
       ? h('p', { class: 'muted small hint' }, 'Nothing was ticked going, so this is everything that was on the list.') : null,
     M.hasList(doc()) ? null : h('p', { class: 'muted small hint' }, 'Your list is empty, so nothing from it is on this trip. ', h('a', { href: '#/' }, 'Start a list'), ' and it fills in.'),
     p.groups.map(g => bagCard(t, g, mode, hide, c.why)),
-    M.bags(doc()).some(b => b.kind === 'bag') ? h('button', { type: 'button', class: 'btn add-extra', onclick: () => extraSheet(t, null, { home: mode === 'back' }) }, h('span', { html: ICONS.plus }), mode === 'go' ? 'Add something for this trip' : 'Add something to bring home') : null,
+    M.bags(doc()).some(b => b.kind === 'bag') ? h('button', { type: 'button', class: 'btn add-extra', 'data-key': 'add-extra', onclick: () => extraSheet(t, null, { home: mode === 'back' }) }, h('span', { html: ICONS.plus }), mode === 'go' ? 'Add something for this trip' : 'Add something to bring home') : null,
     p.tasks.map(g => bagCard(t, g, mode, hide, c.why, true)),
     p.left.length || p.leftBags.length ? leftOff(t, p.left, p.leftBags, mode) : null,
   ];
@@ -348,21 +365,12 @@ const linger = new Set(); // 'go:BAGID' or 'back:BAGID' for a bag, a row's mark 
 let lingerT = null, lingerAt = '';
 const LINGER_MS = 1200;
 
+// If the focus was on a tick that goes, render() moves it to the next one in that bag, or to the folded bag.
 function settle() {
   lingerT = null;
   linger.clear();
-  const f = document.activeElement, fk = f?.dataset?.key, card = fk && f.closest('.bag');
-  // If the focus was on a tick that goes, it moves to the next one in that bag, or to the folded bag.
-  const next = card ? [...card.querySelectorAll('[data-key]')].map(x => x.dataset.key) : [];
-  const i = next.indexOf(fk);
-  const tapped = lingerAt && main.querySelector(`[data-key="${CSS.escape(lingerAt)}"]`)?.getBoundingClientRect().top;
+  const tapped = byKey(main, lingerAt)?.getBoundingClientRect().top;
   holdStill(tapped > 0 && tapped < innerHeight ? tapped : innerHeight / 2, render);
-  if (card && !main.contains(document.activeElement)) {
-    for (const k of [...next.slice(i + 1), ...next.slice(0, i).reverse(), 'fold:' + card.dataset.bag]) {
-      const x = main.querySelector(`[data-key="${CSS.escape(k)}"]`);
-      if (x) { x.focus({ preventScroll: true }); break; }
-    }
-  }
 }
 
 // Redraws with the row nearest y kept at the same place on the screen, taking the nearest at or below it first:
@@ -372,7 +380,7 @@ function holdStill(y, redraw) {
   was.sort(([, a], [, b]) => (a < y) - (b < y) || Math.abs(a - y) - Math.abs(b - y));
   redraw();
   for (const [k, top] of was) {
-    const x = main.querySelector(`[data-key="${CSS.escape(k)}"]`);
+    const x = byKey(main, k);
     if (x) { window.scrollBy(0, x.getBoundingClientRect().top - top); return; }
   }
 }
@@ -391,7 +399,7 @@ function bagCard(t, g, mode, hide, why, jobs = false) {
     h('h2', {}, b.name),
     b.when?.length ? h('span', { class: 'bag-cond' }, b.when.map(k => R.condInfo(doc(), k)?.icon).join('')) : null,
     h('span', { class: 'count' + (all ? ' all' : '') }, all ? h('span', { html: ICONS.check }) : null, `${done}/${g.rows.length}`),
-    b.id !== '_loose' ? h('button', { type: 'button', class: 'icon-btn small', 'aria-label': `More for ${b.name}`, html: ICONS.more, onclick: () => bagSheet(t, g, mode) }) : null);
+    b.id !== '_loose' ? h('button', { type: 'button', class: 'icon-btn small', 'data-key': 'bagmore:' + b.id, 'aria-label': `More for ${b.name}`, html: ICONS.more, onclick: () => bagSheet(t, g, mode) }) : null);
   return h('section', { class: 'bag' + (all ? ' all' : '') + (jobs ? ' jobs' : ''), 'data-bag': b.id },
     head,
     b.note && !(b.id === 's-liquids' && t.travel !== 'fly' && b.note === AIRPORT_NOTE) ? h('p', { class: 'bag-note' }, b.note) : null,
@@ -429,7 +437,7 @@ function itemRow(t, g, r, mode, whyMap, jobs, hide) {
         r.added ? h('small', { class: 'why' }, 'Added for this trip') : null,
         r.moved ? h('small', { class: 'why' }, 'In this bag for this trip') : null,
         r.extra ? h('small', { class: 'why' }, 'Just for this trip') : null)),
-    jobs && mode === 'back' ? null : h('button', { type: 'button', class: 'icon-btn more', 'aria-label': `More for ${r.name}`, html: ICONS.more, onclick: () => itemSheet(t, r, mode, jobs) }));
+    jobs && mode === 'back' ? null : h('button', { type: 'button', class: 'icon-btn more', 'data-key': 'more:' + r.key, 'aria-label': `More for ${r.name}`, html: ICONS.more, onclick: () => itemSheet(t, r, mode, jobs) }));
 }
 
 function leftOff(t, left, leftBags, mode) {
@@ -445,7 +453,7 @@ function leftOff(t, left, leftBags, mode) {
       { label: 'Undo', run: () => apply(d => M.mark(d, t.id, 'x:' + id, was || 0)) });
   };
   return h('section', { class: 'left' },
-    h('button', { type: 'button', class: 'left-head', 'aria-expanded': String(open), onclick: () => { store.setOpen(t.id + ':left', !open); render(); } },
+    h('button', { type: 'button', class: 'left-head', 'data-key': 'left', 'aria-expanded': String(open), onclick: () => { store.setOpen(t.id + ':left', !open); render(); } },
       h('h2', {}, `Left off this trip (${left.length + leftBags.length})`),
       h('span', { class: 'muted small' }, open ? 'Hide' : 'Show')),
     open ? h('ul', { class: 'rows' },
@@ -620,12 +628,12 @@ function condSheet(id) {
       h('h3', {}, 'What’s on'),
       h('div', { class: 'chips pick' }, M.tags(doc()).map(g => {
         const on = !!t.set?.[g.id]?.v;
-        return h('button', { type: 'button', class: 'chip' + (on ? ' on' : ''), 'aria-pressed': String(on), onclick: () => { store.apply(d => M.setCond(d, id, g.id, on ? null : true)); draw(); render(); } }, `${g.icon} ${g.name}`);
+        return h('button', { type: 'button', class: 'chip' + (on ? ' on' : ''), 'data-key': 'tag:' + g.id, 'aria-pressed': String(on), onclick: () => { store.apply(d => M.setCond(d, id, g.id, on ? null : true)); draw(); render(); } }, `${g.icon} ${g.name}`);
       })),
       h('h3', {}, 'Getting there'),
       h('div', { class: 'seg' }, M.TRAVEL.map(k => {
         const info = R.CONDITIONS.find(x => x.k === k);
-        return h('button', { type: 'button', 'aria-pressed': String(t.travel === k), onclick: () => { store.apply(d => M.putTrip(d, { id, travel: k })); draw(); render(); } }, `${info.icon} ${info.name}`);
+        return h('button', { type: 'button', 'data-key': 'travel:' + k, 'aria-pressed': String(t.travel === k), onclick: () => { store.apply(d => M.putTrip(d, { id, travel: k })); draw(); render(); } }, `${info.icon} ${info.name}`);
       })),
       h('h3', {}, 'Place and weather'),
       h('p', { class: 'muted small' }, 'These follow the place and the forecast. Set one yourself if you know better.'),
@@ -638,7 +646,7 @@ function condSheet(id) {
           h('span', { class: 'auto-name' }, h('span', { 'aria-hidden': 'true' }, info.icon), ' ', h('b', {}, info.name),
             h('small', {}, `Automatic: ${autoText}${c.auto[k] && c.why[k] ? ` · ${c.why[k]}` : ''}`)),
           h('div', { class: 'seg tiny', role: 'group', 'aria-label': info.name },
-            ['auto', 'on', 'off'].map(s => h('button', { type: 'button', 'aria-pressed': String(state === s), onclick: () => pickState(s) }, s === 'auto' ? 'Auto' : s === 'on' ? 'Yes' : 'No'))));
+            ['auto', 'on', 'off'].map(s => h('button', { type: 'button', 'data-key': `cond:${k}:${s}`, 'aria-pressed': String(state === s), onclick: () => pickState(s) }, s === 'auto' ? 'Auto' : s === 'on' ? 'Yes' : 'No'))));
       })),
       h('p', { class: 'small' }, h('a', { href: '#/list', onclick: closeSheet }, 'Change the occasions in My list')),
     ], { wide: true });
@@ -820,18 +828,18 @@ function listView() {
         bs.map(b => listBag(b)),
       ];
     }),
-    h('button', { type: 'button', class: 'btn add-extra', onclick: () => bagEditor(null) }, h('span', { html: ICONS.plus }), 'Add a bag or a list of jobs'),
+    h('button', { type: 'button', class: 'btn add-extra', 'data-key': 'bag:new', onclick: () => bagEditor(null) }, h('span', { html: ICONS.plus }), 'Add a bag or a list of jobs'),
     h('section', { class: 'card' },
       h('h2', {}, 'Occasions'),
       h('p', { class: 'muted small' }, 'Pick these when you plan a trip. Things can come along only for some of them.'),
       h('div', { class: 'chips pick' },
-        M.tags(doc()).map(g => h('button', { type: 'button', class: 'chip', onclick: () => tagEditor(g) }, `${g.icon} ${g.name}`)),
-        h('button', { type: 'button', class: 'chip add', onclick: () => tagEditor(null) }, '+ Add one'))),
+        M.tags(doc()).map(g => h('button', { type: 'button', class: 'chip', 'data-key': 'occ:' + g.id, onclick: () => tagEditor(g) }, `${g.icon} ${g.name}`)),
+        h('button', { type: 'button', class: 'chip add', 'data-key': 'occ:new', onclick: () => tagEditor(null) }, '+ Add one'))),
     h('section', { class: 'card' },
       h('h2', {}, 'Share or bring in a list'),
       h('div', { class: 'stack' },
-        h('button', { type: 'button', class: 'btn', onclick: shareSheet }, 'Send my list as a link'),
-        h('button', { type: 'button', class: 'btn', onclick: () => pasteSheet() }, 'Paste a list'))),
+        h('button', { type: 'button', class: 'btn', 'data-key': 'share', onclick: shareSheet }, 'Send my list as a link'),
+        h('button', { type: 'button', class: 'btn', 'data-key': 'paste', onclick: () => pasteSheet() }, 'Paste a list'))),
   ];
 }
 
@@ -849,11 +857,11 @@ function listBag(b) {
     again?.focus();
     if (g.when.length || g.per) toast(`${n}: ${g.per ? 'one for each day' : `only for ${g.when.map(k => R.condInfo(doc(), k).name.toLowerCase()).join(' or ')}`}. Tap it to change that.`);
   };
-  return h('section', { class: 'bag edit' + (b.kind !== 'bag' ? ' jobs' : '') },
+  return h('section', { class: 'bag edit' + (b.kind !== 'bag' ? ' jobs' : ''), 'data-bag': b.id },
     h('header', { class: 'bag-head' },
       h('span', { class: 'bag-icon', 'aria-hidden': 'true' }, b.icon),
       h('h2', {}, b.name),
-      h('button', { type: 'button', class: 'btn small', onclick: () => bagEditor(b), 'aria-label': `Change ${b.name}` }, 'Change')),
+      h('button', { type: 'button', class: 'btn small', 'data-key': 'bagmore:' + b.id, onclick: () => bagEditor(b), 'aria-label': `Change ${b.name}` }, 'Change')),
     condChips(b) ? h('p', { class: 'bag-note' }, condChips(b)) : null,
     b.note ? h('p', { class: 'bag-note' }, b.note) : null,
     h('ul', { class: 'rows' }, its.map(x => h('li', { class: 'row' },
@@ -1137,7 +1145,9 @@ function restored(n) {
   return parts.length ? `Restored ${andList(parts)}.` : 'Nothing in it that isn’t here already.';
 }
 
+let homeKeyed = false, homeT = null;
 function settingsView() {
+  clearTimeout(homeT);
   const d = doc(), home = R.home(d), u = R.units(d), l = R.laundry(d);
   const homeSet = !!M.pref(d, 'home', '');
   const countries = Object.keys(PLUGS).map(cc => [cc, countryName(cc)]).sort((a, b) => a[1].localeCompare(b[1]));
@@ -1164,19 +1174,30 @@ function settingsView() {
     h('section', { class: 'card' },
       h('h2', {}, 'Home'),
       h('label', { class: 'field' }, h('span', {}, 'You live in'),
-        h('select', { onchange: e => apply(x => M.setPref(x, 'home', e.target.value)) }, countries.map(([cc, n]) => h('option', { value: cc, selected: cc === home }, n)))),
+        h('select', {
+          'data-key': 'home',
+          onpointerdown: () => { homeKeyed = false; },
+          onkeydown: e => { if (e.key.length === 1 || /^(Arrow|Home$|End$|Page)/.test(e.key)) homeKeyed = true; },
+          onchange: e => {
+            store.apply(x => M.setPref(x, 'home', e.target.value));
+            // Typed into ("por" for Portugal), it waits for the typing to stop before the page is drawn again: a new
+            // picker wouldn't get the letters after the first.
+            clearTimeout(homeT);
+            if (homeKeyed) homeT = setTimeout(render, 1000); else render();
+          } }, countries.map(([cc, n]) => h('option', { value: cc, selected: cc === home }, n)))),
       h('p', { class: 'muted small' }, homeSet ? 'Trips anywhere else count as abroad, and plug adapters are worked out from home’s plugs.' : 'Guessed from this browser’s language settings. Trips anywhere else count as abroad.')),
     h('section', { class: 'card' },
       h('h2', {}, 'Temperatures'),
       h('div', { class: 'seg', role: 'group', 'aria-label': 'Temperatures' },
-        ['F', 'C'].map(k => h('button', { type: 'button', 'aria-pressed': String(u === k), onclick: () => apply(x => M.setPref(x, 'units', k)) }, k === 'F' ? '°F' : '°C')))),
+        ['F', 'C'].map(k => h('button', { type: 'button', 'data-key': 'units:' + k, 'aria-pressed': String(u === k), onclick: () => apply(x => M.setPref(x, 'units', k)) }, k === 'F' ? '°F' : '°C')))),
     h('section', { class: 'card' },
       h('h2', {}, 'Laundry'),
       h('p', { class: 'muted small' }, 'Things you need one of each day (socks, say) stop at this many, for longer trips where you’ll do laundry.'),
       h('div', { class: 'stepper' },
-        h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'One fewer', disabled: l <= 1, onclick: () => apply(x => M.setPref(x, 'laundry', l - 1)) }, '−'),
+        // At either end the button only looks disabled, so it keeps the focus.
+        h('button', { type: 'button', class: 'icon-btn', 'data-key': 'laundry:-', 'aria-label': 'One fewer', 'aria-disabled': l <= 1 ? 'true' : null, onclick: () => { if (l > 1) apply(x => M.setPref(x, 'laundry', l - 1)); } }, '−'),
         h('output', {}, plural(l, 'day')),
-        h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'One more', disabled: l >= 30, onclick: () => { applyCounting(x => M.setPref(x, 'laundry', l + 1)); render(); } }, '+'))),
+        h('button', { type: 'button', class: 'icon-btn', 'data-key': 'laundry:+', 'aria-label': 'One more', 'aria-disabled': l >= 30 ? 'true' : null, onclick: () => { if (l < 30) { applyCounting(x => M.setPref(x, 'laundry', l + 1)); render(); } } }, '+'))),
     driveHost,
     h('section', { class: 'card' },
       h('h2', {}, 'Backup'),

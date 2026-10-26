@@ -1051,6 +1051,47 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await page.keyboard.press('Enter');
   await until(async () => !(await sheetOpen(page)), 'Enter to close the sheet');
   assert.match(await page.locator('main .bag', { hasText: 'Electronics' }).innerText(), /Floss/);
+
+  // The page redraws after each press, and the focus stays on what was pressed, so the next Tab goes on from there.
+  const focused = () => page.evaluate(() => { const a = document.activeElement; return a === document.body ? 'nothing' : a.getAttribute('aria-label') || a.textContent.trim(); });
+  const press = async (locator, key) => { await locator.focus(); await page.keyboard.press(key); };
+  await press(page.locator('.seg.mode button', { hasText: 'Coming home' }), 'Enter');
+  assert.equal(await focused(), 'Coming home', 'Coming home keeps the focus');
+  await press(page.locator('.seg.mode button', { hasText: 'Going' }), 'Space');
+  assert.equal(await focused(), 'Going');
+  await press(page.locator('.switch input'), 'Space');
+  assert.deepEqual(await page.evaluate(() => [document.activeElement.type, document.activeElement.checked]), ['checkbox', true], 'Hide done keeps the focus');
+  await page.keyboard.press('Space');
+  // Left off from its ⋯: the focus goes on to the next thing in that bag.
+  await row(page, 'Razor').locator('.more').focus();
+  await page.keyboard.press('Enter');
+  await until(() => sheetOpen(page), 'the sheet');
+  await press(page.locator('.sheet button', { hasText: 'Leave it off this trip' }), 'Enter');
+  await until(async () => !(await sheetOpen(page)), 'the sheet to close');
+  assert.equal(await page.evaluate(() => document.activeElement.closest('li')?.querySelector('.name')?.textContent), 'Hairbrush or comb', 'the next thing’s tick');
+  // Each Auto, Yes or No redraws the conditions sheet; the focus stays on the one pressed, and closing it goes back
+  // to Change.
+  await press(page.locator('.needs .btn', { hasText: 'Change' }), 'Enter');
+  await until(() => sheetOpen(page), 'the conditions sheet');
+  const rain = page.locator('.auto-list li', { has: page.locator('b', { hasText: /^Rain$/ }) });
+  await press(rain.locator('button', { hasText: 'Yes' }), 'Enter');
+  assert.equal(await focused(), 'Yes');
+  assert.equal(await page.evaluate(() => document.activeElement.getAttribute('aria-pressed')), 'true');
+  assert.match(await page.evaluate(() => document.activeElement.closest('li').textContent), /Rain/);
+  await page.keyboard.press('Tab');
+  assert.equal(await focused(), 'No', 'and Tab goes on to the next one');
+  await page.keyboard.press('Shift+Tab');
+  await press(rain.locator('button', { hasText: 'Auto' }), 'Space');
+  assert.equal(await focused(), 'Auto');
+  await page.keyboard.press('Escape');
+  // The dialog's close event, which puts the focus back, comes a moment after it closes.
+  await until(async () => (await focused()) === 'Change', 'the focus back on Change', 2000);
+  // Settings: the laundry stepper and °F/°C.
+  await page.goto(base + '#/settings');
+  await press(page.locator('[aria-label="One more"]'), 'Enter');
+  assert.equal(await focused(), 'One more', 'the laundry + keeps the focus');
+  await press(page.locator('.seg button', { hasText: '°C' }), 'Space');
+  assert.equal(await focused(), '°C');
   await ctx.close();
 }
 

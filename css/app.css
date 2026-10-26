@@ -99,9 +99,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
   background: none; color: var(--ink); cursor: pointer; text-decoration: none; font-size: 22px;
 }
 .icon-btn svg { width: 24px; height: 24px; }
-.icon-btn:active:not(:disabled) { background: var(--chip); }
+.icon-btn:active:not(:disabled, [aria-disabled="true"]) { background: var(--chip); }
 /* Hover only where there's a pointer that hovers: on a touch screen it stays stuck on whatever was last tapped. */
-@media (hover: hover) { .icon-btn:hover:not(:disabled) { background: var(--chip); } }
+@media (hover: hover) { .icon-btn:hover:not(:disabled, [aria-disabled="true"]) { background: var(--chip); } }
 /* My list has its name beside its icon: the first toast sends people there by name. */
 .bar-link {
   display: inline-flex; align-items: center; gap: 6px; flex: none; min-height: 44px; padding: 0 10px 0 8px;
@@ -112,7 +112,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 @media (hover: hover) { .bar-link:hover { background: var(--chip); } }
 .icon-btn.small { width: 36px; height: 36px; }
 .icon-btn.small svg { width: 20px; height: 20px; }
-.icon-btn:disabled { opacity: .4; cursor: default; }
+.icon-btn:disabled, .icon-btn[aria-disabled="true"] { opacity: .4; cursor: default; }
 .icon-btn.spin svg { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .cloud .dot { position: absolute; right: 7px; top: 9px; width: 9px; height: 9px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 2px var(--bg); }

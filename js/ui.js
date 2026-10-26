@@ -61,13 +61,44 @@ function placeToast() {
   else if (!dlg.open && el.parentNode === dlg) dlg.before(el);
 }
 
+// ---------- where the focus goes back to ----------
+// The page and an open sheet are drawn afresh after most taps, so each control that lasts through that has a
+// data-key, and the focus goes back to the new one with the same key. Safari doesn't focus a button that's clicked
+// (MDN, <button>, "Clicking and focus"), so the control with a key clicked last is kept here too, until the focus or
+// a key goes somewhere else. Not a text box: putting the focus in one would bring up a phone's keyboard.
+export const tapped = { key: '', el: null };
+const forget = () => { tapped.key = ''; tapped.el = null; };
+document.addEventListener('click', e => {
+  const el = e.target.closest?.('[data-key]');
+  if (el && !el.matches('input[type="text"], input[type="search"], textarea')) { tapped.key = el.dataset.key; tapped.el = el; } else forget();
+}, true);
+document.addEventListener('keydown', forget, true);
+document.addEventListener('focusin', e => { if (e.target !== tapped.el) forget(); }, true);
+// The key of the control that was pressed: the one clicked, or else the one with the focus, inside box.
+export function pressedKey(box) {
+  if (tapped.el && box.contains(tapped.el)) return tapped.key;
+  const a = document.activeElement;
+  return a && box.contains(a) ? a.dataset?.key || '' : '';
+}
+export const byKey = (box, key) => (key ? box.querySelector(`[data-key="${CSS.escape(key)}"]`) : null);
+
 // ---------- bottom sheet ----------
 // sheet('Title', body => [...nodes]) opens it; the body function gets a close() to call.
 let onClose = null;
+// The control the sheet was opened from, and on which screen. Closing the sheet puts the focus back on it, but the
+// page is often drawn afresh while the sheet is open, and in Safari it never had the focus, so it's found by its key.
+let opener = '', openedAt = '';
+function backToOpener() {
+  const dlg = document.getElementById('sheet');
+  if (opener && !dlg.open && location.hash === openedAt && document.activeElement?.dataset?.key !== opener) byKey(document, opener)?.focus({ preventScroll: true });
+}
 export function sheet(title, build, { wide = false, done } = {}) {
   const dlg = document.getElementById('sheet');
   const body = dlg.querySelector('.sheet-body');
-  const close = () => { if (dlg.open) dlg.close(); };
+  const close = () => { if (dlg.open) { dlg.close(); backToOpener(); } };
+  // Drawn again while open, after a tap inside it: the focus stays on what was tapped.
+  const again = dlg.open ? pressedKey(dlg) : '';
+  if (!dlg.open) { opener = pressedKey(document.body); openedAt = location.hash; }
   onClose = done || null;
   dlg.classList.toggle('wide', wide);
   body.replaceChildren(
@@ -79,8 +110,8 @@ export function sheet(title, build, { wide = false, done } = {}) {
   // in view, putting the focus on the close button no longer scrolls back up.
   if (!dlg.open) { dlg.showModal(); dlg.scrollTop = 0; }
   placeToast();
-  const first = body.querySelector('[autofocus]');
-  if (first) first.focus();
+  const same = byKey(body, again), first = body.querySelector('[autofocus]');
+  if (same) same.focus({ preventScroll: true }); else if (first) first.focus();
   return close;
 }
 export function closeSheet() { const dlg = document.getElementById('sheet'); if (dlg.open) dlg.close(); }
@@ -89,7 +120,7 @@ export function setupSheet() {
   const dlg = document.getElementById('sheet');
   // A tap on the dimmed page around the sheet closes it.
   dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
-  dlg.addEventListener('close', () => { placeToast(); const f = onClose; onClose = null; if (f) f(); });
+  dlg.addEventListener('close', () => { placeToast(); backToOpener(); const f = onClose; onClose = null; if (f) f(); });
   // Enter in a text box inside a sheet presses its main button rather than closing it.
   dlg.addEventListener('submit', e => { e.preventDefault(); dlg.querySelector('.sheet-body .btn.primary:not([disabled])')?.click(); });
   // A sheet with more than one text box and no submit button isn't submitted by Enter at all (HTML Living Standard,
