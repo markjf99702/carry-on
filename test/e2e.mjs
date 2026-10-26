@@ -499,6 +499,26 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await ctx.close();
 }
 
+// ================= A forecast that comes late =================
+// On a slow connection the forecast lands while someone is already packing: the list stays where it is.
+{
+  const { ctx, page } = await phone();
+  await ctx.route('https://api.open-meteo.com/**', async route => { await wait(2500); await route.fallback(); });
+  await page.click('text=Start with a starter list');
+  await planTrip(page, { where: 'Lisb', from: 3, to: 7 });
+  assert.match(await page.locator('.wx-head').innerText(), /Looking it up/);
+  assert.ok((await page.locator('.wx-days.wait').boundingBox()).height >= 120, 'room kept for the days');
+  await row(page, 'Prescriptions').evaluate(el => el.scrollIntoView({ block: 'center' }));
+  const atMiddle = () => page.evaluate(() => document.elementFromPoint(innerWidth / 2, innerHeight / 2)?.closest('li.row')?.querySelector('.name')?.textContent);
+  const before = [await atMiddle(), (await row(page, 'Prescriptions').boundingBox()).y];
+  await page.waitForSelector('.wx-days li');
+  assert.ok((await rowsText(page)).includes('Sunscreen'), 'the forecast brought things above');
+  const after = [await atMiddle(), (await row(page, 'Prescriptions').boundingBox()).y];
+  assert.equal(after[0], before[0], 'the same row in the middle of the screen');
+  assert.ok(Math.abs(after[1] - before[1]) <= 2, `and it didn't move (${before[1]} → ${after[1]})`);
+  await ctx.close();
+}
+
 // ================= Changes while packing say so =================
 {
   const { ctx, page } = await phone();

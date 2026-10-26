@@ -216,7 +216,15 @@ function maybeWeather(t, force = false) {
     const cur = doc().trips[t.id];
     // Only if the trip still goes there on those days.
     if (cur && cur.start === t.start && cur.end === t.end && cur.place?.lat === t.place.lat) store.apply(d => M.setWx(d, t.id, wx));
-  }, e => { wxErr[t.id] = e.message; }).finally(() => { delete wxBusy[t.id]; render(); });
+  }, e => { wxErr[t.id] = e.message; }).finally(() => { delete wxBusy[t.id]; redraw(); });
+}
+
+// A redraw that comes on its own (a forecast arriving, a sync landing, another tab saving). On a trip scrolled down
+// to its list, the row in the middle of the screen stays where it is: the forecast's days, chips and rows appearing
+// above would otherwise push the list down under a tap that's on its way.
+function redraw() {
+  if (document.body.dataset.page === 'trip' && scrollY > 0) holdStill(innerHeight / 2, render);
+  else render();
 }
 
 const ago = t => {
@@ -245,6 +253,8 @@ function weatherStrip(t, c) {
       h('span', { class: 'muted small' }, busy ? 'Looking it up…' : days.length ? 'Updated ' + ago(t.wx.at) : ''),
       h('button', { type: 'button', class: 'icon-btn small' + (busy ? ' spin' : ''), 'aria-label': 'Look up the weather again', title: 'Look up the weather again', html: ICONS.refresh, disabled: busy, onclick: () => { maybeWeather(t, true); render(); } })),
     err ? h('p', { class: 'err small' }, err, ' ', days.length ? 'Showing the last lookup.' : 'You can set the weather by hand under Change.') : null,
+    // While the first lookup is on its way, the days' room is kept, so they don't push everything down when they come.
+    !days.length && busy ? h('ol', { class: 'wx-days wait', 'aria-hidden': 'true' }) : null,
     days.length ? h('ol', { class: 'wx-days' }, days.map(d => h('li', { class: d.typ ? 'typ' : '' },
       h('span', { class: 'wd' }, D.weekday(d.d)),
       h('span', { class: 'wi', 'aria-hidden': 'true' }, W.dayIcon(d)),
@@ -1049,8 +1059,8 @@ function settingsView() {
 setupSheet();
 drive.chip(document.getElementById('cloud'));
 store.onSave(r => { if (r === 'full') toast('This browser’s storage is full, so that wasn’t saved.'); else drive.changed(); });
-drive.onUpdate(() => { store.reload(); render(); });
-window.addEventListener('storage', e => { if (e.key === 'carry-on' || e.key === 'carry-on.device') { store.reload(); render(); } });
+drive.onUpdate(() => { store.reload(); redraw(); });
+window.addEventListener('storage', e => { if (e.key === 'carry-on' || e.key === 'carry-on.device') { store.reload(); redraw(); } });
 // Back to a page the browser kept in memory (after the footer's links, say): it missed whatever was saved meanwhile.
 window.addEventListener('pageshow', e => { if (e.persisted) { store.reload(); render(); } });
 window.addEventListener('hashchange', render);
