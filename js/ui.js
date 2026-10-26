@@ -92,6 +92,15 @@ export function setupSheet() {
   dlg.addEventListener('close', () => { placeToast(); const f = onClose; onClose = null; if (f) f(); });
   // Enter in a text box inside a sheet presses its main button rather than closing it.
   dlg.addEventListener('submit', e => { e.preventDefault(); dlg.querySelector('.sheet-body .btn.primary:not([disabled])')?.click(); });
+  // A sheet with more than one text box and no submit button isn't submitted by Enter at all (HTML Living Standard,
+  // 4.10.21.2 Implicit submission), so Enter in a one-line box presses the main button here instead.
+  dlg.addEventListener('keydown', e => {
+    const t = e.target;
+    if (e.key !== 'Enter' || e.isComposing || e.shiftKey || e.ctrlKey || e.altKey || e.metaKey || e.defaultPrevented) return;
+    if (!(t instanceof HTMLInputElement) || (t.type !== 'text' && t.type !== 'search')) return;
+    e.preventDefault();
+    dlg.querySelector('.sheet-body .btn.primary:not([disabled])')?.click();
+  });
 }
 
 // A button that asks for a second tap before doing something it can't undo.

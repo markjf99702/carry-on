@@ -994,6 +994,27 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await ctx.close();
 }
 
+// ================= From the keyboard =================
+{
+  const { ctx, page } = await phone();
+  await page.click('text=Start with a starter list');
+  // Enter in a text box of a sheet with several presses its main button, in the item editor and the bag editor.
+  await page.goto(base + '#/list');
+  await page.locator('.edit-row', { hasText: 'Toothpaste' }).click();
+  await until(() => sheetOpen(page), 'the item editor');
+  await page.fill('.sheet input[type=text] >> nth=0', 'Toothpaste, travel size');
+  await page.press('.sheet input[type=text] >> nth=0', 'Enter');
+  await until(async () => !(await sheetOpen(page)), 'Enter to save and close the item editor', 2000);
+  assert.equal(await page.locator('.edit-row', { hasText: 'Toothpaste, travel size' }).count(), 1, 'the new name saved');
+  await page.click('[aria-label="Change Day bag"]');
+  await until(() => sheetOpen(page), 'the bag editor');
+  await page.fill('.sheet input[type=text] >> nth=0', 'Day pack');
+  await page.press('.sheet input[type=text] >> nth=0', 'Enter');
+  await until(async () => !(await sheetOpen(page)), 'Enter to save and close the bag editor', 2000);
+  assert.ok((await page.locator('.bag.edit h2').allInnerTexts()).includes('DAY PACK'));
+  await ctx.close();
+}
+
 // ================= Two phones, one Google Drive =================
 {
   const g = fakeGoogle();
