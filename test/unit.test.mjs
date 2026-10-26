@@ -3,9 +3,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as M from '../js/model.js';
-import { plan, conditions, qtyOf } from '../js/rules.js';
+import { plan, conditions, qtyOf, units } from '../js/rules.js';
 import { summarize, stale, tripWeather, forecastEdge } from '../js/weather.js';
-import { plugsFor, plugText } from '../js/plugs.js';
+import { plugsFor, plugText, localCountry } from '../js/plugs.js';
 import { parsePaste, encodeList, decodeList, guess } from '../js/share.js';
 import { starterList } from '../js/starter.js';
 import { store } from '../js/store.js'; // in Node there's no localStorage, so it keeps the doc in memory only
@@ -60,6 +60,24 @@ test('abroad: passport, and an adapter only where the plugs differ', () => {
   p = plan(doc, doc.trips.t1);
   assert.ok(allNames(p).includes('Passport'));
   assert.ok(!allNames(p).includes('Plug adapter'), 'US plugs fit in Japan');
+});
+
+test('the first guess at home, from the browser’s languages', () => {
+  const cases = [
+    [['de'], 'DE'], [['fr'], 'FR'], [['ja'], 'JP'], [['zh-Hant-TW'], 'TW'], [['sr-Latn-RS'], 'RS'],
+    [['de', 'en-US', 'en'], 'DE'], // Firefox in German: the first language counts, not the English after it
+    [['en', 'en-GB'], 'GB'], [['en-US', 'en'], 'US'], [['pt-PT', 'pt'], 'PT'], [['zh-Hant'], 'TW'],
+    [['en'], 'US'], [[], 'US'], [['!!', 'nl'], 'NL'], [['es-419'], 'US'],
+  ];
+  for (const [langs, cc] of cases) assert.equal(localCountry(langs), cc, langs.join(','));
+});
+
+test('°F where the weather service reports in it', () => {
+  // Wikipedia, "Fahrenheit" (revision of 16 Oct 2026): the US and its territories, Palau, Micronesia, the Marshall
+  // Islands and the Cayman Islands. Liberia was already here.
+  for (const cc of ['US', 'PR', 'GU', 'VI', 'AS', 'MP', 'PW', 'FM', 'MH', 'KY', 'LR']) assert.equal(units(M.setPref(M.blankDoc(), 'home', cc)), 'F', cc);
+  for (const cc of ['CA', 'GB', 'MX', 'BS', 'DE']) assert.equal(units(M.setPref(M.blankDoc(), 'home', cc)), 'C', cc);
+  assert.equal(units(M.setPref(M.setPref(M.blankDoc(), 'home', 'PR'), 'units', 'C')), 'C', 'unless you say');
 });
 
 test('plugs', () => {

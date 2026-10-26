@@ -226,7 +226,7 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   names = await rowsText(page);
   for (const n of ['Warm coat', 'Gloves and hat', 'Snow boots', 'Passport']) assert.ok(names.includes(n), `${n} for Iceland`);
   assert.ok(!names.includes('Swimsuit'));
-  assert.ok(!names.includes('Plug adapter') || true);
+  assert.ok(names.includes('Plug adapter'), 'US plugs don’t fit Iceland’s sockets');
 
   // ---------- my list ----------
   await page.goto(base + '#/list');

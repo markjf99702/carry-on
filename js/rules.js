@@ -30,7 +30,10 @@ export function condInfo(doc, k) {
 }
 
 export const home = doc => M.pref(doc, 'home', '') || localCountry();
-export const units = doc => M.pref(doc, 'units', '') || (home(doc) === 'US' || home(doc) === 'LR' ? 'F' : 'C');
+// °F at home where the weather is reported in it: the US and its territories, Palau, Micronesia, the Marshall
+// Islands and the Cayman Islands (Wikipedia, "Fahrenheit"), and Liberia.
+const FAHRENHEIT = ['US', 'PR', 'GU', 'VI', 'AS', 'MP', 'PW', 'FM', 'MH', 'KY', 'LR'];
+export const units = doc => M.pref(doc, 'units', '') || (FAHRENHEIT.includes(home(doc)) ? 'F' : 'C');
 export const laundry = doc => M.pref(doc, 'laundry', 7);
 
 // "Thu, Fri and Sat"; more than three days becomes "on 5 days".

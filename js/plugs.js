@@ -51,12 +51,18 @@ export function plugsFor(home, dest) {
 // "Type G, 230 V"
 export const plugText = p => `Type ${p.types.join('/')}, ${p.volts} V`;
 
-// The country this browser says it's in (en-US → US), for a first guess at home.
+// The country this browser's languages point to, for a first guess at home. The first language says most: its
+// own country (en-GB → GB, zh-Hant-TW → TW), or one a later tag in that language names (en, en-GB → GB), or else
+// where that language is mostly spoken (de → DE, ja → JP), so German followed by English is still Germany. Then
+// any country another tag names, and the US when nothing does.
 export function localCountry(langs = globalThis.navigator?.languages || []) {
-  for (const l of langs) {
-    const m = /^[a-z]{2,3}[-_]([A-Z]{2})\b/.exec(l);
-    if (m && PLUGS[m[1]]) return m[1];
-  }
+  const tags = [];
+  for (const l of langs) try { tags.push(new Intl.Locale(l)); } catch { /* not a language tag */ }
+  const known = r => (r && PLUGS[r] ? r : null);
+  if (!tags.length) return 'US';
+  for (const t of tags) if (t.language === tags[0].language && known(t.region)) return t.region;
+  try { const r = known(tags[0].maximize().region); if (r) return r; } catch { /* no likely country */ }
+  for (const t of tags) if (known(t.region)) return t.region;
   return 'US';
 }
 
