@@ -32,6 +32,13 @@ let draft = null;
 // Save and Delete can step back to the trip, or past it, rather than add a step that Back undoes onto the form.
 // They live in history.state, so they last through a reload. lastHash and lastFrom are the screen drawn before.
 let lastHash = '', lastFrom = '', thenGo = null;
+// Where each trip was scrolled to when it was left ('TRIPID:go' or ':back'), so opening it again this visit goes
+// back there rather than to the top. shownTrip is the trip on screen, and tripY how far down it is, kept as it
+// scrolls because by the time a move away is drawn, Back may already have scrolled the page.
+const scrolls = new Map();
+let shownTrip = '', tripY = 0;
+try { history.scrollRestoration = 'manual'; } catch { /* the browser keeps its own */ }
+addEventListener('scroll', () => { if (shownTrip) tripY = scrollY; }, { passive: true });
 function render() {
   const hash = location.hash || '#/';
   if (hash.startsWith('#list=')) { takeLink(hash.slice(6)); return; }
@@ -40,6 +47,8 @@ function render() {
   const [, page = '', id = ''] = hash.slice(1).split('/');
   const screen = page + '/' + id, moved = screen !== current;
   if (moved) {
+    if (shownTrip) scrolls.set(shownTrip, tripY);
+    shownTrip = '';
     draft = null; packedSeen = null; linger.clear(); clearTimeout(lingerT); lingerT = null;
     if (!history.state || !('from' in history.state)) remember({ from: lastHash, before: lastFrom });
     lastHash = hash; lastFrom = history.state?.from ?? '';
@@ -52,7 +61,7 @@ function render() {
   const nodes = view(page, decodeURIComponent(id));
   main.replaceChildren(...[nodes].flat(Infinity).filter(Boolean));
   for (const [k, v] of typed) { const x = main.querySelector(`input[data-key="${CSS.escape(k)}"]`); if (x && !x.value) x.value = v; }
-  if (moved) { current = screen; window.scrollTo(0, 0); main.focus({ preventScroll: true }); }
+  if (moved) { current = screen; window.scrollTo(0, scrolls.get(shownTrip) || 0); tripY = scrollY; main.focus({ preventScroll: true }); }
   const back = key ? main.querySelector(`[data-key="${CSS.escape(key)}"]`) : fid ? main.querySelector('#' + CSS.escape(fid)) : null;
   if (back) {
     back.focus({ preventScroll: true });
@@ -277,6 +286,7 @@ function tripView(t) {
   const t0 = today();
   const mode = store.mode(t.id) || (t0 >= t.end ? 'back' : 'go');
   const p = R.plan(doc(), t, mode), c = p.cond;
+  shownTrip = t.id + ':' + mode;
   const complete = p.total > 0 && p.done === p.total;
   // Said once, when a change finishes the packing; never on opening a trip that's packed already.
   if (packedSeen?.key === t.id + mode && !packedSeen.complete && complete) toast(mode === 'go' ? `Everything for ${title(t)} is packed.` : 'All back in the bags. Safe trip home.');

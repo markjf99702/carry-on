@@ -527,6 +527,24 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   const after = [await atMiddle(), (await row(page, 'Prescriptions').boundingBox()).y];
   assert.equal(after[0], before[0], 'the same row in the middle of the screen');
   assert.ok(Math.abs(after[1] - before[1]) <= 2, `and it didn't move (${before[1]} → ${after[1]})`);
+
+  // Away and back: the trip opens where it was left, from Trips or with Back. Another trip opens at its top.
+  const y = await page.evaluate(() => scrollY);
+  const scrolled = () => page.evaluate(() => scrollY);
+  await page.click('header.bar a.brand');
+  await page.waitForSelector('.tag-card');
+  await page.click('.tag-card');
+  await page.waitForSelector('.pass h1');
+  assert.equal(await scrolled(), y, 'opened from Trips where it was left');
+  assert.equal(await atMiddle(), before[0]);
+  await page.click('header.bar [aria-label="My list"]');
+  await page.waitForSelector('.bag.edit');
+  await page.goBack();
+  await page.waitForSelector('.pass h1');
+  assert.equal(await scrolled(), y, 'and with Back');
+  await page.click('header.bar a.brand');
+  await planTrip(page, { where: 'Tok', from: 20, to: 22 });
+  assert.equal(await scrolled(), 0, 'a new trip at its top');
   await ctx.close();
 }
 
