@@ -83,6 +83,10 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   const { ctx, page } = await phone();
   assert.match(await page.locator('main h1').innerText(), /trip you’re actually taking/i);
   await fits(page, 'the first screen');
+  // On a small phone (375 x 667), both ways in are on the first screen.
+  await page.setViewportSize({ width: 375, height: 667 });
+  for (const b of ['Start with a starter list', 'Paste my own list']) assert.ok((await page.locator('.choices .btn', { hasText: b }).boundingBox()).y + 52 <= 667, `${b} on the first screen`);
+  await page.setViewportSize({ width: 390, height: 844 });
   // Hover styles only where a pointer hovers: on a touch screen they stay stuck on whatever was tapped last.
   const hovers = await page.evaluate(() => [...document.styleSheets].flatMap(s => [...s.cssRules]).map(r => r.selectorText || '').filter(t => t.includes(':hover')));
   assert.deepEqual(hovers, ['.jd-foot a:hover, .jd-foot a:focus-visible'], 'hover styles outside @media (hover: hover)');

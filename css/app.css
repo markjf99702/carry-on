@@ -187,9 +187,9 @@ ul.chips .chip small { font-weight: 500; color: var(--muted); font-size: 13px; }
 .welcome { padding: 14px 0 0; }
 .kicker { font: 700 15px var(--display); text-transform: uppercase; letter-spacing: .14em; color: var(--accent); margin-bottom: 6px; }
 .welcome h1 { font-size: 44px; margin-bottom: 14px; }
-.welcome .how { margin: 0 0 22px; padding: 0; list-style: none; display: grid; gap: 10px; }
-.welcome .how li { padding: 12px 14px; border-radius: 12px; background: var(--paper); border: 1px solid var(--line); }
-.choices { display: grid; gap: 10px; margin-bottom: 12px; }
+.choices { display: grid; gap: 10px; margin: 18px 0 12px; }
+.welcome .how-head { margin: 26px 0 8px; font-size: 14px; }
+.welcome .how { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
 .welcome .past { margin-top: 22px; }
 
 /* ---------- trips: luggage tags ---------- */
