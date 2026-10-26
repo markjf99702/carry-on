@@ -581,6 +581,11 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await page.click('header.bar a.brand');
   await planTrip(page, { where: 'Tok', from: 20, to: 22 });
   assert.equal(await scrolled(), 0, 'a new trip at its top');
+  // Ten days of weather scroll inside their row, and the words for a screen reader with them, not the page.
+  await page.click('header.bar a.brand');
+  await planTrip(page, { where: 'Chic', from: 2, to: 11, by: 'Driving' });
+  await page.waitForSelector('.wx-days li');
+  await fits(page, 'a trip with ten days of weather');
   await ctx.close();
 }
 
