@@ -308,6 +308,11 @@ test('Open-Meteo’s out-of-range answer reads as plain words', async () => {
   try {
     await assert.rejects(tripWeather(PLACE, '2026-11-01', '2026-11-03', '2026-10-27', { now }), { message: 'The forecast doesn’t reach that far yet.' });
   } finally { stub.restore(); }
+  // Only the forecast's: the archive saying it doesn't have a day isn't about the forecast.
+  const stub2 = weatherStub(now, () => ({ status: 400, reason: "Parameter 'end_date' is out of allowed range from 1940-01-01 to 2026-10-20" }));
+  try {
+    await assert.rejects(tripWeather(PLACE, '2026-12-01', '2026-12-03', '2026-10-27', { now }), { message: /^The weather history service said no \(400/ });
+  } finally { stub2.restore(); }
 });
 
 test('turning a condition on or off by hand, and occasions', () => {

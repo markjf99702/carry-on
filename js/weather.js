@@ -32,8 +32,7 @@ async function reach(url, signal, what) {
   if (!res.ok) {
     let reason = '';
     try { reason = (await res.json()).reason || ''; } catch { /* not JSON */ }
-    if (res.status === 400 && /out of allowed range/.test(reason)) throw new Error('The forecast doesn’t reach that far yet.');
-    throw new Error(`${what[0].toUpperCase() + what.slice(1)} said no (${res.status}${reason ? `: ${reason}` : ''}).`);
+    throw Object.assign(new Error(`${what[0].toUpperCase() + what.slice(1)} said no (${res.status}${reason ? `: ${reason}` : ''}).`), { status: res.status, reason });
   }
   return res.json();
 }
@@ -135,7 +134,10 @@ export async function tripWeather(place, start, end, today, { signal, now = Date
         uv: d.uv_index_max?.[i] ?? undefined, code: d.weather_code?.[i] ?? undefined,
       };
     });
-  }).catch(e => { fcErr = e; });
+  }).catch(e => {
+    // Open-Meteo's own words for a day past its edge, should one still be asked for.
+    fcErr = e.status === 400 && /out of allowed range/.test(e.reason) ? new Error('The forecast doesn’t reach that far yet.') : e;
+  });
   if (ty.length) Object.assign(out, await typical(place, ty, today, signal, errors));
   await forecast;
   const gaps = fc.filter(k => !out[k]);
