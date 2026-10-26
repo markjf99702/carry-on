@@ -130,7 +130,8 @@ export function counted(line) {
 //   - a line with a bullet, a box or a number at the margin, right under a line without one, is under it;
 //   - "●" and "○" bullets (Google Docs) count as levels the same way indents do;
 //   - a top-level line with nothing under it is a thing on its own, kept together in "Not in a bag";
-//   - a title line goes: "# Title", or a line on its own above a blank line and a list of boxes or bullets;
+//   - a title line goes: "# Title", or a line on its own above a blank line and a list of boxes or bullets,
+//     unless lines further down look the same (then it's the first heading of several);
 //   - an emoji in front of a bag's name is its icon;
 //   - only when none of that made a bag: blocks of lines between blank lines, each under its first line, and
 //     short ALL-CAPS lines, are bags.
@@ -163,7 +164,8 @@ function read(lines, blocks = false) {
     return b;
   };
   const addItem = (bag, line) => {
-    const { name, qty } = counted(line);
+    // A count is read only in a bag: a job like "2 bins out" keeps its words.
+    const { name, qty } = bag.kind === 'bag' ? counted(line) : { name: line, qty: 0 };
     const g = bag.kind === 'bag' ? guess(name) : { when: [], unless: [], per: '' };
     // The bag already says it (a badge in the work bag).
     if (g.when.length && g.when.every(k => bag.when.includes(k))) g.when = [];
@@ -221,7 +223,8 @@ export function parsePaste(text) {
   const plain = x => docs && !x.bullet;
   if (first && !/:$/.test(first.body) && (docs
     ? plain(first) && (!second || second.gap || plain(second) || !lines.slice(1).some(plain))
-    : first.head === 1 ? !lines.slice(1).some(x => x.head === 1) : !first.head && !first.marked && second?.gap && second.marked)) lines = lines.slice(1);
+    : first.head === 1 ? !lines.slice(1).some(x => x.head === 1)
+      : !first.head && !first.marked && second?.gap && second.marked && !lines.some((x, i) => i > 0 && !x.head && !x.marked && !x.lead && lines[i + 1]?.marked))) lines = lines.slice(1);
   // Levels. A bullet at the margin sits under a line at the margin without one, as if indented a little.
   const mixed = !docs && lines.some(x => !x.lead && x.marked) && lines.some(x => !x.lead && !x.marked && !x.head);
   for (const x of lines) x.level = docs ? (x.bullet ? DOCS_LEVEL[x.bullet] : -1) : x.lead + (mixed && !x.lead && x.marked ? 0.5 : 0);

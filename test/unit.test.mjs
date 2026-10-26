@@ -903,6 +903,9 @@ test('pasted lists: a title line isn’t a thing', () => {
   // Not a title: a heading ending in a colon, or a line with no list of boxes after it.
   assert.equal(shape('Clothes:\n\n- Socks\n\n- Shirts'), 'Clothes: Socks, Shirts');
   assert.equal(shape('Passport\n\nWallet\n\nKeys'), 'Not in a bag: Passport, Wallet, Keys');
+  // Nor the first of several headings that each have a blank line and boxes or bullets under them.
+  assert.equal(shape('Toiletries\n\n- Toothbrush\n- Floss\n\nElectronics\n\n- Phone charger'), 'Toiletries: Toothbrush, Floss | Electronics: Phone charger');
+  assert.equal(shape('Toiletries\n\n☐ Toothbrush\nElectronics\n☐ Phone charger'), 'Toiletries: Toothbrush | Electronics: Phone charger');
 });
 
 test('pasted lists: bullets, boxes and numbers under a heading without one', () => {
@@ -961,6 +964,8 @@ test('a count typed with a thing is its How many, not part of its name', () => {
   });
   // "5 pairs of underwear" and "Underwear" are two lines of the same name: both stay, the first with its count.
   assert.deepEqual(l.items.filter(x => x.name === 'Underwear').map(x => `${x.qty}${x.per}`), ['5', '1day']);
+  // A job keeps its words: jobs have no How many.
+  assert.deepEqual(parsePaste('Leaving the house:\n- 2 bins out\n- Plants x3').items.map(x => `${x.name} ${x.qty}`), ['2 bins out 1', 'Plants x3 1']);
 });
 
 test('first guesses, name by name: nothing everyday left off a trip by a word inside another', () => {
