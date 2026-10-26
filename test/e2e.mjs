@@ -1002,11 +1002,16 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await until(async () => g.files().some(f => f.appProperties?.carryon === 'sync' && f.body), 'the file in Drive');
   assert.ok(g.files().some(f => f.name === 'Carry On' && f.appProperties?.carryon === 'folder'));
 
-  // The second phone brings the list from Drive.
+  // The second phone brings the list from Drive: Settings opens at the Drive card, its button ready, and once the
+  // list is there it says so, on Trips.
   await b.page.click('text=Bring my list from Google Drive');
+  await until(() => b.page.evaluate(() => document.activeElement?.textContent === 'Save to Google Drive'), 'the Drive button focused');
+  const card = await b.page.locator('.card.drive').boundingBox();
+  assert.ok(card.y > 0 && card.y < 200, `the Drive card at the top of the screen (${card.y})`);
   await b.page.click('text=Save to Google Drive');
   await until(() => b.page.evaluate(() => Object.keys(window.carryOn.store.doc.trips).length === 1), 'the trip on the second phone');
-  await b.page.goto(base + '#/');
+  await until(async () => (await b.page.evaluate(() => location.hash)) === '#/' && (await b.page.locator('#toast span').innerText()) === 'Your list is here from Google Drive.', 'Trips and the toast');
+  assert.equal(await b.page.locator('main h1').innerText(), 'TRIPS');
   await b.page.click('.tag-card');
   assert.equal(await row(b.page, 'Belt').locator('.tick').getAttribute('aria-checked'), 'true', 'the tick came along');
   assert.ok(!(await rowsText(b.page)).includes('Eye mask and earplugs'), 'driving, so no eye mask');

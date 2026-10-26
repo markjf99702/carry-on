@@ -136,6 +136,9 @@ function applyCounting(fn) {
 
 // ---------- the first screen ----------
 
+// Set by the first screen's Bring my list from Google Drive: Settings opens at its Google Drive card, once.
+let toDrive = false;
+
 function welcome() {
   return h('section', { class: 'welcome' },
     h('p', { class: 'kicker' }, 'Packing list'),
@@ -149,7 +152,7 @@ function welcome() {
     h('div', { class: 'choices' },
       h('button', { type: 'button', class: 'btn primary big', onclick: () => { store.apply(d => M.startWith(d, starterList())); toast('Starter list in. Change anything in My list.'); go('#/'); } }, 'Start with a starter list'),
       h('button', { type: 'button', class: 'btn big', onclick: () => pasteSheet() }, 'Paste my own list'),
-      drive.ready ? h('a', { class: 'btn big', href: '#/settings' }, 'Bring my list from Google Drive') : null),
+      drive.ready ? h('a', { class: 'btn big', href: '#/settings', onclick: () => { toDrive = true; } }, 'Bring my list from Google Drive') : null),
     h('p', { class: 'small muted' }, 'Pasting works with a list copied from Google Keep, Notes or a document. Put each bag’s things under its name.'),
     yourTrips());
 }
@@ -1110,7 +1113,16 @@ function settingsView() {
   const homeSet = !!M.pref(d, 'home', '');
   const countries = Object.keys(PLUGS).map(cc => [cc, countryName(cc)]).sort((a, b) => a[1].localeCompare(b[1]));
   const driveHost = h('section', { class: 'card drive' });
-  queueMicrotask(() => drive.card(driveHost));
+  const atDrive = toDrive;
+  toDrive = false;
+  queueMicrotask(() => {
+    drive.card(driveHost);
+    // From the first screen: to the Drive card, under the top bar, with its button ready to tap.
+    const btn = atDrive && !driveHost.hidden && driveHost.querySelector('button');
+    if (!btn) return;
+    window.scrollTo(0, driveHost.getBoundingClientRect().top + scrollY - document.querySelector('.bar').offsetHeight - 12);
+    btn.focus({ preventScroll: true });
+  });
   let file;
   return [
     h('div', { class: 'page-head' }, h('h1', {}, 'Settings')),
@@ -1164,7 +1176,12 @@ function settingsView() {
 setupSheet();
 drive.chip(document.getElementById('cloud'));
 store.onSave(r => { if (r === 'full') toast('This browser’s storage is full, so that wasn’t saved.'); else drive.changed(); });
-drive.onUpdate(() => { store.reload(); redraw(); });
+// A list arriving from Drive on a phone that had none: say so, and go to the trips.
+drive.onUpdate(() => {
+  const had = M.hasList(doc());
+  store.reload();
+  if (!had && M.hasList(doc())) { toast('Your list is here from Google Drive.'); go('#/'); } else redraw();
+});
 window.addEventListener('storage', e => { if (e.key === 'carry-on' || e.key === 'carry-on.device') { store.reload(); redraw(); } });
 // Back to a page the browser kept in memory (after the footer's links, say): it missed whatever was saved meanwhile.
 window.addEventListener('pageshow', e => { if (e.persisted) { store.reload(); render(); } });
