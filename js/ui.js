@@ -75,7 +75,9 @@ export function sheet(title, build, { wide = false, done } = {}) {
       h('h2', { id: 'sheetTitle' }, title),
       h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Close', html: ICONS.close, onclick: close })),
     ...[build(close)].flat(Infinity).filter(x => x !== null && x !== undefined && x !== false));
-  if (!dlg.open) dlg.showModal();
+  // A sheet opens at its top. The sheet keeps where the last one was scrolled to, and with its title row staying
+  // in view, putting the focus on the close button no longer scrolls back up.
+  if (!dlg.open) { dlg.showModal(); dlg.scrollTop = 0; }
   placeToast();
   const first = body.querySelector('[autofocus]');
   if (first) first.focus();

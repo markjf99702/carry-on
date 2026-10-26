@@ -160,11 +160,14 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await page.click('.needs .btn');
   await until(() => sheetOpen(page), 'the conditions sheet');
   await page.locator('.auto-list li', { hasText: 'Rain' }).locator('button', { hasText: 'No' }).click();
+  await page.evaluate(() => document.getElementById('sheet').scrollBy(0, 2000));
   await closeSheet(page);
   names = await rowsText(page);
   assert.ok(!names.includes('Umbrella') && !names.includes('Rain jacket'), 'no rain gear once rain is off');
-  // An occasion added from the same sheet.
+  // An occasion added from the same sheet, which opens at its top, not where it was last scrolled to.
   await page.click('.needs .btn');
+  await until(() => sheetOpen(page), 'the conditions sheet');
+  assert.equal(await page.evaluate(() => document.getElementById('sheet').scrollTop), 0, 'a sheet opens at its top');
   await page.locator('.sheet .chip', { hasText: /Working out$/ }).click();
   await closeSheet(page);
   assert.ok((await rowsText(page)).includes('Workout clothes'));
