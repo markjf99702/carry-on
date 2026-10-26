@@ -1042,6 +1042,12 @@ test('first guesses, name by name: nothing everyday left off a trip by a word in
   }
 });
 
+test('no lookbehind in a pattern: Safari before 16.4 can’t read one, and the page wouldn’t load at all', async () => {
+  const { readdir, readFile } = await import('node:fs/promises');
+  const dir = new URL('../js/', import.meta.url);
+  for (const f of await readdir(dir)) assert.doesNotMatch(await readFile(new URL(f, dir), 'utf8'), /\(\?<[!=]/, f);
+});
+
 test('bags: which kind, and which icon', () => {
   for (const n of ['Leaving the house', 'Before we go', 'Before leaving', 'To do before leaving', 'Before departure', 'Lock up']) assert.equal(bagKind(n), 'leave', n);
   for (const n of ['Leaving the hotel', 'Check out of the hotel', 'Hotel checkout', 'Checkout', 'Check-out', 'Leaving the cabin', 'Leaving the vacation rental', 'Leaving the Airbnb', 'Before leaving the hotel']) assert.equal(bagKind(n), 'back', n);

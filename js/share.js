@@ -40,7 +40,9 @@ export function cleanList(raw) {
 }
 
 // ---------- guesses ----------
-// When a thing is probably needed, from its name. Only a first guess: every one can be changed.
+// When a thing is probably needed, from its name. Only a first guess: every one can be changed. A third pattern is
+// what the name mustn't have. (Not a lookbehind in the first: Safari before 16.4 can't read one, and the whole page
+// would fail to load.)
 const GUESSES = [
   // Snow before swimming, so ski goggles are for the snow.
   [/\bski(s|ing)?\b|snow ?(boots?|pants|suit)/i, { when: ['snow'] }],
@@ -52,11 +54,11 @@ const GUESSES = [
   [/workout|\bgym\b|running (shoes|clothes)|sports bra|yoga/i, { when: ['gym'] }],
   // A visa, but not a Visa card; a plug adapter, but not a USB-C or HDMI one.
   [/passport|\bvisa\b(?! (debit |credit )?card)|currency|local cash|foreign cash/i, { when: ['abroad'] }],
-  [/(?<!(usb-?c?|hdmi|lightning|headphone|audio|display|sd|card) )adapter|converter/i, { when: ['plug'] }],
+  [/adapter|converter/i, { when: ['plug'] }, /(usb-?c?|hdmi|lightning|headphone|audio|display|sd|card) adapter/i],
   [/umbrella|rain ?(jacket|coat|shell|boots?)|poncho|waterproof (jacket|coat|shell)/i, { when: ['rain'] }],
   [/winter coat|warm coat|parka|puffer|gloves|mittens|beanie|scarf|thermal|long underwear|long johns|hand warmers/i, { when: ['cold'] }],
   [/light jacket|fleece|sweater|sweatshirt|hoodie|cardigan|\bjumpers?\b/i, { when: ['cool', 'cold'] }],
-  [/\bsuit\b|(?<!hair )\bties?\b|dress (shoes|shirts?)|blazer|heels|cufflinks|dressy|formal/i, { when: ['dressy'] }],
+  [/\bsuit\b|\bties?\b|dress (shoes|shirts?)|blazer|heels|cufflinks|dressy|formal/i, { when: ['dressy'] }, /hair ties?\b/i],
   [/hiking|trail(?! mix)|bug spray|insect|mosquito|headlamp|trekking/i, { when: ['outdoors'] }],
   [/(neck|travel) pillow/i, { when: ['fly'] }],
   [/\bbadge\b|security key|business cards|work laptop/i, { when: ['work'] }],
@@ -69,7 +71,7 @@ const BAG_GUESSES = [
   [/\bski\b|snow/i, { when: ['snow'] }],
 ];
 export function guess(name, forBag = false) {
-  for (const [re, g] of forBag ? BAG_GUESSES : GUESSES) if (re.test(name)) return { when: [], unless: [], per: '', ...g };
+  for (const [re, g, not] of forBag ? BAG_GUESSES : GUESSES) if (re.test(name) && !not?.test(name)) return { when: [], unless: [], per: '', ...g };
   return { when: [], unless: [], per: '' };
 }
 
