@@ -461,6 +461,7 @@ function itemRow(t, g, r, mode, whyMap, jobs, hide) {
     r.added ? line('why', 'Added for this trip') : null,
     r.moved ? line('why', 'In this bag for this trip') : null,
     r.extra ? line('why', 'Just for this trip') : null,
+    r.deleted ? line('why', 'No longer on your list') : null,
   ];
   return h('li', { class: 'row' + (r.done ? ' done' : '') + (r.gone ? ' gone' : '') },
     h('button', { type: 'button', class: 'tick', role: 'checkbox', 'aria-checked': String(r.done), 'data-key': r.key, 'aria-label': r.qty > 1 ? `${r.name}, ${r.qty}` : r.name, 'aria-describedby': lines.join(' ') || null, onclick: toggle },
@@ -565,15 +566,16 @@ function itemSheet(t, r, mode, jobs) {
 
 // Something added just for this trip goes on the list for every trip. It becomes a new thing, so its tick and its
 // bag for this trip go with it, and it stays on this trip even when the first guess at its conditions says no
-// (a travel umbrella on a dry trip). A tick on one goes only if it now comes one a day.
+// (a travel umbrella on a dry trip). A tick on one goes only if it now comes one a day, and only before the trip,
+// as applyCounting does: on a trip under way, it's what Coming home lists.
 function toList(t, r, bag) {
-  const nid = M.newId('i'), g = guess(r.name);
+  const nid = M.newId('i'), g = guess(r.name), under = t.start < today();
   apply(d => {
     let next = M.putItem(d, { id: nid, name: r.name, bag, ...g });
     const trip = next.trips[t.id];
     for (const k of ['p:', 'b:']) {
       const v = trip.marks?.[k + r.id]?.v;
-      if (v && !(k === 'p:' && R.qtyOf(next, trip, next.items[nid]) > 1)) next = M.mark(next, t.id, k + nid, v);
+      if (v && !(k === 'p:' && !under && R.qtyOf(next, trip, next.items[nid]) > 1)) next = M.mark(next, t.id, k + nid, v);
     }
     if (g.when.length) next = M.mark(next, t.id, 'x:' + nid, 'add');
     return M.removeExtra(next, t.id, r.id);

@@ -724,6 +724,31 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   assert.deepEqual((await things()).sort(), ['Belt', 'Maple syrup', 'Shoes']);
   await tick('Maple syrup').click();
   assert.equal(await tick('Maple syrup').getAttribute('aria-checked'), 'true', 'and tickable');
+  // Packed going, then deleted from My list on the trip: it still comes home, and says so.
+  const tripAt = page.url();
+  await page.goto(base + '#/list');
+  await page.locator('.edit-row', { hasText: 'Belt' }).click();
+  await page.click('.sheet .btn.danger-quiet');
+  await page.goto(tripAt);
+  await page.waitForSelector('.pass h1');
+  assert.deepEqual((await things()).sort(), ['Belt', 'Maple syrup', 'Shoes']);
+  assert.match(await row(page, 'Belt').innerText(), /No longer on your list/);
+  await tick('Belt').click();
+  assert.equal(await tick('Belt').getAttribute('aria-checked'), 'true');
+  // Something just for this trip, packed going, then put on My list, where it comes one a day: it was packed, so
+  // on a trip under way its tick stays, and it comes home too.
+  await page.click('text=Going');
+  await page.click('text=Add something for this trip');
+  await page.fill('.sheet input[type="text"]', 'Wool socks');
+  await page.selectOption('.sheet select', { label: '👕 Clothes' });
+  await page.click('.sheet .btn.primary');
+  await tick('Wool socks').click();
+  await more(page, 'Wool socks');
+  await page.click('text=Add it to my list for every trip');
+  assert.equal(await row(page, 'Wool socks').locator('.name').innerText(), 'Wool socks ×3');
+  assert.equal(await tick('Wool socks').getAttribute('aria-checked'), 'true', 'still packed');
+  await page.click('text=Coming home');
+  assert.deepEqual((await things()).sort(), ['Belt', 'Maple syrup', 'Shoes', 'Wool socks ×3']);
   await page.click('.crumb');
   await page.waitForSelector('.tag-card');
   assert.equal(await page.locator('.tag-card .when').innerText(), 'NOW · BACK TODAY');

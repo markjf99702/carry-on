@@ -397,6 +397,43 @@ test('skipping, adding, moving, extras, and what shows coming home', () => {
   assert.ok(p.groups.flatMap(g => g.rows).find(r => r.name === 'Umbrella').packedOnly);
 });
 
+test('coming home lists what went, though it was deleted from My list since, alone or with its bag', () => {
+  let doc = trip(starter(), { travel: 'drive' });
+  const rowsOf = p => p.groups.flatMap(g => g.rows.map(r => `${g.bag.name}: ${r.name}${r.deleted ? ' (deleted)' : ''}`));
+  for (const k of ['p:s-electronics-power-bank', 'p:s-electronics-phone-charger', 'p:s-electronics-headphones', 'p:s-clothes-shoes', 'p:s-daybag-sunglasses', 'p:s-leave-water-the-plants']) doc = M.mark(doc, 't1', k, 1);
+  doc = M.mark(doc, 't1', 'b:s-daybag-sunglasses', 's-clothes');
+  const before = plan(doc, doc.trips.t1, 'back');
+  // A thing deleted on its own: still in its bag, saying so.
+  let d = M.removeItem(doc, 's-electronics-power-bank');
+  let back = plan(d, d.trips.t1, 'back');
+  assert.deepEqual(rowsOf(back), ['Electronics: Phone charger', 'Electronics: Headphones', 'Electronics: Power bank (deleted)', 'Clothes: Sunglasses', 'Clothes: Shoes']);
+  assert.equal(back.total, before.total);
+  const row = back.groups[0].rows[2];
+  assert.equal(row.key, 'r:s-electronics-power-bank');
+  d = M.mark(d, 't1', 'r:s-electronics-power-bank', 1);
+  assert.equal(plan(d, d.trips.t1, 'back').groups[0].rows[2].done, true, 'and it ticks');
+  // Going, it's gone.
+  assert.ok(!allNames(plan(d, d.trips.t1)).includes('Power bank'));
+  // A whole bag deleted: its packed things come home with the things not in a bag.
+  d = M.removeBag(doc, 's-electronics');
+  back = plan(d, d.trips.t1, 'back');
+  assert.deepEqual(rowsOf(back), ['Clothes: Sunglasses', 'Clothes: Shoes', 'Not in a bag: Phone charger (deleted)', 'Not in a bag: Headphones (deleted)', 'Not in a bag: Power bank (deleted)']);
+  assert.equal(back.total, before.total);
+  // One moved to another bag this trip, deleted with its own bag, comes home in the bag it went in.
+  d = M.removeBag(doc, 's-daybag');
+  back = plan(d, d.trips.t1, 'back');
+  assert.deepEqual(rowsOf(back).filter(r => /Sunglasses/.test(r)), ['Clothes: Sunglasses (deleted)']);
+  // Only what was packed going; and a job done before leaving the house isn't one to bring home.
+  d = M.removeItem(M.removeItem(doc, 's-electronics-laptop-and-charger'), 's-leave-water-the-plants');
+  back = plan(d, d.trips.t1, 'back');
+  assert.equal(back.total, before.total);
+  assert.ok(!allNames(back).includes('Laptop and charger'));
+  assert.ok(!back.tasks.flatMap(g => g.rows).some(r => r.name === 'Water the plants'));
+  // Nothing ticked going: everything that's still on the list, as before.
+  const none = M.removeItem(trip(starter(), {}), 's-electronics-power-bank');
+  assert.ok(!allNames(plan(none, none.trips.t1, 'back')).includes('Power bank'));
+});
+
 test('a bag can depend on a condition, and its things go with it', () => {
   let doc = starter();
   doc = trip(doc, {});

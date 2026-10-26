@@ -134,7 +134,7 @@ export function whyNot(doc, rule, res) {
 // Returns { groups: [{ bag, rows }], tasks: [{ bag, rows }], left: [{ item, why, skipped }] (things, then jobs),
 //   leftBags: [{ bag, why, skipped, count }], done, total, cond }
 // A row: { id, name, note, qty, capped (one a day, stopped at the laundry limit), hits: [condition keys],
-//   key: the mark key, done, extra?, gone? }
+//   key: the mark key, done, extra?, gone?, deleted? (coming home: packed going, deleted from My list since) }
 export function plan(doc, trip, mode = 'go') {
   const cond = conditions(doc, trip), on = cond.on;
   const marks = trip.marks || {};
@@ -182,6 +182,19 @@ export function plan(doc, trip, mode = 'go') {
     if (mode === 'back' && anyPacked && !packed) continue;
     const bag = bagFor(mv(x.id)) || bagFor(x.bag) || fallback;
     groupOf(bag).rows.push({ id: x.id, name: x.name, note: '', qty: 1, hits: [], key: (mode === 'go' ? 'p:' : 'r:') + x.id, extra: true });
+  }
+  // Coming home, what went comes back, though it's been deleted from My list since, alone or with its bag: in the
+  // bag it went in this trip, or its own if that's still there, or else with the things not in a bag.
+  if (mode === 'back') {
+    const deleted = Object.values(doc.items).filter(it => M.gone(it) && isPacked(it.id) && (doc.bags[it.bag]?.kind ?? 'bag') === 'bag');
+    const rank = it => doc.bags[it.bag]?.order ?? 1e9;
+    deleted.sort((a, b) => rank(a) - rank(b) || a.order - b.order || a.name.localeCompare(b.name));
+    for (const it of deleted) {
+      groupOf(bagFor(mv(it.id)) || bagFor(it.bag) || fallback).rows.push({
+        id: it.id, name: it.name, note: it.note, qty: qtyOf(doc, trip, it), capped: it.per === 'day' && days(trip) > laundry(doc),
+        hits: [], key: 'r:' + it.id, deleted: true,
+      });
+    }
   }
   // Jobs, for leaving the house or the hotel. One left off this trip, or that its conditions leave off, waits
   // under Left off while its list is coming (a list that isn't has its own line).
