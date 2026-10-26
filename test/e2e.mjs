@@ -417,6 +417,88 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await ctx.close();
 }
 
+// ================= Back after planning, saving and deleting =================
+// The browser's Back (a phone's back gesture) never lands on a form that's done with.
+{
+  const { ctx, page } = await phone();
+  await page.click('text=Start with a starter list');
+  const heading = () => page.locator('main h1').innerText();
+  const back = async () => { const was = page.url(); await page.goBack(); await until(() => page.url() !== was, 'Back'); };
+  await planTrip(page, { where: 'Chic', from: 2, to: 4, by: 'Driving' });
+  const id = await page.evaluate(() => location.hash.split('/')[2]);
+  await back();
+  assert.equal(await heading(), 'TRIPS', 'Back from a new trip goes to Trips');
+  // Edit, Save: Back goes where the trip was opened from.
+  await page.click('.tag-card');
+  await page.waitForSelector('.pass h1');
+  await page.click('[aria-label="Edit this trip"]');
+  await page.fill('#name', 'Lake weekend');
+  await page.click('text=Save');
+  await until(async () => (await heading()) === 'LAKE WEEKEND', 'the trip, saved');
+  await back();
+  assert.equal(await heading(), 'TRIPS', 'Back after Save goes to Trips');
+  // Edit's own way back does the same.
+  await page.click('.tag-card');
+  await page.click('[aria-label="Edit this trip"]');
+  await page.click('.crumb');
+  await page.waitForSelector('.pass h1');
+  await back();
+  assert.equal(await heading(), 'TRIPS');
+  // Delete: Trips, and Back doesn't reopen the form.
+  await page.click('.tag-card');
+  await page.click('[aria-label="Edit this trip"]');
+  await page.click('text=Delete this trip');
+  await page.click('text=Tap again to delete it');
+  await until(async () => (await heading()) === 'TRIPS', 'Trips after Delete');
+  if (await page.evaluate(() => history.length) > 1) {
+    await page.goBack();
+    await wait(300);
+    assert.notEqual(await heading(), 'EDIT TRIP', 'Back after Delete');
+  }
+  // Opened from a link or after a reload, with nothing of this visit before it: Save opens the trip and Delete opens
+  // Trips, in the form's place; Back never reopens the form.
+  await planTrip(page, { where: 'Chic', from: 5, to: 6, by: 'Driving' });
+  const id2 = await page.evaluate(() => location.hash.split('/')[2]);
+  await page.click('.crumb');
+  await planTrip(page, { where: 'Lisb', from: 7, to: 9 });
+  const id3 = await page.evaluate(() => location.hash.split('/')[2]);
+  const opened = async hash => { const tab = await ctx.newPage(); await tab.goto(base + hash); await tab.waitForSelector('main h1'); return [tab, await tab.evaluate(() => history.length)]; };
+  const state = tab => tab.evaluate(() => [location.hash, history.length, document.querySelector('main h1').innerText]);
+  let [tab, n] = await opened('#/edit/' + id2);
+  await tab.click('text=Save');
+  await tab.waitForSelector('.pass h1');
+  assert.deepEqual(await state(tab), [`#/trip/${id2}`, n, 'CHICAGO'], 'Edit from a link, Save: the trip in its place');
+  await tab.close();
+  [tab, n] = await opened('#/trip/' + id2);
+  await tab.click('[aria-label="Edit this trip"]');
+  await tab.reload();
+  await tab.waitForSelector('.form');
+  await tab.click('text=Save');
+  await tab.waitForSelector('.pass h1');
+  assert.deepEqual((await state(tab)).slice(0, 2), [`#/trip/${id2}`, n + 1], 'Edit reloaded, Save: back to the trip');
+  await tab.goBack();
+  assert.notEqual(await tab.evaluate(() => location.hash), '#/edit/' + id2);
+  await tab.close();
+  [tab, n] = await opened('#/edit/' + id2);
+  await tab.click('text=Delete this trip');
+  await tab.click('text=Tap again to delete it');
+  await until(async () => (await tab.locator('main h1').innerText()) === 'TRIPS', 'Trips after Delete');
+  assert.equal(await tab.evaluate(() => history.length), n, 'Edit from a link, Delete: Trips in its place');
+  await tab.close();
+  [tab, n] = await opened('#/trip/' + id3);
+  await tab.click('[aria-label="Edit this trip"]');
+  await tab.click('text=Delete this trip');
+  await tab.click('text=Tap again to delete it');
+  await until(async () => (await state(tab))[0] === '#/', 'Trips after Delete');
+  assert.equal(await tab.locator('main h1').innerText(), 'TRIPS', 'a trip from a link, Edit, Delete: Trips in the trip’s place');
+  await tab.goBack();
+  await wait(300);
+  assert.ok(!/#\/(edit|trip)\//.test(tab.url()), `and Back leaves (${tab.url()})`);
+  await tab.close();
+  assert.ok(id);
+  await ctx.close();
+}
+
 // ================= Changes while packing say so =================
 {
   const { ctx, page } = await phone();

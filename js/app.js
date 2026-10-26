@@ -28,12 +28,22 @@ let current = '';
 // this. It holds only what was changed, so the rest still follows the trip, and it goes when the screen changes,
 // on Save and on Delete.
 let draft = null;
+// Each place in the history remembers the screen it was opened from (from) and the one before that (before), so
+// Save and Delete can step back to the trip, or past it, rather than add a step that Back undoes onto the form.
+// They live in history.state, so they last through a reload. lastHash and lastFrom are the screen drawn before.
+let lastHash = '', lastFrom = '', thenGo = null;
 function render() {
   const hash = location.hash || '#/';
   if (hash.startsWith('#list=')) { takeLink(hash.slice(6)); return; }
+  // Back to a trip that Delete stepped back to: it goes, and Trips takes its place.
+  if (thenGo?.at === hash) { const to = thenGo.to; thenGo = null; go(to, { replace: true }); return; }
   const [, page = '', id = ''] = hash.slice(1).split('/');
   const screen = page + '/' + id, moved = screen !== current;
-  if (moved) { draft = null; packedSeen = null; linger.clear(); clearTimeout(lingerT); lingerT = null; }
+  if (moved) {
+    draft = null; packedSeen = null; linger.clear(); clearTimeout(lingerT); lingerT = null;
+    if (!history.state || !('from' in history.state)) remember({ from: lastHash, before: lastFrom });
+    lastHash = hash; lastFrom = history.state?.from ?? '';
+  }
   // Focus, where the cursor was in a text box, and anything half-typed in an add box come through the redraw.
   const was = document.activeElement;
   const key = was?.dataset?.key, fid = !moved && !key && main.contains(was) ? was.id : '';
@@ -68,7 +78,17 @@ function view(page, id) {
 }
 
 const missing = () => h('section', { class: 'card empty' }, h('h1', {}, 'That trip isn’t here'), h('p', {}, 'It may have been deleted on another device.'), h('a', { class: 'btn primary', href: '#/' }, 'All trips'));
-const go = hash => { if (location.hash === hash) render(); else location.hash = hash; };
+// go(hash, { replace: true }) takes the place of this screen in the history, keeping where it was opened from.
+function go(hash, { replace = false } = {}) {
+  if (replace) {
+    const from = history.state?.from ?? '', before = history.state?.before ?? '';
+    if (remember({ from, before }, hash)) render(); else location.replace(hash);
+  } else if (location.hash === hash) render();
+  else location.hash = hash;
+}
+function remember(state, hash) {
+  try { history.replaceState(state, '', hash); return true; } catch { return false; } // a copy in a frame that can't
+}
 const apply = fn => { store.apply(fn); render(); };
 
 // A change that can raise how many of something a trip needs (a later Back, a higher laundry limit, a higher How
@@ -632,10 +652,13 @@ function tripForm(t, again = false) {
     });
     draft = null;
     if (moved || !editing) delete wxTried[id];
-    go(`#/trip/${id}`);
+    // Back to the trip, as if Back was pressed, when that's where Edit was opened from; otherwise the trip takes the
+    // form's place, so Back from it doesn't open the form again.
+    if (editing && history.state?.from === `#/trip/${id}`) history.back();
+    else go(`#/trip/${id}`, { replace: true });
   };
   return [
-    h('a', { class: 'crumb', href: editing ? `#/trip/${t.id}` : '#/' }, h('span', { html: ICONS.back }), editing ? title(t) : 'Trips'),
+    h('a', { class: 'crumb', href: editing ? `#/trip/${t.id}` : '#/', onclick: e => { if (editing && history.state?.from === `#/trip/${t.id}`) { e.preventDefault(); history.back(); } } }, h('span', { html: ICONS.back }), editing ? title(t) : 'Trips'),
     h('h1', {}, editing ? 'Edit trip' : again ? `${title(t)} again` : 'Plan a trip'),
     h('section', { class: 'card form' },
       h('div', { class: 'field' }, h('label', { for: 'where' }, 'Where to?'), where,
@@ -664,7 +687,12 @@ function tripForm(t, again = false) {
     editing ? h('div', { class: 'danger-zone' }, confirmBtn('Delete this trip', 'Tap again to delete it', () => {
       draft = null;
       store.apply(d => M.removeTrip(d, t.id));
-      go('#/');
+      // Back past the trip when Edit was opened from it, to wherever that was opened from; with nothing in this
+      // visit before the trip, back to it and Trips takes its place. Otherwise Trips takes the form's place.
+      const { from, before } = history.state || {}, trip = `#/trip/${t.id}`;
+      if (from === trip && before && !before.endsWith('/' + t.id) && !/^#\/(new|edit|again)\b/.test(before)) history.go(-2);
+      else if (from === trip) { thenGo = { at: trip, to: '#/' }; history.back(); }
+      else go('#/', { replace: true });
       toast(`${title(t)} deleted.`, { label: 'Undo', run: () => apply(d => M.restoreTrip(d, t.id)) });
     })) : null,
   ];
