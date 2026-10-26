@@ -145,7 +145,7 @@ function welcome() {
     h('h1', {}, 'Pack for the trip you’re actually taking.'),
     h('p', { class: 'lede' }, 'Keep everything you might pack in one list, sorted by bag. Each trip gets its own fresh copy, matched to the forecast, where you’re going and what you’ll be doing. There’s nothing to uncheck afterwards.'),
     h('div', { class: 'choices' },
-      h('button', { type: 'button', class: 'btn primary big', onclick: () => { store.apply(d => M.startWith(d, starterList())); toast('Starter list in. Change anything in My list.'); go('#/'); } }, 'Start with a starter list'),
+      h('button', { type: 'button', class: 'btn primary big', onclick: () => { store.apply(d => M.startWith(d, starterList())); toast('Starter list in. Change anything in My list.', { label: 'See it', run: () => go('#/list') }); go('#/'); } }, 'Start with a starter list'),
       h('button', { type: 'button', class: 'btn big', onclick: () => pasteSheet() }, 'Paste my own list'),
       drive.ready ? h('a', { class: 'btn big', href: '#/settings', onclick: () => { toDrive = true; } }, 'Bring my list from Google Drive') : null),
     h('p', { class: 'small muted' }, 'Pasting works with a list copied from Google Keep, Notes or a document. Put each bag’s things under its name.'),
@@ -807,6 +807,7 @@ function listView() {
   const all = M.bags(doc());
   const kinds = [['bag', 'Bags'], ['leave', 'Before you leave home'], ['back', 'Before you leave the hotel']];
   return [
+    h('a', { class: 'crumb', href: '#/' }, h('span', { html: ICONS.back }), 'Trips'),
     h('div', { class: 'page-head' }, h('h1', {}, 'My list')),
     h('p', { class: 'lede muted' }, 'Everything you might pack, by bag. Something with conditions only comes along when a trip calls for it. Tap anything to change it.'),
     M.trips(doc()).length ? null : h('section', { class: 'card ready' },
@@ -1158,6 +1159,7 @@ function settingsView() {
   });
   let file;
   return [
+    h('a', { class: 'crumb', href: '#/' }, h('span', { html: ICONS.back }), 'Trips'),
     h('div', { class: 'page-head' }, h('h1', {}, 'Settings')),
     h('section', { class: 'card' },
       h('h2', {}, 'Home'),

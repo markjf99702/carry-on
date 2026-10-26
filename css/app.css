@@ -87,7 +87,12 @@ button, input, select, textarea { font: inherit; color: inherit; }
   -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
 }
 .brand { display: flex; align-items: center; gap: 9px; margin-right: auto; text-decoration: none; }
-.brand span { font: 700 25px/1 var(--display); text-transform: uppercase; letter-spacing: .03em; }
+.brand span { font: 700 25px/1 var(--display); text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; }
+/* On the narrowest phones with Google Drive on, the cloud takes the room of the words beside the logo, which then
+   stay only for screen readers. */
+@media (max-width: 349px) {
+  .bar:has(.cloud:not([hidden])) .brand span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+}
 .icon-btn {
   position: relative; display: inline-grid; place-items: center; flex: none;
   width: 44px; height: 44px; padding: 0; border: 0; border-radius: 12px;
@@ -97,6 +102,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .icon-btn:active:not(:disabled) { background: var(--chip); }
 /* Hover only where there's a pointer that hovers: on a touch screen it stays stuck on whatever was last tapped. */
 @media (hover: hover) { .icon-btn:hover:not(:disabled) { background: var(--chip); } }
+/* My list has its name beside its icon: the first toast sends people there by name. */
+.bar-link {
+  display: inline-flex; align-items: center; gap: 6px; flex: none; min-height: 44px; padding: 0 10px 0 8px;
+  border-radius: 12px; font-weight: 650; font-size: 15px; color: var(--ink); text-decoration: none; white-space: nowrap;
+}
+.bar-link svg { width: 22px; height: 22px; }
+.bar-link:active { background: var(--chip); }
+@media (hover: hover) { .bar-link:hover { background: var(--chip); } }
 .icon-btn.small { width: 36px; height: 36px; }
 .icon-btn.small svg { width: 20px; height: 20px; }
 .icon-btn:disabled { opacity: .4; cursor: default; }
@@ -177,6 +190,7 @@ ul.chips .chip small { font-weight: 500; color: var(--muted); font-size: 13px; }
 .card.ready { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
 .card.ready p { margin: 0; flex: 1 1 220px; }
 .page-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 10px 0 16px; }
+.crumb + .page-head { margin-top: 0; }
 .crumb { display: inline-flex; align-items: center; gap: 2px; margin: 4px 0 10px -6px; padding: 6px; font-weight: 650; color: var(--muted); text-decoration: none; }
 .crumb svg { width: 18px; height: 18px; }
 .lede { font-size: 17px; }

@@ -541,7 +541,7 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await page.waitForSelector('.pass h1');
   assert.equal(await scrolled(), y, 'opened from Trips where it was left');
   assert.equal(await atMiddle(), before[0]);
-  await page.click('header.bar [aria-label="My list"]');
+  await page.click('header.bar a[href="#/list"]');
   await page.waitForSelector('.bag.edit');
   await page.goBack();
   await page.waitForSelector('.pass h1');
@@ -998,6 +998,17 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
 {
   const { ctx, page } = await phone();
   await page.click('text=Start with a starter list');
+  // The first toast says where to change the list, and goes there. My list says its name in the top bar, and has
+  // a way back to Trips, as Settings does.
+  assert.equal(await page.locator('header.bar a[href="#/list"]').innerText(), 'My list');
+  await page.locator('#toast button', { hasText: 'See it' }).waitFor();
+  await wait(500);
+  await page.click('#toast button');
+  await until(() => page.evaluate(() => location.hash === '#/list'), 'See it to open My list');
+  await page.click('main .crumb');
+  await until(() => page.evaluate(() => location.hash === '#/'), 'the crumb back to Trips');
+  await page.goto(base + '#/settings');
+  assert.equal(await page.locator('main .crumb').innerText(), 'Trips');
   // Enter in a text box of a sheet with several presses its main button, in the item editor and the bag editor.
   await page.goto(base + '#/list');
   await page.locator('.edit-row', { hasText: 'Toothpaste' }).click();
