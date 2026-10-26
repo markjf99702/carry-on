@@ -1117,11 +1117,16 @@ function settingsView() {
   toDrive = false;
   queueMicrotask(() => {
     drive.card(driveHost);
-    // From the first screen: to the Drive card, under the top bar, with its button ready to tap.
-    const btn = atDrive && !driveHost.hidden && driveHost.querySelector('button');
-    if (!btn) return;
+    // From the first screen: to the Drive card, under the top bar, with its button ready to tap. The card draws
+    // again when Google's sign-in has loaded, button and all, so the focus goes to the new one, until it's
+    // somewhere else or the screen has gone.
+    if (!atDrive || driveHost.hidden) return;
     window.scrollTo(0, driveHost.getBoundingClientRect().top + scrollY - document.querySelector('.bar').offsetHeight - 12);
-    btn.focus({ preventScroll: true });
+    drive.watch(() => {
+      const at = document.activeElement;
+      if (!driveHost.isConnected || (at && at !== document.body && at !== main && !driveHost.contains(at))) return false;
+      driveHost.querySelector('button')?.focus({ preventScroll: true });
+    });
   });
   let file;
   return [
