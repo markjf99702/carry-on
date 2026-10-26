@@ -376,6 +376,8 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await page.evaluate(() => document.getElementById('name').setSelectionRange(4, 4));
   await redraws();
   assert.deepEqual(await form(), planned, 'Plan a trip keeps what was typed');
+  const [leave, back] = [await page.locator('#start').boundingBox(), await page.locator('#end').boundingBox()];
+  assert.equal(leave.y, back.y, 'Leave and Back line up');
   assert.deepEqual(await page.evaluate(() => [document.activeElement.id, document.activeElement.selectionStart]), ['name', 4], 'and the cursor where it was');
   await page.click('text=Make my list');
   await page.waitForSelector('.pass h1');
