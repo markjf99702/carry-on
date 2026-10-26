@@ -343,9 +343,11 @@ function tripView(t) {
       h('div', { class: 'needs-head' },
         h('h2', {}, 'This trip calls for'),
         h('button', { type: 'button', class: 'btn small', 'data-key': 'conds', onclick: () => condSheet(t.id) }, 'Change')),
+      // Each chip opens the sheet at its own row, to see why or to change it.
       h('ul', { class: 'chips' }, onKeys.map(k => {
-        const info = R.condInfo(doc(), k);
-        return h('li', { class: 'chip on' }, h('span', { 'aria-hidden': 'true' }, info.icon), h('span', {}, h('b', {}, info.name), c.why[k] && c.why[k] !== info.name ? h('small', {}, c.why[k]) : null));
+        const info = R.condInfo(doc(), k), why = c.why[k] && c.why[k] !== info.name ? c.why[k] : '', wid = 'why-' + k.replace(/[^\w-]/g, '_');
+        return h('li', {}, h('button', { type: 'button', class: 'chip on', 'data-key': 'chip:' + k, 'aria-label': `${info.name}: change`, 'aria-describedby': why ? wid : null, onclick: () => condSheet(t.id, k) },
+          h('span', { 'aria-hidden': 'true' }, info.icon), h('span', {}, h('b', {}, info.name), why ? h('small', { id: wid }, why) : null)));
       }))),
     h('div', { class: 'seg mode', role: 'group', 'aria-label': 'Packing to leave or to come home' },
       h('button', { type: 'button', 'data-key': 'mode:go', 'aria-pressed': String(mode === 'go'), onclick: () => { store.setMode(t.id, 'go'); render(); } }, 'Going'),
@@ -625,8 +627,9 @@ function extraSheet(t, bagId, { home = false } = {}) {
   });
 }
 
-// What the trip calls for: the occasions, how you're getting there, and the weather and place by hand.
-function condSheet(id) {
+// What the trip calls for: the occasions, how you're getting there, and the weather and place by hand. Opened from
+// a chip, at that one's row (at: its key), with the focus on its choice.
+function condSheet(id, at = '') {
   const draw = () => {
     const t = doc().trips[id];
     const c = R.conditions(doc(), t);
@@ -634,12 +637,12 @@ function condSheet(id) {
       h('h3', {}, 'What’s on'),
       h('div', { class: 'chips pick' }, M.tags(doc()).map(g => {
         const on = !!t.set?.[g.id]?.v;
-        return h('button', { type: 'button', class: 'chip' + (on ? ' on' : ''), 'data-key': 'tag:' + g.id, 'aria-pressed': String(on), onclick: () => { store.apply(d => M.setCond(d, id, g.id, on ? null : true)); draw(); render(); } }, `${g.icon} ${g.name}`);
+        return h('button', { type: 'button', class: 'chip' + (on ? ' on' : ''), 'data-key': 'tag:' + g.id, 'data-k': g.id, 'aria-pressed': String(on), onclick: () => { store.apply(d => M.setCond(d, id, g.id, on ? null : true)); draw(); render(); } }, `${g.icon} ${g.name}`);
       })),
       h('h3', {}, 'Getting there'),
       h('div', { class: 'seg' }, M.TRAVEL.map(k => {
         const info = R.CONDITIONS.find(x => x.k === k);
-        return h('button', { type: 'button', 'data-key': 'travel:' + k, 'aria-pressed': String(t.travel === k), onclick: () => { store.apply(d => M.putTrip(d, { id, travel: k })); draw(); render(); } }, `${info.icon} ${info.name}`);
+        return h('button', { type: 'button', 'data-key': 'travel:' + k, 'data-k': k, 'aria-pressed': String(t.travel === k), onclick: () => { store.apply(d => M.putTrip(d, { id, travel: k })); draw(); render(); } }, `${info.icon} ${info.name}`);
       })),
       h('h3', {}, 'Place and weather'),
       h('p', { class: 'muted small' }, 'Auto follows the place and the forecast. Yes or No sets it for this trip only.'),
@@ -648,7 +651,7 @@ function condSheet(id) {
         const state = set === true ? 'on' : set === false ? 'off' : 'auto';
         const autoText = c.auto[k] === undefined ? 'unknown' : c.auto[k] ? 'yes' : 'no';
         const pickState = s => { store.apply(d => M.setCond(d, id, k, s === 'auto' ? null : s === 'on')); draw(); render(); };
-        return h('li', {},
+        return h('li', { 'data-k': k },
           h('span', { class: 'auto-name' }, h('span', { 'aria-hidden': 'true' }, info.icon), ' ', h('b', {}, info.name),
             h('small', {}, `Automatic: ${autoText}${c.auto[k] && c.why[k] ? ` · ${c.why[k]}` : c.auto[k] === false && c.no[k] ? ` · ${c.no[k]}` : ''}`)),
           h('div', { class: 'seg tiny', role: 'group', 'aria-label': info.name },
@@ -658,6 +661,11 @@ function condSheet(id) {
     ], { wide: true });
   };
   draw();
+  const dlg = document.getElementById('sheet'), row = at && dlg.querySelector(`[data-k="${CSS.escape(at)}"]`);
+  if (!row) return;
+  (row.matches('button') ? row : row.querySelector('[aria-pressed="true"]'))?.focus({ preventScroll: true });
+  const r = row.getBoundingClientRect(), box = dlg.getBoundingClientRect();
+  dlg.scrollTop += r.top - box.top - (box.height - r.height) / 2;
 }
 
 // ---------- planning or changing a trip ----------

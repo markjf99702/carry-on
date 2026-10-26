@@ -110,6 +110,15 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   assert.match(await page.locator('.bag', { hasText: 'Liquids bag' }).locator('.bag-note').innerText(), /quart bag, for a carry-on/, 'flying: the airport rule');
   const chips = await page.locator('.needs .chip').allInnerTexts();
   for (const c of ['Flying', 'Abroad', 'Different plugs', 'Rain', 'Work']) assert.ok(chips.some(x => x.includes(c)), `${c} chip`);
+  // A chip opens the conditions sheet at its own row.
+  const rainChip = page.locator('.needs .chip', { has: page.locator('b', { hasText: /^Rain$/ }) });
+  assert.equal(await rainChip.getAttribute('aria-label'), 'Rain: change');
+  await rainChip.click();
+  await until(() => sheetOpen(page), 'the conditions sheet from the Rain chip', 2000);
+  const [rainRow, sheetBox] = [await page.locator('.sheet [data-k="rain"]').boundingBox(), await page.locator('#sheet').boundingBox()];
+  assert.ok(rainRow.y > sheetBox.y + 60 && rainRow.y + rainRow.height < sheetBox.y + sheetBox.height, `the Rain row in view (${rainRow.y}, ${sheetBox.y}–${sheetBox.y + sheetBox.height})`);
+  assert.match(await page.evaluate(() => document.activeElement.closest('li')?.textContent), /^☔ Rain/, 'with the focus on it');
+  await closeSheet(page);
   await fits(page, 'the trip');
 
   // Ticking, and it keeps.

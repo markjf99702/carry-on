@@ -165,8 +165,8 @@ input:not([type="checkbox"]):focus, select:focus, textarea:focus { outline: none
 }
 .chip.on { background: var(--ink); border-color: var(--ink); color: var(--bg); }
 .chip.add { border-style: dashed; color: var(--muted); }
-ul.chips .chip { cursor: default; }
-ul.chips .chip.on { background: var(--paper); color: var(--ink); border-color: var(--line); align-items: flex-start; padding: 6px 12px; border-radius: 14px; }
+ul.chips li { display: flex; }
+ul.chips .chip.on { background: var(--paper); color: var(--ink); border-color: var(--line); align-items: flex-start; padding: 6px 12px; border-radius: 14px; text-align: left; }
 ul.chips .chip.on > span:last-child { display: grid; line-height: 1.2; }
 ul.chips .chip small { font-weight: 500; color: var(--muted); font-size: 13px; }
 
