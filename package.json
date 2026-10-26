@@ -1,0 +1,13 @@
+{
+  "name": "carry-on",
+  "private": true,
+  "type": "module",
+  "description": "A packing list, by bag, that checks the forecast and the place.",
+  "scripts": {
+    "test": "node --test test/unit.test.mjs && node test/e2e.mjs",
+    "build": "node tools/build.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.10"
+  }
+}
