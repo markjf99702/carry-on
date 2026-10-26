@@ -64,13 +64,13 @@ const loc = p => ({ latitude: p.lat.toFixed(4), longitude: p.lon.toFixed(4), tim
 export function forecastUrl(p, start, end) {
   return `${API.forecast}?${new URLSearchParams({
     ...loc(p), start_date: start, end_date: end,
-    daily: 'temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,snowfall_sum,uv_index_max,weather_code',
+    daily: 'temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,rain_sum,showers_sum,snowfall_sum,uv_index_max,weather_code',
   })}`;
 }
 export function archiveUrl(p, start, end) {
   return `${API.archive}?${new URLSearchParams({
     ...loc(p), start_date: start, end_date: end,
-    daily: 'temperature_2m_max,temperature_2m_min,precipitation_sum,snowfall_sum,shortwave_radiation_sum',
+    daily: 'temperature_2m_max,temperature_2m_min,precipitation_sum,rain_sum,snowfall_sum,shortwave_radiation_sum',
   })}`;
 }
 
@@ -88,9 +88,11 @@ export async function tripWeather(place, start, end, today, { signal, now = Date
       const d = raw.daily || {};
       (d.time || []).forEach((k, i) => {
         if (d.temperature_2m_max[i] === null || d.temperature_2m_min[i] === null) return;
+        const rain = d.rain_sum?.[i], showers = d.showers_sum?.[i];
         out[k] = {
           d: k, hi: d.temperature_2m_max[i], lo: d.temperature_2m_min[i], mm: d.precipitation_sum?.[i] ?? 0,
           pop: d.precipitation_probability_max?.[i] ?? undefined, snow: d.snowfall_sum?.[i] ?? 0,
+          rain: rain == null && showers == null ? undefined : (rain ?? 0) + (showers ?? 0),
           uv: d.uv_index_max?.[i] ?? undefined, code: d.weather_code?.[i] ?? undefined,
         };
       });
@@ -103,13 +105,13 @@ export async function tripWeather(place, start, end, today, { signal, now = Date
     const sets = got.filter(g => g.status === 'fulfilled').map(g => g.value.daily || {});
     got.forEach(g => { if (g.status === 'rejected') errors.push(g.reason); });
     ty.forEach((k, i) => {
-      const rows = sets.map(s => ({ hi: s.temperature_2m_max?.[i], lo: s.temperature_2m_min?.[i], mm: s.precipitation_sum?.[i], sn: s.snowfall_sum?.[i], rad: s.shortwave_radiation_sum?.[i] }))
+      const rows = sets.map(s => ({ hi: s.temperature_2m_max?.[i], lo: s.temperature_2m_min?.[i], mm: s.precipitation_sum?.[i], rain: s.rain_sum?.[i], sn: s.snowfall_sum?.[i], rad: s.shortwave_radiation_sum?.[i] }))
         .filter(r => r.hi != null && r.lo != null);
       if (!rows.length) return;
       const mean = f => rows.reduce((a, r) => a + (r[f] ?? 0), 0) / rows.length;
       out[k] = {
         d: k, typ: 1, hi: mean('hi'), lo: mean('lo'), mm: mean('mm'), rad: mean('rad'),
-        wet: rows.filter(r => (r.mm ?? 0) >= 1).length / rows.length,
+        wet: rows.filter(r => rainOf({ mm: r.mm, snow: r.sn, rain: r.rain }) >= 1).length / rows.length,
         sn: rows.filter(r => (r.sn ?? 0) >= 0.5).length / rows.length,
       };
     });
@@ -134,6 +136,15 @@ export function stale(wx, start, end, today, now = Date.now()) {
 // What the weather means for packing. Thresholds in °C.
 export const LIMITS = { hot: 28, cool: 13, cold: 4, coldDay: 10, rainPop: 50, rainMm: 3, rainShare: 0.3, snowCm: 0.5, snowShare: 0.15, uv: 6, rad: 20 };
 
+// The rain on a day, in mm. Open-Meteo's precipitation total and its chance of precipitation take in snow as well,
+// so a snow day would otherwise bring an umbrella. Days saved before the rain was asked for take the snow off the
+// total, at Open-Meteo's own rate: 7 cm of snow is about 10 mm of water.
+export const rainOf = d => d.rain ?? Math.max(0, (d.mm ?? 0) - (d.snow ?? 0) * 10 / 7);
+// WMO weather codes for snow: snowfall, snow grains and snow showers.
+const snowCode = c => (c >= 71 && c <= 77) || c === 85 || c === 86;
+// A rain day in the forecast: 3 mm of rain, or a 50% chance, unless the day is snow with hardly any rain.
+const rainy = d => rainOf(d) >= LIMITS.rainMm || ((d.pop ?? 0) >= LIMITS.rainPop && !(snowCode(d.code) && rainOf(d) < 1));
+
 export function summarize(wx) {
   const days = wx?.days || [];
   if (!days.length) return null;
@@ -141,7 +152,7 @@ export function summarize(wx) {
   const mean = (list, f) => (list.length ? list.reduce((a, d) => a + (d[f] ?? 0), 0) / list.length : 0);
   const maxHi = Math.max(...days.map(d => d.hi)), minLo = Math.min(...days.map(d => d.lo));
   const meanHi = mean(days, 'hi');
-  const rainDays = fc.filter(d => (d.pop ?? (d.mm >= LIMITS.rainMm ? 100 : 0)) >= LIMITS.rainPop || d.mm >= LIMITS.rainMm).map(d => d.d);
+  const rainDays = fc.filter(rainy).map(d => d.d);
   const snowDays = fc.filter(d => (d.snow ?? 0) >= LIMITS.snowCm).map(d => d.d);
   const wet = mean(ty, 'wet'), sn = mean(ty, 'sn');
   const uv = fc.length ? Math.max(...fc.map(d => d.uv ?? 0)) : 0, rad = mean(ty, 'rad');

@@ -110,7 +110,7 @@ function cleanDay(d) {
     out.sn = r2(numOk(d.sn, 0, 1) ?? 0);
     out.rad = r1(numOk(d.rad, 0, 60) ?? 0);
   } else {
-    for (const [k, lo2, hi2] of [['pop', 0, 100], ['snow', 0, 500], ['uv', 0, 20], ['code', 0, 99]]) {
+    for (const [k, lo2, hi2] of [['pop', 0, 100], ['rain', 0, 2000], ['snow', 0, 500], ['uv', 0, 20], ['code', 0, 99]]) {
       const v = numOk(d[k], lo2, hi2);
       if (v !== null) out[k] = k === 'code' || k === 'pop' ? Math.round(v) : r1(v);
     }

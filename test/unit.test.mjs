@@ -95,6 +95,47 @@ test('weather: cold, cool and typical weather', () => {
   assert.equal(typ.typical, true); assert.equal(typ.rain, true); assert.equal(typ.sun, false); assert.equal(typ.cool, true);
 });
 
+test('snow isn’t rain: no umbrella on a snow day, both on a day of sleet', () => {
+  // Open-Meteo's precipitation total and its chance of precipitation count snow too. Chicago in January.
+  const snowDay = { pop: 85, mm: 6.2, snow: 4.3, code: 73 };
+  for (const extra of [{}, { rain: 0 }]) { // saved before the rain was asked for, and since
+    const w = summarize({ at: 1, days: [day('2027-01-14', -1, -6, { pop: 10 }), day('2027-01-15', -3, -9, { ...snowDay, ...extra })] });
+    assert.equal(w.snow, true); assert.equal(w.rain, false, JSON.stringify(extra));
+  }
+  const sleet = summarize({ at: 1, days: [day('2027-01-15', 2, -1, { pop: 90, mm: 7, snow: 2, rain: 4.2, code: 73 })] });
+  assert.equal(sleet.rain, true); assert.equal(sleet.snow, true);
+  const rain = summarize({ at: 1, days: [day('2027-04-15', 12, 6, { pop: 60, mm: 1, code: 61 }), day('2027-04-16', 12, 6, { pop: 10, mm: 4 })] });
+  assert.deepEqual(rain.rainDays, ['2027-04-15', '2027-04-16']); assert.equal(rain.snow, false);
+  let doc = M.setPref(starter(), 'home', 'US');
+  doc = trip(doc, { place: { name: 'Chicago', cc: 'US' }, start: '2027-01-14', end: '2027-01-15', wx: { at: 1, days: [day('2027-01-14', -1, -6), day('2027-01-15', -3, -9, snowDay)] } });
+  const p = plan(doc, doc.trips.t1), all = allNames(p);
+  for (const n of ['Umbrella', 'Rain jacket']) assert.ok(!all.includes(n), n);
+  for (const n of ['Warm coat', 'Snow boots']) assert.ok(all.includes(n), n);
+  assert.equal(p.cond.why.snow, 'Snow likely Fri');
+});
+
+test('typical weather: rain days are counted without the snow', async () => {
+  const now = Date.parse('2026-11-02T12:00:00Z');
+  // Every past year: 5 mm of water on each day, all of it snow (3.5 cm) in two years and rain in the third.
+  const stub = weatherStub(now, (kind, u) => {
+    const year = +u.searchParams.get('start_date').slice(0, 4), snowy = year !== 2025;
+    return { daily: { precipitation_sum: () => 5, snowfall_sum: () => (snowy ? 3.5 : 0), ...(year === 2024 ? {} : { rain_sum: () => (snowy ? 0 : 5) }) } };
+  });
+  try {
+    const wx = await tripWeather(PLACE, '2027-01-14', '2027-01-15', '2026-11-02', { now });
+    assert.ok(stub.calls.every(c => c.startsWith('archive')));
+    assert.deepEqual(wx.days.map(d => [d.wet, d.sn]), [[1 / 3, 2 / 3], [1 / 3, 2 / 3]], 'one year in three had rain; 2024 had no rain_sum, so its snow comes off the total');
+  } finally { stub.restore(); }
+  // The forecast keeps its rain apart, and so does the saved copy.
+  const stub2 = weatherStub(now, () => ({ daily: { precipitation_sum: () => 6.2, snowfall_sum: () => 4.3, rain_sum: () => 0, showers_sum: () => 0.4, weather_code: () => 73, precipitation_probability_max: () => 85 } }));
+  try {
+    const wx = await tripWeather(PLACE, '2026-11-04', '2026-11-04', '2026-11-02', { now });
+    assert.equal(wx.days[0].rain, 0.4);
+    assert.equal(M.cleanWx(wx).days[0].rain, 0.4);
+    assert.equal(summarize(wx).rain, false);
+  } finally { stub2.restore(); }
+});
+
 test('stale weather', () => {
   const now = Date.parse('2026-11-02T12:00:00Z');
   assert.equal(stale(null, '2026-11-10', '2026-11-12', '2026-11-02', now), true);
