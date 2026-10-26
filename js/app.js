@@ -1040,7 +1040,7 @@ function pasteSheet() {
       offerList(list, 'Your pasted list');
     };
     return [
-      h('p', { class: 'muted small' }, 'Copy your list from Google Keep, Notes or a document and paste it here. Put each bag’s things under its name, indented, with a dash, or after a line ending in a colon. Anything on its own goes in “Not in a bag”. A first guess at when each thing is needed goes in too.'),
+      h('p', { class: 'muted small' }, 'Copy your list from Google Keep, Notes or a document and paste it here. Put each bag’s things under its name: indented, with a dash, or after a line ending in a colon or a # Heading. Anything on its own goes in “Not in a bag”. A first guess at when each thing is needed goes in too.'),
       area = h('textarea', { rows: 10, autofocus: true, placeholder: 'Electronics:\n- Phone charger\n- Headphones\nToiletries:\n- Toothbrush\n- Floss\nPassport' }),
       h('div', { class: 'sheet-actions' }, h('button', { type: 'button', class: 'btn primary', onclick: go2 }, 'Next')),
     ];

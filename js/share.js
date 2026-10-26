@@ -124,48 +124,41 @@ export function counted(line) {
   if (front && !/^\p{Ll}\p{Lu}/u.test(name)) name = name[0].toUpperCase() + name.slice(1);
   return { name, qty: Math.min(20, Math.max(1, +n)) };
 }
-// Takes the text of a list from Google Keep, Apple Notes, Google Docs or a plain text file:
-//   - a line ending with ":" starts a bag, and so does a line with more-indented lines under it;
+// Takes the text of a list from Google Keep, Apple Notes, Google Docs, Markdown or a plain text file:
+//   - a line ending with ":" starts a bag, and so do "# Heading" and "**Heading**", and a line with
+//     more-indented lines under it;
+//   - a line with a bullet, a box or a number at the margin, right under a line without one, is under it;
 //   - "●" and "○" bullets (Google Docs) count as levels the same way indents do;
-//   - a top-level line with nothing under it is a thing on its own, kept together in "Not in a bag".
+//   - a top-level line with nothing under it is a thing on its own, kept together in "Not in a bag";
+//   - a title line goes: "# Title", or a line on its own above a blank line and a list of boxes or bullets;
+//   - an emoji in front of a bag's name is its icon;
+//   - only when none of that made a bag: blocks of lines between blank lines, each under its first line, and
+//     short ALL-CAPS lines, are bags.
 // Bullets, checkboxes and numbers are dropped. Ids come from the names, so the same text pasted on two
 // devices makes the same list, which merges into one.
 
 const slug = s => s.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30) || 'x';
-const LEVEL1 = /^[○◦▫□‣⁃–-]\s/;
 
 const DOCS = /^\s*[●○■]/m;
-const MARK = /^([●•▪■◆○◦▫□‣⁃*–-]|\[[ xX✓]?\]|[☐☑✓✔✅]|\d+[.)])\s*/u;
+const MARK = /^([●•▪■◆○◦▫□‣⁃*–-]|\+(?=\s)|\[[ xX✓]?\]|[☐☑✓✔✅]|\d+[.)])\s*/u;
+const HEADING = /^(#{1,6})\s+(.*?)[\s#]*$/;
+const BOLD = /^(\*\*|__)(.+)\1$/;
+const EMOJI = /^(\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic}|\p{EMod})*)\s*/u;
+const CAPS = s => s.length <= 30 && !/\p{Ll}/u.test(s) && (s.match(/\p{Lu}/gu) || []).length >= 4;
+const DOCS_LEVEL = { '●': 0, '•': 0, '○': 4, '◦': 4, '■': 8, '▪': 8 };
 
-export function parsePaste(text) {
-  const src = String(text || '').replace(/\r\n?/g, '\n').replace(/[​‌‍﻿]/g, '');
-  // Google Docs marks its levels with ●, ○ and ■. Then the bullets say the level, and a line before the
-  // first bullet is the document's title.
-  const docs = DOCS.test(src);
-  const lines = [];
-  for (const raw of src.split('\n')) {
-    if (!raw.trim()) continue;
-    const lead = /^[ \t]*/.exec(raw)[0].replace(/\t/g, '    ').length;
-    let body = raw.trim();
-    let level = lead;
-    if (docs) {
-      const b = body[0];
-      if (b === '●' || b === '•') level = 0;
-      else if (b === '○' || b === '◦') level = 4;
-      else if (b === '■' || b === '▪') level = 8;
-      else if (!lines.length) continue;
-    } else if (LEVEL1.test(body) && lead === 0) level = 2; // "- item" at the margin sits under the line above
-    for (let i = 0; i < 3 && MARK.test(body); i++) body = body.replace(MARK, '').trim();
-    if (!body) continue;
-    lines.push({ level, body });
-  }
-  // Levels are relative: whatever is deeper than the line before is under it.
+// Puts the lines in bags. Levels are relative: whatever is deeper than the line before is under it. With
+// blocks, a blank line ends a bag.
+function read(lines, blocks = false) {
   const bags = [], items = [], used = new Set();
   const uid = base => { let id = base, n = 2; while (used.has(id)) id = `${base}-${n++}`; used.add(id); return id; };
-  let loose = null, cur = null, curLevel = -1;
-  const makeBag = (name, kind = bagKind(name)) => {
-    const g = guess(name, true);
-    const b = { id: uid('b-' + slug(name)), name, icon: bagIcon(name, kind), kind, when: kind === 'bag' ? g.when : [], unless: [], note: '' };
+  let loose = null, cur = null, curLevel = -1, colon = false;
+  const makeBag = (heading) => {
+    let name = heading, icon = '';
+    const e = EMOJI.exec(name);
+    if (e && e[1].length <= 8 && name.length > e[0].length) { icon = e[1]; name = name.slice(e[0].length); }
+    const kind = bagKind(name), g = guess(name, true);
+    const b = { id: uid('b-' + slug(name)), name, icon: kind === 'bag' && icon ? icon : bagIcon(name, kind), kind, when: kind === 'bag' ? g.when : [], unless: [], note: '' };
     bags.push(b);
     return b;
   };
@@ -178,22 +171,74 @@ export function parsePaste(text) {
     if (qty) g.per = '';
     items.push({ id: uid('i-' + slug(bag.name).slice(0, 12) + '-' + slug(name).slice(0, 28)), name, bag: bag.id, when: g.when, unless: g.unless, qty: qty || 1, per: g.per, note: '' });
   };
-  let colon = false;
+  // lastMarked: whether the last thing in the current bag had a bullet. Under "Electronics:", "Headphones" then
+  // "☐ Charger" are both things in it; after "- Toothbrush" under "Toiletries:", "Tech" then "- Charger" is a bag.
+  let lastMarked = null;
   lines.forEach((ln, i) => {
     const next = lines[i + 1];
-    const header = /:$/.test(ln.body) || (next && next.level > ln.level && (cur === null || ln.level <= curLevel));
+    if (blocks && ln.gap && !ln.head) cur = null;
+    const deeper = next ? next.level - ln.level : 0;
+    const under = deeper >= 1 || (deeper > 0 && !(cur && colon && ln.level === curLevel && !lastMarked));
+    const header = ln.head || /:$/.test(ln.body) || (under && (cur === null || ln.level <= curLevel));
     if (header) {
       cur = makeBag(ln.body.replace(/:$/, '').trim());
       curLevel = ln.level;
-      colon = /:$/.test(ln.body);
+      colon = !!ln.head || /:$/.test(ln.body);
+      lastMarked = null;
     } else if (cur && (ln.level > curLevel || (colon && ln.level === curLevel))) {
       addItem(cur, ln.body);
+      lastMarked = ln.marked;
     } else {
       cur = null; curLevel = -1;
       if (!loose) loose = makeBag('Not in a bag');
       addItem(loose, ln.body);
     }
   });
+  return { bags, items, loose };
+}
+
+export function parsePaste(text) {
+  const src = String(text || '').replace(/\r\n?/g, '\n').replace(/[​‌‍﻿]/g, '');
+  // Google Docs marks its levels with ●, ○ and ■. Then the bullets say the level.
+  const docs = DOCS.test(src);
+  // Each line: its indent, its text without bullets or boxes, whether it had one, whether it's a heading by how
+  // it looks (1 for "# Title", 2 for "## Heading" or "**Heading**"), and whether a blank line came before it.
+  let lines = [], gap = false;
+  for (const raw of src.split('\n')) {
+    if (!raw.trim()) { gap = true; continue; }
+    const lead = /^[ \t]*/.exec(raw)[0].replace(/\t/g, '    ').length;
+    let body = raw.trim(), head = 0, m;
+    const bullet = docs && body[0] in DOCS_LEVEL ? body[0] : '';
+    if ((m = HEADING.exec(body))) { body = m[2]; head = m[1].length === 1 ? 1 : 2; } else if ((m = BOLD.exec(body))) { body = m[2].trim(); head = 2; }
+    const marked = !head && MARK.test(body);
+    if (!head) for (let i = 0; i < 3 && MARK.test(body); i++) body = body.replace(MARK, '').trim();
+    if (!body) continue;
+    lines.push({ lead, body, marked, head, bullet, gap });
+    gap = false;
+  }
+  // A title goes. In Google Docs, a first line without a bullet, unless it's a heading like the others there.
+  const [first, second] = lines;
+  const plain = x => docs && !x.bullet;
+  if (first && !/:$/.test(first.body) && (docs
+    ? plain(first) && (!second || second.gap || plain(second) || !lines.slice(1).some(plain))
+    : first.head === 1 ? !lines.slice(1).some(x => x.head === 1) : !first.head && !first.marked && second?.gap && second.marked)) lines = lines.slice(1);
+  // Levels. A bullet at the margin sits under a line at the margin without one, as if indented a little.
+  const mixed = !docs && lines.some(x => !x.lead && x.marked) && lines.some(x => !x.lead && !x.marked && !x.head);
+  for (const x of lines) x.level = docs ? (x.bullet ? DOCS_LEVEL[x.bullet] : -1) : x.lead + (mixed && !x.lead && x.marked ? 0.5 : 0);
+
+  let made = read(lines);
+  // Nothing made a bag: try blank-line blocks and ALL-CAPS headings.
+  if (made.bags.every(b => b === made.loose)) {
+    const starts = lines.filter((x, i) => (i === 0 || x.gap) && lines[i + 1] && !lines[i + 1].gap);
+    const caps = lines.filter((x, i) => CAPS(x.body) && lines[i + 1] && !CAPS(lines[i + 1].body));
+    const blocks = starts.length >= 2;
+    if (blocks || caps.length >= 2) {
+      for (const x of blocks ? starts : []) x.head = 2;
+      for (const x of caps.length >= 2 ? caps : []) { x.head = 2; x.body = x.body[0] + x.body.slice(1).toLowerCase(); }
+      made = read(lines, blocks);
+    }
+  }
+  const { bags, items, loose } = made;
   // A bag with nothing in it (a heading with no lines after it) goes.
   const full = bags.filter(b => items.some(x => x.bag === b.id));
   // "Not in a bag" goes last among the bags, before the jobs for leaving.

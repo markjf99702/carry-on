@@ -846,6 +846,64 @@ test('pasted lists: colons, dashes and checkboxes', () => {
   assert.equal(parsePaste('Electronics:\nHeadphones').items[0].id, parsePaste('Electronics:\nHeadphones').items[0].id, 'same text, same ids');
 });
 
+// "Bag: thing, thing | Bag: thing" for comparing a pasted list at a glance.
+const shape = text => { const l = parsePaste(text); return l.bags.map(b => `${b.name}: ${l.items.filter(x => x.bag === b.id).map(x => x.name).join(', ')}`).join(' | '); };
+
+test('pasted lists: a title line isn’t a thing', () => {
+  // Google Keep shares a list as its title, a blank line, then boxes.
+  assert.equal(shape('Packing list\n\n☐ Toothbrush\n☐ Socks\n☑ Passport'), 'Not in a bag: Toothbrush, Socks, Passport');
+  assert.equal(shape('Packing\n\n□ Toiletries\n    □ Toothbrush\n✓ Passport'), 'Toiletries: Toothbrush | Not in a bag: Passport');
+  assert.equal(shape('# Packing list\n\n## Toiletries\n- [ ] Toothbrush\n- [x] Floss\n\n## Electronics\n- [ ] Phone charger'), 'Toiletries: Toothbrush, Floss | Electronics: Phone charger');
+  // Google Docs: the first line without a bullet is the title, unless the other lines without one are headings too.
+  assert.equal(shape('Packing list\nToiletries\n●\tToothbrush\n●\tFloss\nElectronics\n●\tPhone charger'), 'Toiletries: Toothbrush, Floss | Electronics: Phone charger');
+  assert.equal(shape('Toiletries\n●\tToothbrush\nElectronics\n●\tPhone charger'), 'Toiletries: Toothbrush | Electronics: Phone charger');
+  assert.equal(shape('Toiletries:\n●\tToothbrush\nElectronics:\n●\tPhone charger'), 'Toiletries: Toothbrush | Electronics: Phone charger');
+  assert.equal(shape('Summer trip\n●\tClothes\n○\tSocks\n●\tPassport'), 'Clothes: Socks | Not in a bag: Passport');
+  // Not a title: a heading ending in a colon, or a line with no list of boxes after it.
+  assert.equal(shape('Clothes:\n\n- Socks\n\n- Shirts'), 'Clothes: Socks, Shirts');
+  assert.equal(shape('Passport\n\nWallet\n\nKeys'), 'Not in a bag: Passport, Wallet, Keys');
+});
+
+test('pasted lists: bullets, boxes and numbers under a heading without one', () => {
+  for (const mark of ['•', '*', '+', '☐', '–', '-', '□', '1.', '1)', '- [ ]']) {
+    assert.equal(shape(`Toiletries\n${mark} Toothbrush\n${mark} Floss\nElectronics\n${mark} Phone charger`), 'Toiletries: Toothbrush, Floss | Electronics: Phone charger', mark);
+  }
+  // Nested with two spaces.
+  assert.equal(shape('* Toiletries\n  * Toothbrush\n* Passport'), 'Toiletries: Toothbrush | Not in a bag: Passport');
+  assert.equal(shape('- Toiletries\n  - Toothbrush\n- Passport'), 'Toiletries: Toothbrush | Not in a bag: Passport');
+  // A heading ending in a colon keeps the lines after it, with a box or without.
+  assert.equal(shape('Electronics:\nHeadphones\n☐ Charger\nToiletries\n- Toothbrush'), 'Electronics: Headphones, Charger | Toiletries: Toothbrush');
+  assert.equal(shape('Toiletries:\n- Toothbrush\nElectronics\n- Charger'), 'Toiletries: Toothbrush | Electronics: Charger');
+  // All with bullets: a flat list.
+  assert.equal(shape('• Passport\n• Wallet'), 'Not in a bag: Passport, Wallet');
+});
+
+test('pasted lists: Markdown headings, bold headings and + bullets', () => {
+  assert.equal(shape('## Toiletries\n* Toothbrush\n* Floss\n## Electronics\n* Phone charger'), 'Toiletries: Toothbrush, Floss | Electronics: Phone charger');
+  assert.equal(shape('### Toiletries\nToothbrush\nFloss\n### Electronics\nCharger'), 'Toiletries: Toothbrush, Floss | Electronics: Charger');
+  assert.equal(shape('**Toiletries**\n- Toothbrush\n__Electronics:__\n- Charger'), 'Toiletries: Toothbrush | Electronics: Charger');
+  assert.equal(shape('Toiletries:\n+ Toothbrush\n+ Floss'), 'Toiletries: Toothbrush, Floss');
+  // Several "# " lines are headings, not a title.
+  assert.equal(shape('# Toiletries\n- Toothbrush\n# Electronics\n- Charger'), 'Toiletries: Toothbrush | Electronics: Charger');
+});
+
+test('pasted lists: an emoji in front of a heading is its icon', () => {
+  const l = parsePaste('🧴 Liquids:\n- Shampoo\n🔌 Tech\n- Charger\n## 🏖️ Beach\n- Towel');
+  assert.deepEqual(l.bags.map(b => `${b.icon} ${b.name}`), ['🧴 Liquids', '🔌 Tech', '🏖️ Beach']);
+  assert.deepEqual(l.bags.map(b => b.id), ['b-liquids', 'b-tech', 'b-beach']);
+});
+
+test('pasted lists: blank-line blocks and ALL-CAPS headings, when nothing else makes a bag', () => {
+  assert.equal(shape('Toiletries\nToothbrush\nToothpaste\n\nElectronics\nPhone charger\nHeadphones\n\nPassport'), 'Toiletries: Toothbrush, Toothpaste | Electronics: Phone charger, Headphones | Not in a bag: Passport');
+  assert.equal(shape('TOILETRIES\nToothbrush\nToothpaste\nELECTRONICS\nPhone charger'), 'Toiletries: Toothbrush, Toothpaste | Electronics: Phone charger');
+  // Not when something else made a bag, nor for one all-caps line, nor for ID or USB.
+  assert.equal(shape('Toiletries:\nToothbrush\n\nPassport\nWallet'), 'Toiletries: Toothbrush, Passport, Wallet');
+  assert.equal(shape('PACKING LIST\nToothbrush\nUSB\nCharger\nID\nWallet'), 'Not in a bag: PACKING LIST, Toothbrush, USB, Charger, ID, Wallet');
+  // The same text gives the same ids.
+  const text = 'TOILETRIES\nToothbrush\n\nELECTRONICS\nCharger';
+  assert.deepEqual(parsePaste(text), parsePaste(text));
+});
+
 test('guesses', () => {
   assert.deepEqual(guess('Work Visa card').when, []);
   assert.deepEqual(guess('Passport').when, ['abroad']);
