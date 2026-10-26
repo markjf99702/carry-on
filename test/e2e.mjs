@@ -148,6 +148,19 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await closeSheet(page);
   assert.ok((await rowsText(page)).includes('Workout clothes'));
 
+  // Someone's home this time: no jobs before leaving. The sheet has no stray words in it.
+  await page.locator('.bag', { hasText: 'Leaving the house' }).locator('.bag-head .icon-btn').click();
+  await until(() => sheetOpen(page), 'the job list sheet');
+  assert.doesNotMatch(await page.locator('.sheet').innerText(), /null|undefined/);
+  await page.click('text=Skip these jobs this trip');
+  assert.equal(await page.locator('.bag h2', { hasText: 'Leaving the house' }).count(), 0);
+  assert.match(await page.locator('.left-head').innerText(), /Left off this trip/i);
+  if ((await page.locator('.left-head').getAttribute('aria-expanded')) !== 'true') await page.click('.left-head');
+  const leave = page.locator('.left .row', { hasText: 'Leaving the house' });
+  assert.match(await leave.innerText(), /4 jobs · You left it off this trip/);
+  await leave.locator('button', { hasText: 'Put back' }).click();
+  assert.equal(await page.locator('.bag h2', { hasText: 'Leaving the house' }).count(), 1);
+
   // A bag that stays packed.
   await page.locator('.bag', { hasText: 'Liquids bag' }).locator('.bag-head .icon-btn').click();
   await page.click('text=It’s all packed already');

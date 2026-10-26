@@ -384,3 +384,4 @@ ul.chips .chip small { font-weight: 500; color: var(--muted); font-size: 13px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }
+.sheet .stack + p { margin-top: 12px; }

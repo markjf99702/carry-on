@@ -150,9 +150,38 @@ test('skipping, adding, moving, extras, and what shows coming home', () => {
 test('a bag can depend on a condition, and its things go with it', () => {
   let doc = starter();
   doc = trip(doc, {});
-  const p = plan(doc, doc.trips.t1);
-  const badge = p.left.find(l => l.item.name === 'Badge');
-  assert.equal(badge.why, 'Work bag: only for work');
+  let p = plan(doc, doc.trips.t1);
+  assert.ok(!p.left.some(l => l.item.name === 'Badge'), 'the bag’s own line covers its things');
+  assert.deepEqual(p.leftBags.map(l => [l.bag.name, l.why, l.count, l.skipped]), [['Work bag', 'Only for work', 3, false]]);
+  // Brought along anyway.
+  doc = M.mark(doc, 't1', 'x:s-work', 'add');
+  p = plan(doc, doc.trips.t1);
+  assert.deepEqual(names(p, 'Work bag'), ['Badge', 'Notebook and pen', 'Business cards']);
+  assert.deepEqual(p.leftBags, []);
+});
+
+test('a whole bag or list of jobs left off one trip', () => {
+  let doc = starter();
+  doc = trip(doc, {});
+  doc = M.mark(doc, 't1', 'x:s-leave', 'skip');
+  doc = M.mark(doc, 't1', 'x:s-daybag', 'skip');
+  let p = plan(doc, doc.trips.t1);
+  assert.deepEqual(p.tasks, [], 'no jobs before leaving');
+  assert.ok(!names(p, 'Day bag').length);
+  assert.deepEqual(p.leftBags.filter(l => l.skipped).map(l => l.bag.name).sort(), ['Day bag', 'Leaving the house']);
+  assert.ok(!p.left.some(l => l.item.bag === 's-daybag'));
+  // Coming home, the hotel list is still there, and can be skipped on its own.
+  assert.deepEqual(plan(doc, doc.trips.t1, 'back').tasks.map(g => g.bag.name), ['Leaving the hotel']);
+  doc = M.mark(doc, 't1', 'x:s-back', 'skip');
+  const back = plan(doc, doc.trips.t1, 'back');
+  assert.deepEqual(back.tasks, []);
+  assert.deepEqual(back.leftBags.map(l => l.bag.name), ['Leaving the hotel']);
+  // Other trips still have them.
+  doc = M.putTrip(doc, { id: 't2', start: T, end: add(T, 2), travel: 'drive' });
+  assert.deepEqual(plan(doc, doc.trips.t2).tasks.map(g => g.bag.name), ['Leaving the house']);
+  // Put back.
+  doc = M.mark(doc, 't1', 'x:s-leave', 0);
+  assert.deepEqual(plan(doc, doc.trips.t1).tasks.map(g => g.bag.name), ['Leaving the house']);
 });
 
 test('days: spans and years back', () => {

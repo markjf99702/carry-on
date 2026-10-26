@@ -20,6 +20,7 @@
 - **It knows where you're going.** Abroad brings your passport. A plug adapter comes only where your plugs don't fit the sockets, with the socket types and voltage on the list (US plugs fit in Japan and Mexico, not in Portugal).
 - **And what you'll be doing.** Pick occasions for a trip (work, working out, swimming, dressing up, outdoors, or your own), and things or whole bags come along only for them: the work bag on work trips, the swimsuit when you're swimming or it's hot.
 - **Says why.** Anything that came along for a reason says so under its name ("Rain likely Fri", "Type C/F, 230 V"). **Left off this trip** lists everything that didn't, and why, with a button to pack it anyway. You can also turn any weather or place condition on or off by hand.
+- **Leave things off one trip.** A single thing, a whole bag, or a list of jobs (no house jobs when someone's staying home) can be left off one trip from its ⋯ menu. It waits under **Left off this trip**, and stays on your list for other trips.
 - **Counts by the day.** Socks and underwear come one for each day of the trip, up to a laundry limit you set.
 - **Coming home.** Switch to **Coming home** and the list shows only what you packed, with its own ticks and the hotel checklist.
 - **Bring your own list.** Paste a list from Google Keep, Notes or a document. Bags are the lines with things under them, and it makes a first guess at when each thing is needed (passport when abroad, swimsuit for swimming). A list can also go to someone else as a link; the list travels inside the link itself.

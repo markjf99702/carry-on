@@ -94,7 +94,10 @@ export function whyNot(doc, rule, res) {
 // The list for one trip.
 //   mode 'go': packing to leave. 'back': packing to come home, which lists what went (or, if nothing was
 //   ticked going, everything that was on the list) and the jobs before leaving the hotel.
-// Returns { groups: [{ bag, rows }], left: [{ item, why, skipped }], tasks: { bag, rows }[], done, total, cond }
+// A whole bag or list of jobs can be left off one trip ('x:BAGID' 'skip'), or brought along when its
+// conditions say no ('add'), the same way a single thing can.
+// Returns { groups: [{ bag, rows }], tasks: [{ bag, rows }], left: [{ item, why, skipped }],
+//   leftBags: [{ bag, why, skipped, count }], done, total, cond }
 // A row: { id, name, note, qty, hits: [condition keys], key: the mark key, done, extra?, gone? }
 export function plan(doc, trip, mode = 'go') {
   const cond = conditions(doc, trip), on = cond.on;
@@ -105,21 +108,29 @@ export function plan(doc, trip, mode = 'go') {
   const anyPacked = Object.entries(marks).some(([k, m]) => k.startsWith('p:') && m.v === 1);
   const allBags = M.bags(doc);
   const bagOk = Object.fromEntries(allBags.map(b => [b.id, passes(b, on)]));
-  const groups = new Map(), tasks = [], left = [];
+  const coming = b => pick(b.id) === 'add' || (pick(b.id) !== 'skip' && bagOk[b.id].ok);
+  const groups = new Map(), tasks = [], left = [], leftBags = [];
   const groupOf = bag => { if (!groups.has(bag.id)) groups.set(bag.id, { bag, rows: [] }); return groups.get(bag.id); };
   const fallback = { id: '_loose', name: 'Not in a bag', icon: '🧳', kind: 'bag', when: [], unless: [], order: 1e9 };
   const bagFor = id => allBags.find(b => b.id === id && b.kind === 'bag');
+
+  // Bags and lists of jobs not coming on this trip, the ones this way of packing shows.
+  const kinds = mode === 'go' ? ['bag', 'leave'] : ['back'];
+  for (const b of allBags) {
+    if (!kinds.includes(b.kind) || coming(b) || !M.items(doc, b.id).length) continue;
+    const skipped = pick(b.id) === 'skip';
+    leftBags.push({ bag: b, skipped, why: skipped ? 'You left it off this trip' : whyNot(doc, b, bagOk[b.id]), count: M.items(doc, b.id).length });
+  }
 
   for (const b of allBags.filter(b => b.kind === 'bag')) groupOf(b);
   for (const it of M.items(doc)) {
     const home = allBags.find(b => b.id === it.bag);
     if (!home || home.kind !== 'bag') continue;
-    const res = passes(it, on), bres = bagOk[home.id];
+    const res = passes(it, on), bagIn = coming(home);
     const p = pick(it.id), packed = isPacked(it.id);
-    const coming = p === 'add' || packed || (p !== 'skip' && res.ok && bres.ok);
-    if (!coming) {
-      const why = p === 'skip' ? 'You left it off this trip' : !bres.ok ? `${home.name}: ${whyNot(doc, home, bres).toLowerCase()}` : whyNot(doc, it, res);
-      left.push({ item: it, skipped: p === 'skip', why });
+    if (!(p === 'add' || packed || (p !== 'skip' && res.ok && bagIn))) {
+      // Things in a bag that isn't coming are covered by the bag's own line.
+      if (bagIn) left.push({ item: it, skipped: p === 'skip', why: p === 'skip' ? 'You left it off this trip' : whyNot(doc, it, res) });
       continue;
     }
     if (mode === 'back' && anyPacked && !packed) continue;
@@ -127,7 +138,7 @@ export function plan(doc, trip, mode = 'go') {
     groupOf(bag).rows.push({
       id: it.id, name: it.name, note: it.note, qty: qtyOf(doc, trip, it),
       hits: res.hits, key: (mode === 'go' ? 'p:' : 'r:') + it.id,
-      added: p === 'add', moved: bag !== home, packedOnly: !res.ok || !bres.ok ? p !== 'add' : false,
+      added: p === 'add', moved: bag !== home, packedOnly: (!res.ok || !bagIn) && p !== 'add',
     });
   }
   for (const x of M.extras(trip)) {
@@ -138,7 +149,7 @@ export function plan(doc, trip, mode = 'go') {
   }
   const kind = mode === 'go' ? 'leave' : 'back';
   for (const b of allBags.filter(b => b.kind === kind)) {
-    if (!bagOk[b.id].ok) continue;
+    if (!coming(b)) continue;
     const rows = M.items(doc, b.id).filter(it => passes(it, on).ok && pick(it.id) !== 'skip')
       .map(it => ({ id: it.id, name: it.name, note: it.note, qty: 1, hits: passes(it, on).hits, key: (mode === 'go' ? 'p:' : 'r:') + it.id }));
     if (rows.length) tasks.push({ bag: b, rows });
@@ -148,7 +159,7 @@ export function plan(doc, trip, mode = 'go') {
   for (const r of all) r.done = (marks[r.key]?.v || 0) > 0;
   if (mode === 'back') for (const r of all) r.gone = marks[r.key]?.v === 2;
   return {
-    groups: list, tasks, left: mode === 'go' ? left : [], cond,
+    groups: list, tasks, left: mode === 'go' ? left : [], leftBags, cond,
     done: all.filter(r => r.done).length, total: all.length,
   };
 }

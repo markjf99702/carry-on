@@ -207,7 +207,7 @@ function tripView(t) {
     p.groups.map(g => bagCard(t, g, mode, hide, c.why)),
     mode === 'go' ? h('button', { type: 'button', class: 'btn add-extra', onclick: () => extraSheet(t) }, h('span', { html: ICONS.plus }), 'Add something for this trip') : null,
     p.tasks.map(g => bagCard(t, g, mode, hide, c.why, true)),
-    mode === 'go' && p.left.length ? leftOff(t, p.left) : null,
+    p.left.length || p.leftBags.length ? leftOff(t, p.left, p.leftBags) : null,
   ];
 }
 
@@ -252,15 +252,22 @@ function itemRow(t, r, mode, whyMap, jobs) {
     jobs && mode === 'back' ? null : h('button', { type: 'button', class: 'icon-btn more', 'aria-label': `More for ${r.name}`, html: ICONS.more, onclick: () => itemSheet(t, r, mode, jobs) }));
 }
 
-function leftOff(t, left) {
+function leftOff(t, left, leftBags) {
   const open = store.isOpen(t.id + ':left');
+  const put = (id, skipped) => apply(d => M.mark(d, t.id, 'x:' + id, skipped ? 0 : 'add'));
   return h('section', { class: 'left' },
     h('button', { type: 'button', class: 'left-head', 'aria-expanded': String(open), onclick: () => { store.setOpen(t.id + ':left', !open); render(); } },
-      h('h2', {}, `Left off this trip (${left.length})`),
+      h('h2', {}, `Left off this trip (${left.length + leftBags.length})`),
       h('span', { class: 'muted small' }, open ? 'Hide' : 'Show')),
-    open ? h('ul', { class: 'rows' }, left.map(l => h('li', { class: 'row left-row' },
-      h('div', { class: 'what' }, h('span', { class: 'name' }, l.item.name), h('small', {}, l.why)),
-      h('button', { type: 'button', class: 'btn small', 'data-key': 'x:' + l.item.id, onclick: () => apply(d => M.mark(d, t.id, 'x:' + l.item.id, l.skipped ? 0 : 'add')) }, l.skipped ? 'Put back' : 'Pack it')))) : null);
+    open ? h('ul', { class: 'rows' },
+      leftBags.map(l => h('li', { class: 'row left-row' },
+        h('div', { class: 'what' },
+          h('span', { class: 'name' }, `${l.bag.icon} ${l.bag.name}`),
+          h('small', {}, `${plural(l.count, l.bag.kind === 'bag' ? 'thing' : 'job')} · ${l.why}`)),
+        h('button', { type: 'button', class: 'btn small', 'data-key': 'x:' + l.bag.id, onclick: () => put(l.bag.id, l.skipped) }, l.skipped ? 'Put back' : 'Bring it'))),
+      left.map(l => h('li', { class: 'row left-row' },
+        h('div', { class: 'what' }, h('span', { class: 'name' }, l.item.name), h('small', {}, l.why)),
+        h('button', { type: 'button', class: 'btn small', 'data-key': 'x:' + l.item.id, onclick: () => put(l.item.id, l.skipped) }, l.skipped ? 'Put back' : 'Pack it')))) : null);
 }
 
 // ---------- sheets for a trip ----------
@@ -299,8 +306,16 @@ function bagSheet(t, g, mode) {
     h('div', { class: 'stack' },
       h('button', { type: 'button', class: 'btn', onclick: () => { close(); apply(d => M.markAll(d, t.id, keys, all ? 0 : 1)); } },
         all ? 'Untick everything in it' : b.kind === 'bag' ? (mode === 'go' ? 'It’s all packed already' : 'It’s all back in') : 'All done'),
+      h('button', { type: 'button', class: 'btn', onclick: () => {
+        close();
+        const was = t.marks?.['x:' + b.id]?.v;
+        apply(d => M.mark(d, t.id, 'x:' + b.id, 'skip'));
+        toast(`${b.name} is off this trip.`, { label: 'Undo', run: () => apply(d => M.mark(d, t.id, 'x:' + b.id, was || 0)) });
+      } }, b.kind === 'bag' ? 'Leave this bag off this trip' : 'Skip these jobs this trip'),
       h('button', { type: 'button', class: 'btn', onclick: () => { close(); bagEditor(b); } }, 'Change it in my list')),
-    b.kind === 'bag' && mode === 'go' ? h('p', { class: 'muted small' }, 'Handy for a bag that stays packed between trips.') : null,
+    h('p', { class: 'muted small' }, b.kind === 'bag'
+      ? 'Left off, it waits under “Left off this trip” in case you change your mind. Its things stay on your list for other trips.'
+      : 'Skipped, they wait under “Left off this trip” and stay on your list for other trips.'),
   ]);
 }
 

@@ -66,7 +66,7 @@ export function sheet(title, build, { wide = false, done } = {}) {
     h('div', { class: 'sheet-top' },
       h('h2', { id: 'sheetTitle' }, title),
       h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Close', html: ICONS.close, onclick: close })),
-    ...[build(close)].flat());
+    ...[build(close)].flat(Infinity).filter(x => x !== null && x !== undefined && x !== false));
   if (!dlg.open) dlg.showModal();
   const first = body.querySelector('[autofocus]');
   if (first) first.focus();
