@@ -8,6 +8,7 @@ import { summarize, stale } from '../js/weather.js';
 import { plugsFor, plugText } from '../js/plugs.js';
 import { parsePaste, encodeList, decodeList, guess } from '../js/share.js';
 import { starterList } from '../js/starter.js';
+import { store } from '../js/store.js'; // in Node there's no localStorage, so it keeps the doc in memory only
 import { add, span, yearsBack, range, weekday, short, long } from '../js/days.js';
 
 const T = '2026-11-02';
@@ -378,6 +379,39 @@ test('two Drive files made at once fold into one, keeping the ids other devices 
     assert.deepEqual(M.items(m).filter(x => x.name === 'Kindle').map(x => x.id), ['kindleA'], `one Kindle on ${who}`);
     assert.equal(plan(m, m.trips.t1).groups.flatMap(g => g.rows).find(r => r.name === 'Kindle').done, true, `ticked on ${who}`);
   }
+});
+
+test('a backup brings back starter things deleted since it was saved, and says what came back', () => {
+  const none = { things: 0, jobs: 0, bags: 0, lists: 0, occasions: 0, trips: 0 };
+  store.erase();
+  store.apply(() => trip(M.putItem(starter(), { id: 'i-mine', name: 'My own thing', bag: 's-daybag' }), {}));
+  const backup = store.backup();
+  later();
+  store.apply(d => M.removeTrip(M.removeItem(M.removeItem(M.removeBag(d, 's-leave'), 's-clothes-socks'), 'i-mine'), 't1'));
+  const deleted = store.doc;
+  assert.deepEqual(store.restoreBackup(backup), { ...none, things: 2, jobs: 4, lists: 1, trips: 1 });
+  for (const d of [store.doc, M.mergeDocs(store.doc, deleted)]) {
+    assert.ok(!M.gone(d.bags['s-leave']) && !M.gone(d.trips.t1));
+    assert.equal(M.items(d, 's-leave').length, 4, 'with its jobs');
+    assert.ok(!M.gone(d.items['s-clothes-socks']) && !M.gone(d.items['i-mine']));
+  }
+  assert.deepEqual(store.restoreBackup(backup), none, 'nothing new the second time');
+  // A starter list this phone never had still gives way to its own list.
+  store.erase();
+  store.apply(() => M.replaceList(M.blankDoc(), parsePaste('Electronics:\n- Phone charger')));
+  assert.deepEqual(store.restoreBackup(JSON.stringify(starter())), none);
+  assert.deepEqual(M.bags(store.doc).map(b => b.name), ['Electronics']);
+  // A backup from another browser with its own Kindle, ticked on a trip there: it becomes this device's Kindle,
+  // so the next sync with Drive, which holds this device's ids, doesn't make two.
+  store.erase();
+  store.apply(() => M.putItem(starter(), { id: 'kindleA', name: 'Kindle', bag: 's-daybag' }));
+  const drive = store.doc;
+  const other = M.mark(trip(M.putItem(starter(), { id: 'kindleB', name: 'Kindle', bag: 's-daybag' }), {}), 't1', 'p:kindleB', 1);
+  assert.deepEqual(store.restoreBackup(JSON.stringify(other)), { ...none, trips: 1 });
+  const synced = M.mergeDocs(store.doc, drive);
+  assert.deepEqual(M.items(synced).filter(x => x.name === 'Kindle').map(x => x.id), ['kindleA']);
+  assert.equal(synced.trips.t1.marks['p:kindleA'].v, 1);
+  store.erase();
 });
 
 test('replacing and adding lists', () => {

@@ -842,6 +842,15 @@ async function shareSheet() {
 
 // ---------- settings ----------
 
+// "a, b and c"
+const andList = parts => (parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : parts[0]);
+// What a backup brought back, from store.restoreBackup's counts: "Restored 3 things and 1 bag."
+function restored(n) {
+  const parts = [[n.things, 'thing'], [n.bags, 'bag'], [n.jobs, 'job'], [n.lists, 'list of jobs', 'lists of jobs'], [n.occasions, 'occasion'], [n.trips, 'trip']]
+    .filter(([k]) => k).map(([k, one, many]) => plural(k, one, many));
+  return parts.length ? `Restored ${andList(parts)}.` : 'Nothing in it that isn’t here already.';
+}
+
 function settingsView() {
   const d = doc(), home = R.home(d), u = R.units(d), l = R.laundry(d);
   const homeSet = !!M.pref(d, 'home', '');
@@ -879,7 +888,7 @@ function settingsView() {
         h('label', { class: 'btn file' }, 'Restore from a backup', file = h('input', { type: 'file', accept: '.json,application/json', onchange: async () => {
           const f = file.files[0];
           if (!f) return;
-          try { const n = store.restoreBackup(await f.text()); render(); drive.changed(); toast(n ? `Restored: ${plural(n, 'change')}.` : 'Nothing in it that isn’t here already.'); } catch (e) { toast(e.message); }
+          try { const n = store.restoreBackup(await f.text()); render(); drive.changed(); toast(restored(n)); } catch (e) { toast(e.message); }
           file.value = '';
         } })))),
     h('section', { class: 'card' },

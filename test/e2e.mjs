@@ -301,6 +301,15 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   assert.equal(await other.page.evaluate(() => Object.keys(window.carryOn.store.doc.trips).length), 0, 'no trips in a list link');
   await other.ctx.close();
 
+  // A backup brings back what was deleted since, starter things included, and says what came back.
+  const backup = await page.evaluate(() => window.carryOn.store.backup());
+  await page.evaluate(() => { const { store, M } = window.carryOn; store.apply(d => M.removeItem(M.removeBag(d, 's-leave'), 's-clothes-socks')); });
+  await page.goto(base + '#/settings');
+  await page.locator('input[type=file]').setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(backup) });
+  await until(async () => (await page.locator('#toast').innerText()) === 'Restored 1 thing, 4 jobs and 1 list of jobs.', 'the restore toast');
+  await page.locator('input[type=file]').setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(backup) });
+  await until(async () => (await page.locator('#toast').innerText()) === 'Nothing in it that isn’t here already.', 'nothing new');
+
   // With every bag deleted, the first screen comes back, and the trips can still be opened from it.
   await page.evaluate(() => { const { store, M } = window.carryOn; for (const b of M.bags(store.doc)) store.apply(d => M.removeBag(d, b.id)); });
   await page.goto(base + '#/');
