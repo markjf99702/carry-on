@@ -3,8 +3,8 @@
 // the occasions decide what's on the list, things get ticked, left off, added and moved, and the coming-home
 // pass lists only what went. A trip too far off for a forecast gets typical weather; one with no connection is
 // set by hand. The list is changed, sent as a link and opened on another phone, a list is pasted in, what's typed
-// stays put while the page redraws, quick taps tick what was tapped, and two phones share one list and its ticks
-// through a stand-in Google Drive (test/fake-google.mjs).
+// stays put while the page redraws, quick taps tick what was tapped, finishing the packing says so, and two phones
+// share one list and its ticks through a stand-in Google Drive (test/fake-google.mjs).
 import { createRequire } from 'node:module';
 import { execSync } from 'node:child_process';
 import { createServer } from 'node:http';
@@ -444,6 +444,37 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   assert.equal(await page.evaluate(() => document.activeElement.closest('li')?.textContent), 'Power bank');
   await until(async () => /All 5 packed/.test(await bag('Electronics').innerText()), 'the bag to fold');
   assert.match(await page.evaluate(() => document.activeElement.textContent), /All 5 packed/, 'focus on the folded bag');
+  // Everything packed: said once, when it happens.
+  const toasts = () => page.evaluate(() => window.toasts);
+  await page.evaluate(() => {
+    window.toasts = [];
+    const el = document.getElementById('toast');
+    new MutationObserver(() => { if (!el.hidden) window.toasts.push(el.firstChild?.textContent); }).observe(el, { childList: true, attributes: true });
+  });
+  const allBut = (mode, name) => page.evaluate(([mode, name]) => {
+    const { store, M, R, render } = window.carryOn, t = Object.values(store.doc.trips)[0];
+    const keys = R.plan(store.doc, t, mode).groups.concat(R.plan(store.doc, t, mode).tasks).flatMap(g => g.rows).filter(r => r.name !== name).map(r => r.key);
+    store.apply(d => M.markAll(d, t.id, keys, 1));
+    render();
+  }, [mode, name]);
+  await allBut('go', 'Shoes');
+  assert.deepEqual(await toasts(), []);
+  await row(page, 'Shoes').locator('.tick').click();
+  assert.deepEqual(await toasts(), ['Everything for Chicago is packed.']);
+  assert.equal(await page.locator('.progress p.all').innerText(), 'All packed');
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await wait(1500);
+  assert.deepEqual(await toasts(), ['Everything for Chicago is packed.'], 'just the once');
+  await page.click('text=Coming home');
+  await allBut('back', 'Shoes');
+  await row(page, 'Shoes').locator('.tick').click();
+  assert.deepEqual((await toasts()).slice(1), ['All back in the bags. Safe trip home.']);
+  assert.match(await page.locator('.progress p.all').innerText(), /All back in the bags/);
+  // Not when the trip opens already packed.
+  await page.reload();
+  await page.waitForSelector('.pass h1');
+  await wait(300);
+  assert.equal(await page.locator('#toast').isHidden(), true);
   await ctx.close();
 }
 

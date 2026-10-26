@@ -249,6 +249,8 @@ ul.chips .chip small { font-weight: 500; color: var(--muted); font-size: 13px; }
 .progress { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 12px; margin-bottom: 14px; }
 .progress .meter { grid-column: 1 / -1; height: 8px; }
 .progress p { margin: 0; }
+.progress p.all { display: flex; align-items: center; gap: 4px; color: var(--ok); }
+.progress p.all svg { display: block; width: 18px; height: 18px; }
 
 /* ---------- bags ---------- */
 .bag { background: var(--paper); border: 1px solid var(--line); border-radius: 16px; margin-bottom: 12px; box-shadow: var(--shadow); overflow: hidden; }

@@ -33,7 +33,7 @@ function render() {
   if (hash.startsWith('#list=')) { takeLink(hash.slice(6)); return; }
   const [, page = '', id = ''] = hash.slice(1).split('/');
   const screen = page + '/' + id, moved = screen !== current;
-  if (moved) { draft = null; linger.clear(); clearTimeout(lingerT); lingerT = null; }
+  if (moved) { draft = null; packedSeen = null; linger.clear(); clearTimeout(lingerT); lingerT = null; }
   // Focus, where the cursor was in a text box, and anything half-typed in an add box come through the redraw.
   const was = document.activeElement;
   const key = was?.dataset?.key, fid = !moved && !key && main.contains(was) ? was.id : '';
@@ -183,11 +183,17 @@ function weatherStrip(t, c) {
 
 // ---------- one trip ----------
 
+let packedSeen = null; // the trip and way of packing last drawn, and whether it was all packed
+
 function tripView(t) {
   maybeWeather(t);
   const t0 = today();
   const mode = store.mode(t.id) || (t0 >= t.end ? 'back' : 'go');
   const p = R.plan(doc(), t, mode), c = p.cond;
+  const complete = p.total > 0 && p.done === p.total;
+  // Said once, when a change finishes the packing; never on opening a trip that's packed already.
+  if (packedSeen?.key === t.id + mode && !packedSeen.complete && complete) toast(mode === 'go' ? `Everything for ${title(t)} is packed.` : 'All back in the bags. Safe trip home.');
+  packedSeen = { key: t.id + mode, complete };
   const n = D.nights(t.start, t.end);
   const onKeys = Object.keys(c.on).filter(k => c.on[k] && R.condInfo(doc(), k));
   const order = k => { const i = R.CONDITIONS.findIndex(x => x.k === k); return i < 0 ? 100 : i; };
@@ -220,7 +226,7 @@ function tripView(t) {
       h('button', { type: 'button', 'aria-pressed': String(mode === 'back'), onclick: () => { store.setMode(t.id, 'back'); render(); } }, 'Coming home')),
     h('div', { class: 'progress' },
       h('div', { class: 'meter', 'aria-hidden': 'true' }, h('i', { style: { width: (p.total ? 100 * p.done / p.total : 0) + '%' } })),
-      h('p', {}, h('b', {}, p.done === p.total && p.total ? (mode === 'go' ? 'All packed' : 'All back in the bags') : `${p.done} of ${p.total}`), p.done === p.total ? '' : mode === 'go' ? ' packed' : ' back in the bags'),
+      h('p', { class: complete ? 'all' : null }, complete ? h('span', { html: ICONS.check }) : null, h('b', {}, complete ? (mode === 'go' ? 'All packed' : 'All back in the bags') : `${p.done} of ${p.total}`), complete ? '' : mode === 'go' ? ' packed' : ' back in the bags'),
       h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: hide, onchange: e => { store.hide = e.target.checked; render(); } }), h('span', {}, 'Hide done'))),
     mode === 'back' && !Object.keys(t.marks || {}).some(k => k.startsWith('p:') && t.marks[k].v === 1)
       ? h('p', { class: 'muted small hint' }, 'Nothing was ticked going, so this is everything that was on the list.') : null,
