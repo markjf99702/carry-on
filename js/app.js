@@ -238,7 +238,7 @@ function tagCard(t) {
     where ? h('span', { class: 'where' }, where) : null,
     h('span', { class: 'dates' }, `${D.span(t.start, t.end, t0.slice(0, 4))} · ${n ? plural(n, 'night') : 'day trip'} · ${R.CONDITIONS.find(x => x.k === t.travel).icon}`),
     w ? h('span', { class: 'glance' }, `${W.dayIcon(W.tripDays(t.wx, t.start, t.end, t.place)[0])} ${W.temp(w.minLo, c.units)}–${W.temp(w.maxHi, c.units)}${w.rain ? ' · rain' + (w.rainDays.length ? ' likely' : ' some days') : ''}${w.snow ? ' · snow' : ''}`) : null,
-    h('span', { class: 'meter', 'aria-hidden': 'true' }, h('i', { style: { width: (p.total ? (100 * p.done / p.total) : 0) + '%' } })),
+    h('span', { class: 'meter', 'aria-hidden': 'true' }, meter(t.id + ':tag', p.done, p.total)),
     h('span', { class: 'packed' }, p.done === p.total && p.total ? 'All packed' : `${p.done} of ${p.total} packed`));
 }
 
@@ -333,8 +333,9 @@ function tripView(t) {
   shownTrip = t.id + ':' + mode;
   const complete = p.total > 0 && p.done === p.total;
   // Said once, when a change finishes the packing; never on opening a trip that's packed already. When the change
-  // said what it did with an Undo, just now, the Undo stays.
-  if (packedSeen?.key === t.id + mode && !packedSeen.complete && complete) toastKeep(mode === 'go' ? `Everything for ${title(t)} is packed.` : 'All back in the bags. Safe trip home.');
+  // said what it did with an Undo, just now, the Undo stays. The check by "All packed" pops as it's said.
+  const finished = packedSeen?.key === t.id + mode && !packedSeen.complete && complete;
+  if (finished) toastKeep(mode === 'go' ? `Everything for ${title(t)} is packed.` : 'All back in the bags. Safe trip home.');
   packedSeen = { key: t.id + mode, complete };
   const n = D.nights(t.start, t.end);
   const onKeys = Object.keys(c.on).filter(k => c.on[k] && R.condInfo(doc(), k));
@@ -369,8 +370,8 @@ function tripView(t) {
       h('button', { type: 'button', 'data-key': 'mode:go', 'aria-pressed': String(mode === 'go'), onclick: () => { store.setMode(t.id, 'go'); render(); } }, 'Going'),
       h('button', { type: 'button', 'data-key': 'mode:back', 'aria-pressed': String(mode === 'back'), onclick: () => { store.setMode(t.id, 'back'); render(); } }, 'Coming home')),
     h('div', { class: 'progress' },
-      h('div', { class: 'meter', 'aria-hidden': 'true' }, h('i', { style: { width: (p.total ? 100 * p.done / p.total : 0) + '%' } })),
-      h('p', { class: complete ? 'all' : null }, complete ? h('span', { html: ICONS.check }) : null, h('b', {}, complete ? (mode === 'go' ? 'All packed' : 'All back in the bags') : `${p.done} of ${p.total}`), complete ? '' : mode === 'go' ? ' packed' : ' back in the bags'),
+      h('div', { class: 'meter', 'aria-hidden': 'true' }, meter(t.id + ':' + mode, p.done, p.total)),
+      h('p', { class: complete ? 'all' + (finished ? ' just' : '') : null }, complete ? h('span', { html: ICONS.check }) : null, h('b', {}, complete ? (mode === 'go' ? 'All packed' : 'All back in the bags') : `${p.done} of ${p.total}`), complete ? '' : mode === 'go' ? ' packed' : ' back in the bags'),
       h('label', { class: 'switch' }, h('input', { type: 'checkbox', 'data-key': 'hide', checked: hide, onchange: e => { store.hide = e.target.checked; render(); } }), h('span', {}, 'Hide done'))),
     mode === 'back' && !Object.keys(t.marks || {}).some(k => k.startsWith('p:') && t.marks[k].v === 1)
       ? h('p', { class: 'muted small hint' }, 'Nothing was ticked going, so this is everything that was on the list.') : null,
@@ -388,6 +389,20 @@ function tripView(t) {
 const linger = new Set(); // 'go:BAGID' or 'back:BAGID' for a bag, a row's mark key for a row
 let lingerT = null, lingerAt = '';
 const LINGER_MS = 1200;
+
+// Things that move, once. render() draws every row and meter afresh, so a transition on them never runs, and an
+// animation on a class that stays would play again on every redraw. So the row just ticked is marked for the one
+// redraw the tick makes (popKey), and each meter starts at the width it was last drawn at, per trip and way of
+// packing, or per luggage tag, and moves to the new one a frame later.
+let popKey = '';
+const meterAt = new Map();
+function meter(key, done, total) {
+  const now = total ? 100 * done / total : 0, was = meterAt.get(key);
+  meterAt.set(key, now);
+  const bar = h('i', { style: { width: (was ?? now) + '%' } });
+  if (was !== undefined && was !== now) requestAnimationFrame(() => requestAnimationFrame(() => { bar.style.width = now + '%'; }));
+  return bar;
+}
 
 // If the focus was on a tick that goes, render() moves it to the next one in that bag, or to the folded bag.
 function settle() {
@@ -446,7 +461,9 @@ function itemRow(t, g, r, mode, whyMap, jobs, hide) {
     clearTimeout(lingerT);
     lingerT = linger.size ? setTimeout(settle, LINGER_MS) : null;
     lingerAt = r.key;
+    popKey = r.key;
     render();
+    popKey = '';
   };
   // A screen reader hears the tick by its name and how many ("Socks, 5"), then the lines under it, without the
   // conditions' pictures.
@@ -464,7 +481,7 @@ function itemRow(t, g, r, mode, whyMap, jobs, hide) {
     r.extra ? line('why', 'Just for this trip') : null,
     r.deleted ? line('why', 'No longer on your list') : null,
   ];
-  return h('li', { class: 'row' + (r.done ? ' done' : '') + (r.gone ? ' gone' : '') },
+  return h('li', { class: 'row' + (r.done ? ' done' : '') + (r.done && r.key === popKey ? ' just' : '') + (r.gone ? ' gone' : '') },
     h('button', { type: 'button', class: 'tick', role: 'checkbox', 'aria-checked': String(r.done), 'data-key': r.key, 'aria-label': r.qty > 1 ? `${r.name}, ${r.qty}` : r.name, 'aria-describedby': lines.join(' ') || null, onclick: toggle },
       h('span', { class: 'box', html: ICONS.check }),
       h('span', { class: 'what' },

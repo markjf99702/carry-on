@@ -330,6 +330,10 @@ ul.chips .chip small { font-weight: 500; color: var(--muted); font-size: 13px; }
 .what small, .edit-row small { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
 .what small.why, .edit-row small.why { color: var(--sky); }
 .row.done .box { background: var(--ok); border-color: var(--ok); color: var(--paper); }
+/* The tick just made, and the check as the last one finishes the packing, pop once (app.js marks them for one
+   redraw). */
+.row.done.just .box, .progress p.all.just svg { animation: tick-pop .26s cubic-bezier(.3, 1.5, .5, 1); }
+@keyframes tick-pop { 0% { transform: scale(.6); } 60% { transform: scale(1.15); } 100% { transform: scale(1); } }
 .row.done .name { color: var(--muted); text-decoration: line-through; text-decoration-thickness: 1.5px; }
 .row.done .qty { color: var(--muted); }
 .row.gone .box { background: var(--muted); border-color: var(--muted); }
@@ -399,8 +403,12 @@ ul.chips .chip small { font-weight: 500; color: var(--muted); font-size: 13px; }
   pointer-events: none; /* a tap on the words reaches what's under them */
 }
 .toast button { flex: none; min-height: 44px; margin: -4px 0; padding: 0 14px; border: 1.5px solid color-mix(in srgb, var(--bg) 45%, transparent); border-radius: 8px; background: none; color: var(--bg); font-weight: 700; cursor: pointer; pointer-events: auto; }
-/* Over a sheet, at the top of the screen, clear of the sheet's buttons. */
+/* Over a sheet, at the top of the screen, clear of the sheet's buttons. It comes in from the edge it's at. */
 .sheet .toast { top: calc(12px + env(safe-area-inset-top)); bottom: auto; }
+.toast:not([hidden]) { animation: toast-in .18s ease-out; }
+.sheet .toast:not([hidden]) { animation-name: toast-in-top; }
+@keyframes toast-in { from { transform: translate(-50%, 12px); opacity: 0; } }
+@keyframes toast-in-top { from { transform: translate(-50%, -12px); opacity: 0; } }
 .sheet {
   width: 100%; max-width: 520px; max-height: 92vh; max-height: 92dvh; margin: auto auto 0; padding: 0; overscroll-behavior: contain;
   border: 0; border-radius: 18px 18px 0 0;
@@ -412,6 +420,13 @@ ul.chips .chip small { font-weight: 500; color: var(--muted); font-size: 13px; }
 }
 .sheet.wide { max-width: 600px; }
 .sheet::backdrop { background: rgba(14, 18, 26, .5); }
+/* A sheet slides up as it opens, over a page that dims, and goes at once. Drawn again while open, it stays still.
+   It moves by its margin rather than a transform, which would hold the toast inside it to the sheet instead of the
+   screen while it moves. */
+.sheet[open] { animation: sheet-up .22s cubic-bezier(.2, .8, .2, 1); }
+.sheet[open]::backdrop { animation: fade .22s; }
+@keyframes sheet-up { from { margin-bottom: -40px; opacity: .6; } }
+@keyframes fade { from { opacity: 0; } }
 .sheet-body { padding: 0 18px calc(18px + env(safe-area-inset-bottom)); }
 .sheet-body:has(> .sheet-actions:last-child) { padding-bottom: 0; }
 /* The title and the buttons stay in view while a long sheet scrolls between them. */
@@ -440,7 +455,9 @@ ul.chips .chip small { font-weight: 500; color: var(--muted); font-size: 13px; }
 .moved:empty { margin-bottom: 8px; }
 
 @media (min-width: 720px) {
+  /* In the middle of the screen, it fades in where it is. */
   .sheet { margin: auto; border-radius: 16px; }
+  .sheet[open] { animation-name: fade; }
   h1 { font-size: 40px; }
   .pass h1 { font-size: 58px; }
   .tags { grid-template-columns: 1fr 1fr; }
@@ -450,7 +467,7 @@ ul.chips .chip small { font-weight: 500; color: var(--muted); font-size: 13px; }
   .welcome h1 { font-size: 38px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { transition: none !important; animation: none !important; }
+  *, *::before, *::after, *::backdrop { transition: none !important; animation: none !important; }
 }
 .sheet .stack + p { margin-top: 12px; }
 /* A phone on its side, or with the keyboard up and little room left: the title and the buttons scroll with the

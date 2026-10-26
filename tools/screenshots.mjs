@@ -25,8 +25,9 @@ const NOW = new Date('2026-10-26T09:00:00');
 const browser = await pw.chromium.launch();
 await mkdir(join(root, 'docs'), { recursive: true });
 
+// With less motion asked for, so a sheet or a meter is never caught partway.
 async function open(viewport, deviceScaleFactor, colorScheme = 'light') {
-  const ctx = await browser.newContext({ viewport, deviceScaleFactor, hasTouch: true, serviceWorkers: 'block', colorScheme });
+  const ctx = await browser.newContext({ viewport, deviceScaleFactor, hasTouch: true, serviceWorkers: 'block', colorScheme, reducedMotion: 'reduce' });
   await ctx.clock.setSystemTime(NOW);
   await openMeteo(ctx);
   const page = await ctx.newPage();

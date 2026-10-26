@@ -1330,6 +1330,52 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await ctx.close();
 }
 
+// ================= Things that move, once =================
+// render() draws the page afresh after every tap, so something that moves has to be marked for just the one redraw.
+{
+  const { ctx, page } = await phone();
+  await page.click('text=Start with a starter list');
+  await planTrip(page, { where: 'Chic', from: 2, to: 4, by: 'Driving' });
+  // What starts moving in the frames after fn runs in the page.
+  const moves = fn => page.evaluate(async fn => {
+    await new Promise(r => setTimeout(r, 400)); // anything already moving has stopped
+    const seen = new Set(), names = () => document.getAnimations().forEach(a => seen.add(`${a.animationName || a.transitionProperty} ${a.effect.target.closest?.('[id], li, .progress')?.className || a.effect.target.id}`.trim()));
+    eval(fn)();
+    for (let i = 0; i < 6; i++) { await new Promise(r => requestAnimationFrame(r)); names(); }
+    return [...seen].sort();
+  }, fn.toString());
+  const shoes = '() => [...document.querySelectorAll("main li.row")].find(li => li.querySelector(".name").textContent === "Shoes").querySelector(".tick").click()';
+  // A tick pops its box and slides the meter; the redraw after it, and one on its own, move nothing.
+  assert.deepEqual(await moves(shoes), ['tick-pop row done just', 'width progress']);
+  assert.deepEqual(await moves('() => window.carryOn.render()'), []);
+  await until(async () => (await moves('() => {}')).length === 0, 'the list to settle');
+  // A sheet slides up over a page that dims, once: drawn again while open, it stays put.
+  const opened = await moves('() => document.querySelector(".needs-head .btn").click()');
+  assert.ok(opened.includes('sheet-up sheet wide') && opened.includes('fade sheet wide'), `the sheet slides up, and the page dims (${opened})`);
+  assert.deepEqual(await moves('() => document.querySelector("#sheet [data-k=\'rain\'] button").click()'), []);
+  await closeSheet(page);
+  // A toast comes up from the bottom.
+  await more(page, 'Belt');
+  await page.click('text=Leave it off this trip');
+  await until(async () => !(await sheetOpen(page)), 'the sheet to close');
+  assert.ok((await moves('() => { const t = document.getElementById("toast"); t.hidden = true; void t.offsetWidth; t.hidden = false; }')).includes('toast-in toast'));
+  // Finishing the packing pops the check by All packed.
+  const ticks = (rest, shoes) => page.evaluate(([rest, shoes]) => {
+    const { store, M, R, render } = window.carryOn, id = location.hash.split('/')[2], p = R.plan(store.doc, store.doc.trips[id], 'go');
+    const rows = p.groups.concat(p.tasks).flatMap(g => g.rows);
+    store.apply(d => M.mark(M.markAll(d, id, rows.filter(r => r.name !== 'Shoes').map(r => r.key), rest), id, rows.find(r => r.name === 'Shoes').key, shoes));
+    render();
+  }, [rest, shoes]);
+  await ticks(1, 0);
+  assert.deepEqual((await moves(shoes)).filter(m => m.startsWith('tick-pop')), ['tick-pop progress', 'tick-pop row done just']);
+  // With less motion asked for, nothing moves at all.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await ticks(0, 0);
+  assert.deepEqual(await moves(shoes), []);
+  assert.deepEqual(await moves('() => document.querySelector(".needs-head .btn").click()'), []);
+  await ctx.close();
+}
+
 // ================= Two phones, one Google Drive =================
 {
   const g = fakeGoogle();
