@@ -24,16 +24,18 @@ export async function encodeList(list) {
 export async function decodeList(code) {
   let raw;
   try { raw = JSON.parse(new TextDecoder().decode(await squeeze(unb64(code), 'out'))); } catch { raw = null; }
+  if (typeof raw?.app === 'string' && raw.app !== APP) throw new Error('That link is for another app, not Carry On.');
   if (!raw || raw.app !== APP || !Array.isArray(raw.bags)) throw new Error('That link doesn’t hold a Carry On list. It may have been cut short.');
   return cleanList(raw);
 }
 
 // Keeps only what's well formed, in order.
+const list = x => (Array.isArray(x) ? x : []);
 export function cleanList(raw) {
-  const bags = (raw.bags || []).map(b => cleanBag({ ...b, t: 0 })).filter(Boolean).map(({ t, order, ...b }) => b);
+  const bags = list(raw.bags).map(b => cleanBag({ ...b, t: 0 })).filter(Boolean).map(({ t, order, ...b }) => b);
   const ids = new Set(bags.map(b => b.id));
-  const items = (raw.items || []).map(x => cleanItem({ ...x, t: 0 })).filter(x => x && ids.has(x.bag)).map(({ t, order, ...x }) => x);
-  const tags = (raw.tags || []).map(g => cleanTag({ ...g, t: 0 })).filter(Boolean).map(({ t, order, ...g }) => g);
+  const items = list(raw.items).map(x => cleanItem({ ...x, t: 0 })).filter(x => x && ids.has(x.bag)).map(({ t, order, ...x }) => x);
+  const tags = list(raw.tags).map(g => cleanTag({ ...g, t: 0 })).filter(Boolean).map(({ t, order, ...g }) => g);
   return { bags, items, tags };
 }
 

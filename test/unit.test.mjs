@@ -514,6 +514,21 @@ test('a list survives a link', async () => {
   await assert.rejects(decodeList('nonsense'));
 });
 
+test('links with an odd shape, or from another app, say what’s wrong', async () => {
+  const pack = async obj => {
+    const packed = new Uint8Array(await new Response(new Blob([JSON.stringify(obj)]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer());
+    return btoa(String.fromCharCode(...packed)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  };
+  const bags = [{ id: 'b1', name: 'Day bag' }, null, 7, 'Bag'];
+  for (const odd of [{ tags: { a: 1 } }, { items: 'Socks' }, { items: { i1: { name: 'Socks', bag: 'b1' } }, tags: 3 }]) {
+    const l = await decodeList(await pack({ app: 'carry-on', list: 1, bags, ...odd }));
+    assert.deepEqual([l.bags.map(b => b.name), l.items, l.tags], [['Day bag'], [], []]);
+  }
+  await assert.rejects(decodeList(await pack({ app: 'brickyard', list: 1, sets: [] })), { message: 'That link is for another app, not Carry On.' });
+  const cut = { message: 'That link doesn’t hold a Carry On list. It may have been cut short.' };
+  for (const code of ['nonsense', '', (await encodeList({ bags: [] })).slice(0, 12), await pack({ list: 1, bags: [] }), await pack({ app: 'carry-on', bags: {} })]) await assert.rejects(decodeList(code), cut);
+});
+
 test('qty', () => {
   let doc = M.setPref(starter(), 'laundry', 3);
   doc = trip(doc, {});
