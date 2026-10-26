@@ -101,9 +101,10 @@ async function run(tries, g) {
     if (g !== gen) return false; // saving stopped meanwhile
     const files = await findAll(FILE, 'id,version');
     let file = files[0] || null, remote = file ? await download(file.id) : null;
-    // Two devices that each made the file at the same moment: fold the extras into the first and bin them.
+    // Two devices that each made the file at the same moment: fold the extras into the first and bin them. The
+    // first one's ids win, since other devices already hold them.
     for (const extra of files.slice(1)) {
-      remote = mergeDocs(remote, await download(extra.id), { first: true });
+      remote = mergeDocs(await download(extra.id), remote, { first: true });
       await api('PATCH', `drive/v3/files/${extra.id}`, JSON.stringify({ trashed: true }), 'application/json');
     }
     // A device's first sync with this file (or a file made fresh after the old one was deleted) takes

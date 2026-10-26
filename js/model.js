@@ -222,6 +222,22 @@ function mergeRec(x, y) {
   return out;
 }
 
+// A trip on the side whose bags and things took the other side's ids in a first merge: its ticks, skips and moves,
+// and the bags of its one-trip things, go to the new ids. Where two marks land on one key, the newer stays.
+function followRenames(trip, bagMap, itemMap) {
+  const out = { ...trip };
+  if (trip.marks) {
+    out.marks = {};
+    for (const [k, m] of Object.entries(trip.marks)) {
+      const id = k.slice(2), key = k[0] + ':' + (itemMap[id] || bagMap[id] || id);
+      const x = k[0] === 'b' && bagMap[m.v] ? { ...m, v: bagMap[m.v] } : m;
+      if (!out.marks[key] || newer(x, out.marks[key])) out.marks[key] = x;
+    }
+  }
+  if (trip.extras) out.extras = Object.fromEntries(Object.entries(trip.extras).map(([id, x]) => [id, bagMap[x.bag] ? { ...x, bag: bagMap[x.bag] } : x]));
+  return out;
+}
+
 // For telling whether two names are the same: case, spaces and punctuation don't count.
 const norm = s => String(s || '').toLowerCase().normalize('NFKC').replace(/[^\p{L}\p{N}\p{So}]+/gu, ' ').trim();
 const untouched = x => x.t === 0;
@@ -230,7 +246,8 @@ const untouched = x => x.t === 0;
 // ends up with the same list and trips.
 // first: this device's first merge with that copy (turning Drive on, restoring a backup, adding a shared list).
 //   - Nothing counts as removed: something one side deleted but the other still has stays.
-//   - A bag or thing made separately on both sides (same name, and for a thing the same bag) becomes one.
+//   - A bag or thing made separately on both sides (same name, and for a thing the same bag) becomes one, with
+//     the remote side's id; this side's trips follow, so their ticks stay.
 //   - Untouched starter records (t = 0) are the exception. A second phone that started from the starter list
 //     and then joins Drive shouldn't bring back starter things deleted elsewhere, or add them to a list that
 //     never had them: when the other side has a list of its own, they're dropped (kept as deletions, so the
@@ -238,7 +255,7 @@ const untouched = x => x.t === 0;
 //     so that thing still shows.
 export function mergeDocs(local, remote, { first = false } = {}) {
   const out = { app: APP, v: 1 };
-  let bagMap = {};
+  const bagMap = {}, itemMap = {};
   for (const name of ['bags', 'items', 'tags', 'trips']) {
     let a = { ...local[name] };
     const b = remote[name];
@@ -253,9 +270,10 @@ export function mergeDocs(local, remote, { first = false } = {}) {
         taken.add(match.id);
         delete a[id];
         a[match.id] = { ...x, id: match.id };
-        if (name === 'bags') bagMap[id] = match.id;
+        if (name === 'bags') bagMap[id] = match.id; else itemMap[id] = match.id;
       }
     }
+    if (first && name === 'trips') for (const [id, t] of Object.entries(a)) a[id] = followRenames(t, bagMap, itemMap);
     const liveIn = m => Object.values(m).some(x => !gone(x) && !untouched(x));
     const aHas = liveIn(a), bHas = liveIn(b);
     // A starter bag that someone put a thing of their own in is in use: it stays, with that thing.

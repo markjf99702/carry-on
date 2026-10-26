@@ -319,6 +319,51 @@ test('moving things whose places tie', () => {
   }
 });
 
+test('a first merge that makes two of a thing into one keeps its ticks, skips, moves and one-trip things', () => {
+  // This phone and the Drive copy each have their own Kindle, Hat and Gym bag, made separately.
+  const own = (doc, s) => {
+    doc = M.putBag(doc, { id: 'gym' + s, name: 'Gym bag' });
+    doc = M.putItem(doc, { id: 'towel' + s, name: 'Towel', bag: 'gym' + s });
+    doc = M.putItem(doc, { id: 'kindle' + s, name: 'Kindle', bag: 's-daybag' });
+    return M.putItem(doc, { id: 'hat' + s, name: 'Hat', bag: 's-clothes' });
+  };
+  let phone = trip(own(starter(), 'A'), {});
+  phone = M.mark(phone, 't1', 'p:kindleA', 1);
+  phone = M.mark(phone, 't1', 'x:hatA', 'skip');
+  phone = M.mark(phone, 't1', 'b:s-daybag-sunglasses', 'gymA');
+  phone = M.putExtra(phone, 't1', { id: 'e1', name: 'Gift', bag: 'gymA' });
+  phone = M.putTrip(phone, { id: 't2', start: T, end: add(T, 2), travel: 'drive' });
+  phone = M.mark(phone, 't2', 'x:gymA', 'skip');
+  const drive = own(starter(), 'B');
+  for (const [local, remote, ids] of [[phone, drive, 'B'], [drive, phone, 'A']]) {
+    const m = M.mergeDocs(local, remote, { first: true });
+    assert.deepEqual(M.items(m).filter(x => ['Kindle', 'Hat', 'Towel'].includes(x.name)).map(x => x.id).sort(), ['hat', 'kindle', 'towel'].map(x => x + ids));
+    const p = plan(m, m.trips.t1), rowOf = n => p.groups.flatMap(g => g.rows).find(r => r.name === n);
+    assert.equal(rowOf('Kindle').done, true, 'still ticked');
+    assert.ok(p.left.some(l => l.item.name === 'Hat' && l.skipped), 'still left off');
+    assert.deepEqual(names(p, 'Gym bag').sort(), ['Gift', 'Sunglasses', 'Towel'], 'moved and added to the one Gym bag');
+    assert.deepEqual(plan(m, m.trips.t2).leftBags.filter(l => l.skipped).map(l => l.bag.name), ['Gym bag']);
+    assert.equal(M.canon(M.mergeDocs(m, remote)), M.canon(m), 'the next sync changes nothing');
+  }
+  // Two marks on one key: the newer stays.
+  let both = M.mark(phone, 't1', 'p:kindleB', 0);
+  later();
+  both = M.mark(both, 't1', 'p:kindleA', 1);
+  assert.equal(M.mergeDocs(both, drive, { first: true }).trips.t1.marks['p:kindleB'].v, 1);
+});
+
+test('two Drive files made at once fold into one, keeping the ids other devices hold', () => {
+  // Each phone made its own file. The first file's phone has a Kindle; the second's has one too, ticked on a trip.
+  const main = M.putItem(starter(), { id: 'kindleA', name: 'Kindle', bag: 's-daybag' });
+  let extra = trip(M.putItem(starter(), { id: 'kindleB', name: 'Kindle', bag: 's-daybag' }), {});
+  extra = M.mark(extra, 't1', 'p:kindleB', 1);
+  const folded = M.mergeDocs(extra, main, { first: true }); // as sync.js folds the second file into the first
+  for (const [who, m] of [['the first file’s phone', M.mergeDocs(main, folded)], ['the second’s', M.mergeDocs(extra, folded, { first: true })]]) {
+    assert.deepEqual(M.items(m).filter(x => x.name === 'Kindle').map(x => x.id), ['kindleA'], `one Kindle on ${who}`);
+    assert.equal(plan(m, m.trips.t1).groups.flatMap(g => g.rows).find(r => r.name === 'Kindle').done, true, `ticked on ${who}`);
+  }
+});
+
 test('replacing and adding lists', () => {
   const doc = starter();
   const mine = parsePaste('Bags:\n- Camera\nToiletries bag:\n- Toothbrush\n- Retainer');
