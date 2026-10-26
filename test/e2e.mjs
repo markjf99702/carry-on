@@ -82,6 +82,9 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   const { ctx, page } = await phone();
   assert.match(await page.locator('main h1').innerText(), /trip you’re actually taking/i);
   await fits(page, 'the first screen');
+  // Hover styles only where a pointer hovers: on a touch screen they stay stuck on whatever was tapped last.
+  const hovers = await page.evaluate(() => [...document.styleSheets].flatMap(s => [...s.cssRules]).map(r => r.selectorText || '').filter(t => t.includes(':hover')));
+  assert.deepEqual(hovers, ['.jd-foot a:hover, .jd-foot a:focus-visible'], 'hover styles outside @media (hover: hover)');
   await page.click('text=Start with a starter list');
   await page.waitForSelector('text=No trips yet.');
 

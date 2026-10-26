@@ -94,7 +94,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
   background: none; color: var(--ink); cursor: pointer; text-decoration: none; font-size: 22px;
 }
 .icon-btn svg { width: 24px; height: 24px; }
-.icon-btn:hover { background: var(--chip); }
+.icon-btn:active:not(:disabled) { background: var(--chip); }
+/* Hover only where there's a pointer that hovers: on a touch screen it stays stuck on whatever was last tapped. */
+@media (hover: hover) { .icon-btn:hover:not(:disabled) { background: var(--chip); } }
 .icon-btn.small { width: 36px; height: 36px; }
 .icon-btn.small svg { width: 20px; height: 20px; }
 .icon-btn:disabled { opacity: .4; cursor: default; }
@@ -112,10 +114,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
   background: var(--paper); color: var(--ink); font-weight: 650; text-decoration: none; cursor: pointer;
   text-align: center;
 }
-.btn:hover { border-color: color-mix(in srgb, var(--ink) 30%, var(--line)); }
+@media (hover: hover) { .btn:hover { border-color: color-mix(in srgb, var(--ink) 30%, var(--line)); } }
 .btn svg { width: 18px; height: 18px; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-.btn.primary:hover { filter: brightness(1.06); }
+@media (hover: hover) { .btn.primary:hover { filter: brightness(1.06); } }
 .btn.big { min-height: 52px; font-size: 17px; padding: 0 20px; }
 .btn.small { min-height: 36px; padding: 0 12px; font-size: 14px; border-radius: 10px; }
 .btn.danger { border-color: var(--red); color: var(--red); background: none; }
@@ -320,7 +322,7 @@ ul.chips .chip small { font-weight: 500; color: var(--muted); font-size: 13px; }
 .results:not(:empty) { border: 1px solid var(--line); }
 .results li + li { border-top: 1px solid var(--line); }
 .results button { display: block; width: 100%; padding: 11px 12px; border: 0; background: var(--paper); text-align: left; cursor: pointer; }
-.results button:hover { background: var(--chip); }
+@media (hover: hover) { .results button:hover { background: var(--chip); } }
 .results .err { padding: 10px 12px; }
 .picked { display: flex; align-items: center; gap: 8px; min-height: 46px; padding: 4px 4px 4px 12px; border: 1.5px solid var(--ok); border-radius: 10px; background: var(--ok-soft); }
 .picked > span { flex: 1; min-width: 0; }
