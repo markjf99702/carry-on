@@ -2,7 +2,7 @@
 // The list, the trips and their last weather lookup are in localStorage.
 // Network first, so a new version shows up as soon as you're online.
 
-const CACHE = 'carry-on-v5'; // bump the number when the files change
+const CACHE = 'carry-on-v6'; // bump the number when the files change
 const SHELL = [
   './', 'index.html', 'css/app.css', 'icon.svg', 'icon-180.png', 'manifest.webmanifest',
   'fonts/figtree.woff2', 'fonts/barlow-condensed-600.woff2', 'fonts/barlow-condensed-700.woff2',

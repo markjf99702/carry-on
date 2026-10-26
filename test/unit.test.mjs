@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as M from '../js/model.js';
 import { plan, conditions, qtyOf } from '../js/rules.js';
-import { summarize, stale } from '../js/weather.js';
+import { summarize, stale, tripWeather, forecastEdge } from '../js/weather.js';
 import { plugsFor, plugText } from '../js/plugs.js';
 import { parsePaste, encodeList, decodeList, guess } from '../js/share.js';
 import { starterList } from '../js/starter.js';
@@ -105,6 +105,58 @@ test('stale weather', () => {
   assert.equal(stale(typ, '2026-12-20', '2026-12-20', '2026-11-02', now), false, 'typical weather two days old is still good');
   assert.equal(stale({ ...typ, at: now - 8 * 86400e3 }, '2026-12-20', '2026-12-20', '2026-11-02', now), true, 'but not after a week');
   assert.equal(stale(null, '2026-10-01', '2026-10-05', '2026-11-02', now), false, 'a past trip keeps what it had');
+});
+
+// A stand-in for Open-Meteo's forecast and archive in Node: answers each request from the dates it asks for, the
+// way the real one does, including its edge: the forecast's end_date may be at most UTC today + 15 days.
+// answer(kind, url) can return { daily overrides }, { status, reason } for an error, or an Error for no connection.
+function weatherStub(now, answer = () => ({})) {
+  const calls = [], was = globalThis.fetch;
+  globalThis.fetch = async url => {
+    const u = new URL(url), s = u.searchParams, kind = u.hostname.startsWith('archive') ? 'archive' : 'forecast';
+    calls.push(`${kind} ${s.get('start_date')} ${s.get('end_date')}`);
+    const a = answer(kind, u);
+    if (a instanceof Error) throw a;
+    const bad = (status, reason) => ({ ok: false, status, json: async () => ({ error: true, reason }) });
+    if (a.status) return bad(a.status, a.reason);
+    if (kind === 'forecast' && s.get('end_date') > add(new Date(now).toISOString().slice(0, 10), 15)) {
+      return bad(400, `Parameter 'end_date' is out of allowed range from 2026-07-25 to ${add(new Date(now).toISOString().slice(0, 10), 15)}`);
+    }
+    const time = a.time || range(s.get('start_date'), s.get('end_date'));
+    const fill = v => time.map(() => v);
+    const daily = kind === 'forecast'
+      ? { time, temperature_2m_max: fill(20), temperature_2m_min: fill(10), precipitation_probability_max: fill(10), precipitation_sum: fill(0), snowfall_sum: fill(0), uv_index_max: fill(4), weather_code: fill(2) }
+      : { time, temperature_2m_max: fill(15), temperature_2m_min: fill(5), precipitation_sum: fill(0), snowfall_sum: fill(0), shortwave_radiation_sum: fill(12) };
+    for (const [k, f] of Object.entries(a.daily || {})) daily[k] = time.map((d, i) => f(d, i));
+    return { ok: true, status: 200, json: async () => ({ daily }) };
+  };
+  return { calls, restore: () => { globalThis.fetch = was; } };
+}
+const PLACE = { name: 'Somewhere', lat: 35.7, lon: 139.7, cc: 'JP' };
+
+test('a forecast east of UTC after local midnight asks only for the days Open-Meteo has', async () => {
+  // 05:00 on Oct 27 in Tokyo is still Oct 26 in UTC, and Open-Meteo counts its 16 days from the UTC date.
+  const now = Date.parse('2026-10-26T20:00:00Z'), today = '2026-10-27';
+  assert.equal(forecastEdge(today, now), '2026-11-10');
+  assert.equal(forecastEdge('2026-10-26', Date.parse('2026-10-27T03:00:00Z')), '2026-11-10', 'behind UTC, the local date counts');
+  const stub = weatherStub(now);
+  try {
+    const wx = await tripWeather(PLACE, '2026-11-08', '2026-11-11', today, { now });
+    assert.ok(stub.calls.includes('forecast 2026-11-08 2026-11-10'), stub.calls.join(', '));
+    assert.deepEqual(wx.days.map(d => [d.d, !!d.typ]), [['2026-11-08', false], ['2026-11-09', false], ['2026-11-10', false], ['2026-11-11', true]]);
+    assert.equal(wx.err, undefined);
+  } finally { stub.restore(); }
+  // The typical day past the edge isn't due for the forecast yet.
+  const wx = { at: now, days: [day('2026-11-10', 20, 10), { d: '2026-11-11', typ: 1, hi: 15, lo: 5, mm: 0, wet: 0, sn: 0, rad: 12 }] };
+  assert.equal(stale(wx, '2026-11-10', '2026-11-11', today, now + 3600e3), false);
+});
+
+test('Open-Meteo’s out-of-range answer reads as plain words', async () => {
+  const now = Date.parse('2026-10-26T20:00:00Z');
+  const stub = weatherStub(now, kind => (kind === 'forecast' ? { status: 400, reason: "Parameter 'end_date' is out of allowed range from 2026-07-25 to 2026-11-10" } : {}));
+  try {
+    await assert.rejects(tripWeather(PLACE, '2026-11-01', '2026-11-03', '2026-10-27', { now }), { message: 'The forecast doesn’t reach that far yet.' });
+  } finally { stub.restore(); }
 });
 
 test('turning a condition on or off by hand, and occasions', () => {

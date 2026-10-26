@@ -12,6 +12,13 @@ export const API = {
 export const AHEAD = 15;
 const YEARS = [1, 2, 3];
 
+// The last day the forecast has. Open-Meteo counts its 16 days from today in UTC, so where today has already
+// begun ahead of UTC (Tokyo, Sydney, India, Europe just after midnight), it ends a day sooner than the local date says.
+export function forecastEdge(today, now = Date.now()) {
+  const utc = new Date(now).toISOString().slice(0, 10);
+  return add(utc < today ? utc : today, AHEAD);
+}
+
 // fetch, but when the connection itself fails, say which service couldn't be reached
 // rather than passing on the browser's own words ("Failed to fetch", "Load failed").
 async function reach(url, signal, what) {
@@ -25,6 +32,7 @@ async function reach(url, signal, what) {
   if (!res.ok) {
     let reason = '';
     try { reason = (await res.json()).reason || ''; } catch { /* not JSON */ }
+    if (res.status === 400 && /out of allowed range/.test(reason)) throw new Error('The forecast doesn’t reach that far yet.');
     throw new Error(`${what[0].toUpperCase() + what.slice(1)} said no (${res.status}${reason ? `: ${reason}` : ''}).`);
   }
   return res.json();
@@ -68,10 +76,10 @@ export function archiveUrl(p, start, end) {
 
 // The weather for each day of a trip: the forecast for the days it reaches, and for the rest the average of
 // the same days in the last three years. Days long gone get nothing (a past trip keeps what it had).
-export async function tripWeather(place, start, end, today, { signal } = {}) {
+export async function tripWeather(place, start, end, today, { signal, now = Date.now() } = {}) {
   if (!place || place.lat === undefined) throw new Error('This trip has no place to look up.');
   const days = range(start, end);
-  const last = add(today, AHEAD), first = add(today, -60);
+  const last = forecastEdge(today, now), first = add(today, -60);
   const fc = days.filter(d => d >= first && d <= last), ty = days.filter(d => d > last);
   const out = {}, errors = [];
   const jobs = [];
@@ -110,7 +118,7 @@ export async function tripWeather(place, start, end, today, { signal } = {}) {
   const list = days.map(k => out[k]).filter(Boolean);
   if (signal?.aborted) throw new DOMException('Stopped', 'AbortError');
   if (!list.length) throw errors[0] || new Error('No weather came back for those days.');
-  return { at: Date.now(), days: list };
+  return { at: now, days: list };
 }
 
 // Old enough to look up again: a forecast after three hours. Typical weather doesn't change, so only once the
@@ -120,7 +128,7 @@ export function stale(wx, start, end, today, now = Date.now()) {
   if (!wx || !wx.days.length) return true;
   const forecast = wx.days.some(d => !d.typ);
   if (now - wx.at > (forecast ? 3 * 3600e3 : 7 * 86400e3)) return true;
-  return wx.days.some(d => d.typ && d.d <= add(today, AHEAD));
+  return wx.days.some(d => d.typ && d.d <= forecastEdge(today, now));
 }
 
 // What the weather means for packing. Thresholds in °C.
