@@ -288,13 +288,16 @@ function weatherStrip(t, c) {
   const u = c.units;
   // Each day as a sentence for a screen reader, in place of the short words and numbers shown: "Friday: rain, high
   // 81°, low 63°, 70% chance of rain"; "Saturday, typical for these dates: often wet, high 64°, low 52°".
+  // A forecast's chance is of rain or snow (Open-Meteo's chance of precipitation): on a snow day, it's snow.
+  const chanceOf = d => (W.snowCode(d.code) ? 'snow' : 'rain');
   const said = d => {
-    const words = W.dayWords(d), wet = d.typ ? (d.wet >= 0.3 ? `rain in ${Math.round(d.wet * 100)}% of recent years` : '') : d.pop >= 30 ? `${d.pop}% chance of rain` : '';
+    const words = W.dayWords(d), wet = d.typ ? (d.wet >= 0.3 ? `rain in ${Math.round(d.wet * 100)}% of recent years` : '') : d.pop >= 30 ? `${d.pop}% chance of ${chanceOf(d)}` : '';
     return `${D.weekdayLong(d.d)}${d.typ ? ', typical for these dates' : ''}: ${[words, `high ${W.temp(d.hi, u)}`, `low ${W.temp(d.lo, u)}`, wet].filter(Boolean).join(', ')}`;
   };
   // What the blue % means, which is different on typical days.
-  const pctFc = days.some(d => !d.typ && d.pop >= 30), pctTy = days.some(d => d.typ && d.wet >= 0.3);
-  const pct = pctFc && pctTy ? 'Blue % is the chance of rain, or on the dashed days, how many recent years had rain that day.' : pctFc ? 'Blue % is the chance of rain.' : pctTy ? 'Blue % is how many recent years had rain that day.' : '';
+  const fcPct = days.filter(d => !d.typ && d.pop >= 30), pctTy = days.some(d => d.typ && d.wet >= 0.3);
+  const of = [...new Set(fcPct.map(chanceOf))].sort().join(' or ');
+  const pct = fcPct.length && pctTy ? `Blue % is the chance of ${of}, or on the dashed days, how many recent years had rain that day.` : fcPct.length ? `Blue % is the chance of ${of}.` : pctTy ? 'Blue % is how many recent years had rain that day.' : '';
   // Unless typical weather is standing in for a forecast that didn't come back, why there's typical weather at all.
   const typNote = ty && !days.some(d => d.typ && d.d <= W.forecastEdge(today())) ? (fc ? 'Past the forecast, the days show what the same dates were like in recent years.' : 'Too far off for a forecast, so these are the same dates in recent years. It switches to the forecast about two weeks out.') : '';
   return h('section', { class: 'wx' },

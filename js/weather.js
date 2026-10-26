@@ -177,7 +177,7 @@ export const LIMITS = { hot: 28, cool: 13, cold: 4, coldDay: 10, rainPop: 50, ra
 // total, at Open-Meteo's own rate: 7 cm of snow is about 10 mm of water.
 export const rainOf = d => d.rain ?? Math.max(0, (d.mm ?? 0) - (d.snow ?? 0) * 10 / 7);
 // WMO weather codes for snow: snowfall, snow grains and snow showers.
-const snowCode = c => (c >= 71 && c <= 77) || c === 85 || c === 86;
+export const snowCode = c => (c >= 71 && c <= 77) || c === 85 || c === 86;
 // A rain day in the forecast: 3 mm of rain, or a 50% chance, unless the day is snow with hardly any rain.
 const rainy = d => rainOf(d) >= LIMITS.rainMm || ((d.pop ?? 0) >= LIMITS.rainPop && !(snowCode(d.code) && rainOf(d) < 1));
 

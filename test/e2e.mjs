@@ -581,11 +581,14 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await page.click('header.bar a.brand');
   await planTrip(page, { where: 'Tok', from: 20, to: 22 });
   assert.equal(await scrolled(), 0, 'a new trip at its top');
-  // Ten days of weather scroll inside their row, and the words for a screen reader with them, not the page.
+  // Ten days of weather scroll inside their row, and the words for a screen reader with them, not the page. On snow
+  // days the chance is of snow.
   await page.click('header.bar a.brand');
-  await planTrip(page, { where: 'Chic', from: 2, to: 11, by: 'Driving' });
+  await planTrip(page, { where: 'Reyk', from: 2, to: 11 });
   await page.waitForSelector('.wx-days li');
   await fits(page, 'a trip with ten days of weather');
+  assert.match(await page.locator('.wx-days li .sr-only').first().textContent(), /: snow, high \d+°, low -?\d+°, 40% chance of snow$/);
+  assert.match(await page.locator('.wx').innerText(), /Blue % is the chance of snow\./);
   await ctx.close();
 }
 
