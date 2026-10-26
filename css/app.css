@@ -13,6 +13,9 @@
   --accent: #c2412a;
   --accent-ink: #ffffff;
   --accent-soft: #f9e2d8;
+  /* Red words: darker than the button red so they read on the page and the tags (5.35:1 on the page, 4.72:1 on
+     kraft). The dark look's red is light enough already. */
+  --accent-text: #ad3822;
   --ok: #24744a;
   --ok-soft: #dcefe2;
   --sky: #285a8c;
@@ -37,6 +40,7 @@
     --accent: #ff7d57;
     --accent-ink: #1d0d06;
     --accent-soft: #3b2219;
+    --accent-text: #ff7d57;
     --ok: #62c98f;
     --ok-soft: #1b3426;
     --sky: #8dbcef;
@@ -71,7 +75,7 @@ a { color: inherit; }
 button, input, select, textarea { font: inherit; color: inherit; }
 .muted { color: var(--muted); }
 .small { font-size: 14px; }
-.err { color: var(--red); font-weight: 600; }
+.err { color: var(--accent-text); font-weight: 600; }
 .err:empty { display: none; }
 .pad { padding: 10px 14px; margin: 0; }
 [hidden] { display: none !important; }
@@ -118,8 +122,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .icon-btn.spin svg { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .cloud .dot { position: absolute; right: 7px; top: 9px; width: 9px; height: 9px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 2px var(--bg); }
-.cloud[data-s="busy"] .dot { background: var(--amber); animation: pulse .8s ease-in-out infinite alternate; }
-.cloud[data-s="tap"] .dot, .cloud[data-s="error"] .dot { background: var(--red); }
+/* Not by colour alone: syncing is a hollow ring, and needing a tap or an error a red badge with "!". */
+.cloud[data-s="busy"] .dot { background: none; border: 2px solid var(--amber); animation: pulse .8s ease-in-out infinite alternate; }
+.cloud[data-s="tap"] .dot, .cloud[data-s="error"] .dot { right: 4px; top: 5px; display: grid; place-items: center; width: 15px; height: 15px; background: var(--red); }
+.cloud[data-s="tap"] .dot::after, .cloud[data-s="error"] .dot::after { content: '!'; color: var(--paper); font: 800 11px/1 var(--body); }
 @keyframes pulse { to { opacity: .35; } }
 
 /* ---------- buttons, fields, chips ---------- */
@@ -135,8 +141,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 @media (hover: hover) { .btn.primary:hover { filter: brightness(1.06); } }
 .btn.big { min-height: 52px; font-size: 17px; padding: 0 20px; }
 .btn.small { min-height: 36px; padding: 0 12px; font-size: 14px; border-radius: 10px; }
-.btn.danger { border-color: var(--red); color: var(--red); background: none; }
-.btn.danger-quiet { border-color: transparent; color: var(--red); background: none; }
+.btn.danger { border-color: var(--accent-text); color: var(--accent-text); background: none; }
+.btn.danger-quiet { border-color: transparent; color: var(--accent-text); background: none; }
 .btn.quiet { border-color: transparent; color: var(--muted); }
 .btn.file { position: relative; overflow: hidden; }
 .btn.file input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
@@ -177,13 +183,15 @@ ul.chips .chip small { font-weight: 500; color: var(--muted); font-size: 13px; }
   flex: 1; min-height: 40px; padding: 0 8px; border: 0; border-radius: 9px; background: none;
   font-weight: 650; cursor: pointer; color: var(--muted); white-space: nowrap;
 }
-.seg button[aria-pressed="true"] { background: var(--paper); color: var(--ink); box-shadow: var(--shadow); }
+/* The chosen one has an edge as well as the lighter fill, which is faint, especially in the dark look. */
+.seg button[aria-pressed="true"] { background: var(--paper); color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--ink), var(--shadow); }
 .seg.tiny button { min-height: 32px; font-size: 14px; padding: 0 10px; }
 
 .switch { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--muted); cursor: pointer; }
-.switch input { appearance: none; -webkit-appearance: none; width: 38px; height: 22px; margin: 0; border-radius: 99px; background: var(--line); position: relative; cursor: pointer; transition: background .15s; }
-.switch input::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--paper); transition: transform .15s; box-shadow: 0 1px 2px rgba(0, 0, 0, .25); }
-.switch input:checked { background: var(--ok); }
+/* Off, the track has an edge, as its fill alone is faint against the page. */
+.switch input { appearance: none; -webkit-appearance: none; width: 38px; height: 22px; margin: 0; border: 1.5px solid var(--muted); border-radius: 99px; background: var(--line); position: relative; cursor: pointer; transition: background .15s; }
+.switch input::after { content: ''; position: absolute; top: 1.5px; left: 1.5px; width: 16px; height: 16px; border-radius: 50%; background: var(--paper); transition: transform .15s; box-shadow: 0 1px 2px rgba(0, 0, 0, .25); }
+.switch input:checked { background: var(--ok); border-color: var(--ok); }
 .switch input:checked::after { transform: translateX(16px); }
 
 .card { background: var(--paper); border: 1px solid var(--line); border-radius: 16px; padding: 18px 16px; margin: 0 0 14px; box-shadow: var(--shadow); }
@@ -202,7 +210,7 @@ ul.chips .chip small { font-weight: 500; color: var(--muted); font-size: 13px; }
 
 /* ---------- welcome ---------- */
 .welcome { padding: 14px 0 0; }
-.kicker { font: 700 15px var(--display); text-transform: uppercase; letter-spacing: .14em; color: var(--accent); margin-bottom: 6px; }
+.kicker { font: 700 15px var(--display); text-transform: uppercase; letter-spacing: .14em; color: var(--accent-text); margin-bottom: 6px; }
 .welcome h1 { font-size: 44px; margin-bottom: 14px; }
 .choices { display: grid; gap: 10px; margin: 18px 0 12px; }
 .welcome .how-head { margin: 26px 0 8px; font-size: 14px; }
@@ -222,7 +230,7 @@ ul.chips .chip small { font-weight: 500; color: var(--muted); font-size: 13px; }
 .tag-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 42px; border-right: 2px dashed var(--kraft-line); }
 .tag-card .hole { position: absolute; left: 14px; top: 50%; width: 16px; height: 16px; margin-top: -8px; border-radius: 50%; background: var(--bg); box-shadow: inset 0 0 0 3px var(--kraft-line); }
 .tag-card .when { font: 700 14px var(--display); text-transform: uppercase; letter-spacing: .1em; opacity: .75; }
-.tag-card.now .when { color: var(--accent); opacity: 1; }
+.tag-card.now .when { color: var(--accent-text); opacity: 1; }
 .tag-card h2 { font-size: 34px; line-height: 1; margin: 2px 0; overflow-wrap: anywhere; }
 .tag-card .where:empty { display: none; }
 .tag-card .where, .tag-card .dates, .tag-card .glance { font-size: 15px; }
@@ -236,7 +244,7 @@ ul.chips .chip small { font-weight: 500; color: var(--muted); font-size: 13px; }
 .past ul { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
 .past li { display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--line); }
 .past li > a:first-child { flex: 1; display: grid; padding: 10px 2px; text-decoration: none; }
-.past .again { font-size: 14px; font-weight: 650; color: var(--accent); text-decoration: none; padding: 8px; }
+.past .again { font-size: 14px; font-weight: 650; color: var(--accent-text); text-decoration: none; padding: 8px; }
 
 /* ---------- one trip: the boarding pass ---------- */
 .pass { position: relative; background: var(--paper); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); margin-bottom: 14px; overflow: hidden; }
@@ -307,13 +315,13 @@ ul.chips .chip small { font-weight: 500; color: var(--muted); font-size: 13px; }
 .tick:focus-visible, .edit-row:focus-visible, .bag-done:focus-visible { outline-offset: -3px; }
 .tick .box {
   flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%;
-  border: 2px solid color-mix(in srgb, var(--ink) 35%, transparent); color: transparent; transition: background .12s, border-color .12s, transform .12s;
+  border: 2px solid color-mix(in srgb, var(--ink) 50%, transparent); color: transparent; transition: background .12s, border-color .12s, transform .12s;
 }
 .tick .box svg { width: 17px; height: 17px; }
 .tick:active .box { transform: scale(.9); }
 .what { display: grid; gap: 1px; min-width: 0; }
 .name { font-weight: 600; overflow-wrap: anywhere; }
-.qty { font-weight: 700; color: var(--accent); }
+.qty { font-weight: 700; color: var(--accent-text); }
 .what small, .edit-row small { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
 .what small.why, .edit-row small.why { color: var(--sky); }
 .row.done .box { background: var(--ok); border-color: var(--ok); color: var(--paper); }
