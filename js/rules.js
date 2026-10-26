@@ -2,7 +2,7 @@
 // No page code, so the tests run it in Node.
 import * as M from './model.js';
 import { nights, weekday } from './days.js';
-import { summarize, temp } from './weather.js';
+import { summarize, temp, tripDays } from './weather.js';
 import { plugsFor, plugText, countryName, localCountry } from './plugs.js';
 
 // The conditions a thing can depend on, besides the trip's occasions (tags in the list).
@@ -53,7 +53,7 @@ export function conditions(doc, trip) {
     auto.plug = !!p?.need;
     if (p) why.plug = plugText(p) + (p.voltsDiffer ? ' (check anything that heats up)' : '');
   }
-  const w = summarize(trip.wx);
+  const w = summarize({ days: tripDays(trip.wx, trip.start, trip.end) });
   if (w) {
     for (const k of ['hot', 'cool', 'cold', 'rain', 'snow', 'sun']) auto[k] = w[k];
     why.hot = `Highs up to ${temp(w.maxHi, u)}`;

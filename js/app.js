@@ -140,7 +140,7 @@ function tagCard(t) {
     h('h2', {}, title(t)),
     h('span', { class: 'where' }, [t.name && t.place ? t.place.name : '', t.place?.cc && t.place.cc !== R.home(doc()) ? (t.place.country || countryName(t.place.cc)) : ''].filter(Boolean).join(', ') || ' '),
     h('span', { class: 'dates' }, `${D.span(t.start, t.end, t0.slice(0, 4))} · ${n ? plural(n, 'night') : 'day trip'} · ${R.CONDITIONS.find(x => x.k === t.travel).icon}`),
-    w ? h('span', { class: 'glance' }, `${W.dayIcon(t.wx.days[0])} ${W.temp(w.minLo, c.units)}–${W.temp(w.maxHi, c.units)}${w.rain ? ' · rain' + (w.rainDays.length ? ' likely' : ' some days') : ''}${w.snow ? ' · snow' : ''}`) : null,
+    w ? h('span', { class: 'glance' }, `${W.dayIcon(W.tripDays(t.wx, t.start, t.end)[0])} ${W.temp(w.minLo, c.units)}–${W.temp(w.maxHi, c.units)}${w.rain ? ' · rain' + (w.rainDays.length ? ' likely' : ' some days') : ''}${w.snow ? ' · snow' : ''}`) : null,
     h('span', { class: 'meter', 'aria-hidden': 'true' }, h('i', { style: { width: (p.total ? (100 * p.done / p.total) : 0) + '%' } })),
     h('span', { class: 'packed' }, p.done === p.total && p.total ? 'All packed' : `${p.done} of ${p.total} packed`));
 }
@@ -174,16 +174,16 @@ function weatherStrip(t, c) {
   if (!t.place || t.place.lat === undefined) {
     return h('section', { class: 'wx none' }, h('p', { class: 'muted small' }, 'No weather for this trip: its place wasn’t looked up. Set the weather by hand under ', h('b', {}, 'Change'), ', or pick the place again in ', h('a', { href: `#/edit/${t.id}` }, 'Edit'), '.'));
   }
-  const days = t.wx?.days || [];
+  const days = W.tripDays(t.wx, t.start, t.end);
   const fc = days.some(d => !d.typ), ty = days.some(d => d.typ);
   const label = !days.length ? 'Weather' : fc && ty ? 'Forecast, then typical weather' : fc ? 'Forecast' : 'Typical weather for these days';
   const u = c.units;
   return h('section', { class: 'wx' },
     h('div', { class: 'wx-head' },
       h('h2', {}, label),
-      h('span', { class: 'muted small' }, busy ? 'Looking it up…' : t.wx ? 'Updated ' + ago(t.wx.at) : ''),
+      h('span', { class: 'muted small' }, busy ? 'Looking it up…' : days.length ? 'Updated ' + ago(t.wx.at) : ''),
       h('button', { type: 'button', class: 'icon-btn small' + (busy ? ' spin' : ''), 'aria-label': 'Look up the weather again', title: 'Look up the weather again', html: ICONS.refresh, disabled: busy, onclick: () => { maybeWeather(t, true); render(); } })),
-    err ? h('p', { class: 'err small' }, err, ' ', t.wx ? 'Showing the last lookup.' : 'You can set the weather by hand under Change.') : null,
+    err ? h('p', { class: 'err small' }, err, ' ', days.length ? 'Showing the last lookup.' : 'You can set the weather by hand under Change.') : null,
     days.length ? h('ol', { class: 'wx-days' }, days.map(d => h('li', { class: d.typ ? 'typ' : '' },
       h('span', { class: 'wd' }, D.weekday(d.d)),
       h('span', { class: 'wi', 'aria-hidden': 'true' }, W.dayIcon(d)),
@@ -528,7 +528,7 @@ function tripForm(t, again = false) {
         const was = !!d.trips[id]?.set?.[g.id]?.v, now = st.tags.has(g.id);
         if (was !== now) next = M.setCond(next, id, g.id, now ? true : null);
       }
-      if (moved || !editing) next = { ...next, trips: { ...next.trips, [id]: { ...next.trips[id], wx: undefined } } };
+      if (moved) next = M.clearWx(next, id);
       return next;
     });
     draft = null;

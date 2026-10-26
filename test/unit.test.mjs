@@ -383,6 +383,35 @@ test('merging ticks on one trip from two phones', () => {
   assert.equal(m.trips.t1.set.work.v, true);
 });
 
+test('a trip whose place or dates change loses its old weather on every device', () => {
+  const lisbon = { name: 'Lisbon', cc: 'PT', country: 'Portugal', lat: 38.7, lon: -9.1 };
+  const reykjavik = { name: 'Reykjavík', cc: 'IS', country: 'Iceland', lat: 64.1, lon: -21.9 };
+  const now = Date.parse('2026-11-02T12:00:00Z'), today = '2026-11-02';
+  let doc = M.setPref(starter(), 'home', 'US');
+  doc = M.putTrip(doc, { id: 't1', place: lisbon, start: '2026-12-20', end: '2026-12-24', travel: 'fly' });
+  doc = M.setWx(doc, 't1', { at: Date.now() - 1000, days: range('2026-12-20', '2026-12-24').map(d => ({ d, typ: 1, hi: 20, lo: 11, mm: 2, wet: 0.4, sn: 0, rad: 10 })) });
+  const other = doc; // the other phone hasn't heard of the change
+  later();
+  let edited = M.putTrip(doc, { id: 't1', place: reykjavik, start: '2027-01-10', end: '2027-01-14' });
+  edited = M.clearWx(edited, 't1');
+  for (const m of [M.mergeDocs(edited, other), M.mergeDocs(other, edited)]) {
+    assert.deepEqual(m.trips.t1.wx.days, [], 'none of Lisbon’s days');
+    assert.equal(conditions(m, m.trips.t1).weather, null);
+    assert.equal(stale(m.trips.t1.wx, '2027-01-10', '2027-01-14', today, now), true, 'so it looks up Reykjavík');
+  }
+  assert.deepEqual(M.cleanTrip(edited.trips.t1).wx.days, [], 'and the cleared weather saves as it is');
+  // Should the old days still come back (from a copy that only dropped them on its own device), they don't count.
+  const stray = M.putTrip(other, { id: 't1', place: reykjavik, start: '2027-01-10', end: '2027-01-14' });
+  assert.equal(stray.trips.t1.wx.days.length, 5);
+  const c = conditions(stray, stray.trips.t1);
+  assert.equal(c.weather, null); assert.ok(!c.on.cool && !c.on.rain, 'no Lisbon reasons');
+  assert.equal(stale(stray.trips.t1.wx, '2027-01-10', '2027-01-14', today, now), true);
+  // Days that cover the trip, and a few more, are fine: only the trip's own count.
+  const wider = M.putTrip(other, { id: 't1', start: '2026-12-21', end: '2026-12-23' });
+  assert.equal(stale(wider.trips.t1.wx, '2026-12-21', '2026-12-23', today, now), false);
+  assert.equal(conditions(wider, wider.trips.t1).weather.minLo, 11);
+});
+
 test('a first merge keeps everything, but untouched starter things give way to a real list', () => {
   // Phone A brought its own list in and deleted nothing; phone B started from the starter list.
   const pasted = parsePaste('Electronics:\n- Phone charger\n- Headphones\nToiletries:\n- Toothbrush');

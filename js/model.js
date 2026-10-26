@@ -432,6 +432,13 @@ export function setWx(doc, id, wx) {
   if (!trip || !w) return doc;
   return { ...doc, trips: { ...doc.trips, [id]: { ...trip, wx: w } } };
 }
+// When a trip's place or dates change, its weather goes: as a lookup with no days, newer than the one before, so
+// a merge with a copy that still has the old place's weather keeps it gone on every device.
+export function clearWx(doc, id) {
+  const trip = doc.trips[id];
+  if (!trip) return doc;
+  return { ...doc, trips: { ...doc.trips, [id]: { ...trip, wx: { at: Math.max(Date.now(), (trip.wx?.at || 0) + 1), days: [] } } } };
+}
 
 export function setPref(doc, k, v) {
   return { ...doc, prefs: { ...doc.prefs, [k]: { v, t: stamp(doc.prefs[k]) } } };

@@ -147,12 +147,19 @@ export async function tripWeather(place, start, end, today, { signal, now = Date
   return wx;
 }
 
+// The saved days that belong to a trip. A lookup from before its place or dates changed can come back from
+// another device's copy, with days that aren't the trip's.
+export const tripDays = (wx, start, end) => (wx?.days || []).filter(d => d.d >= start && d.d <= end);
+
 // Old enough to look up again: a forecast after three hours. Typical weather doesn't change, so only once the
-// forecast reaches it (or after a week). A lookup that didn't all come back, after half an hour.
+// forecast reaches it (or after a week). A lookup that didn't all come back, after half an hour, and one that
+// isn't for these days (the dates changed) at once.
 export function stale(wx, start, end, today, now = Date.now()) {
   if (end < add(today, -1)) return false;
   if (!wx || !wx.days.length) return true;
   if (wx.err) return now - wx.at > 30 * 60e3;
+  const have = new Set(wx.days.map(d => d.d)), first = add(today, -60);
+  if (range(start > first ? start : first, end).some(k => !have.has(k))) return true;
   const forecast = wx.days.some(d => !d.typ);
   if (now - wx.at > (forecast ? 3 * 3600e3 : 7 * 86400e3)) return true;
   return wx.days.some(d => d.typ && d.d <= forecastEdge(today, now));
