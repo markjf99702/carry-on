@@ -388,7 +388,7 @@ function tripForm(t, again = false) {
     list.replaceChildren(...results.map(r => h('li', {}, h('button', { type: 'button', role: 'option', onclick: () => { st.place = r; results = []; drawWhere(); } },
       h('b', {}, r.name), ' ', h('span', { class: 'muted' }, [r.admin, r.country].filter(Boolean).join(', '))))));
     const typed = input.value.trim();
-    if (searchErr && typed) list.append(h('li', { class: 'err small' }, searchErr), h('li', {}, h('button', { type: 'button', onclick: () => { st.place = { name: typed, admin: '', country: '', cc: '' }; drawWhere(); } }, `Use “${typed}” without looking it up`)));
+    if (searchErr && typed) list.append(h('li', { class: 'err small' }, single ? 'This copy can’t reach the weather service. Use what you typed and set the weather by hand, or open carry-on.junkdrawer.works for the forecast.' : searchErr), h('li', {}, h('button', { type: 'button', onclick: () => { st.place = { name: typed, admin: '', country: '', cc: '' }; drawWhere(); } }, `Use “${typed}” without looking it up`)));
     where.replaceChildren(input, list);
   };
   input.addEventListener('input', () => {

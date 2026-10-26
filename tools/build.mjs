@@ -41,7 +41,10 @@ const fragment = html
   .replace(/<meta name="viewport"[^>]*>\s*/i, '');
 
 // That host pads the page clear of a phone's notch itself.
-const embedded = fragment.replace('padding: calc(8px + env(safe-area-inset-top)) 10px 8px 16px;', 'padding: 8px 10px 8px 16px;');
+const embedded = fragment
+  .replace('position: sticky; top: 0; z-index: 10;', 'position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10;')
+  .replace('padding: calc(8px + env(safe-area-inset-top)) 10px 8px 16px;', 'padding: 8px 10px 8px 16px;');
+for (const bit of ['top: env(safe-area-inset-top, 0px); z-index: 10;', 'padding: 8px 10px 8px 16px;']) if (!embedded.includes(bit)) throw new Error('build: the top bar changed; update tools/build.mjs');
 
 await mkdir(new URL('dist/', root), { recursive: true });
 await writeFile(new URL('dist/carry-on.html', root), html);
