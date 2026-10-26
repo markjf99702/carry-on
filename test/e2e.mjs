@@ -724,6 +724,13 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await toastUndo(page);
   assert.deepEqual(await page.locator('.bag.edit h2').allInnerTexts(), mine, 'the starter bags are back, and the Work bag stays deleted');
   await fits(page, 'my list after Undo');
+  // Added, the toast says what came; added again, that nothing did.
+  for (const said of ['Added 1 bag and 1 thing.', 'Nothing new: it’s all on your list already.']) {
+    await page.goto(base + '#list=' + code);
+    await until(() => sheetOpen(page), 'the list offer');
+    await page.click('text=Add it to my list');
+    await until(async () => (await page.locator('#toast span').innerText()) === said, said);
+  }
   await ctx.close();
 }
 

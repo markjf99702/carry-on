@@ -976,6 +976,21 @@ function listSummary(list) {
   return `${plural(bags.length, 'bag')} and ${plural(list.items.filter(x => bags.some(b => b.id === x.bag)).length, 'thing')}: ${bags.slice(0, 4).map(b => b.name).join(', ')}${bags.length > 4 ? '…' : ''}`;
 }
 
+// What adding a list brought in: "Added 3 things: Retainer, Camera, Feed the cat.", "Added 1 bag and 4 things."
+function added(was, now) {
+  const fresh = (coll, list) => list.filter(x => !was[coll][x.id] || M.gone(was[coll][x.id]));
+  const bs = fresh('bags', M.bags(now)), its = fresh('items', M.items(now)), gs = fresh('tags', M.tags(now));
+  const jobs = bs.filter(b => b.kind !== 'bag').length;
+  if (!bs.length && !gs.length) {
+    if (!its.length) return 'Nothing new: it’s all on your list already.';
+    const n = its.map(x => x.name);
+    return `Added ${plural(n.length, 'thing')}: ${n.length > 3 ? `${n.slice(0, 2).join(', ')} and ${n.length - 2} more` : n.join(', ')}.`;
+  }
+  const parts = [[bs.length - jobs, 'bag'], [jobs, 'list of jobs', 'lists of jobs'], [its.length, 'thing'], [gs.length, 'occasion']]
+    .filter(([k]) => k).map(([k, one, many]) => plural(k, one, many));
+  return `Added ${andList(parts)}.`;
+}
+
 // Use a list that came in: add it to this one, or put it in this one's place (which Undo takes back).
 function offerList(list, from, after) {
   const has = M.hasList(doc());
@@ -987,7 +1002,14 @@ function offerList(list, from, after) {
     toast('Your list is in.', has ? { label: 'Undo', run: () => apply(d => M.undoReplace(d, before, done)) } : undefined);
     go('#/list');
   };
-  const add = close => { close(); store.apply(d => M.addList(d, list)); after?.(); toast('Added to your list.'); go('#/list'); };
+  const add = close => {
+    close();
+    let was = null;
+    const now = store.apply(d => M.addList(was = d, list));
+    after?.();
+    toast(added(was, now));
+    go('#/list');
+  };
   sheet(from, close => [
     h('p', {}, listSummary(list)),
     list.bags.length ? h('ul', { class: 'preview' }, list.bags.map(b => h('li', {}, h('span', { 'aria-hidden': 'true' }, b.icon), ' ', h('b', {}, b.name), ' ',

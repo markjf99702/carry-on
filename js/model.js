@@ -530,22 +530,26 @@ export function undoReplace(doc, before, after) {
   return out;
 }
 
-// Adds another list to this one. A bag with the same name as one already here is that bag, and a thing
-// already in it stays as it is; everything else comes in after what's here.
+// Adds another list to this one. A bag with the same name as one already here is that bag ("Toiletries" is the
+// Toiletries bag); a thing already on the list stays as it is and where it is, in whichever bag (a job, in a list
+// of jobs of the same kind); everything else comes in after what's here. A new bag comes only with something new
+// in it, so adding the same list twice changes nothing.
+const bagKey = name => norm(name).replace(/ (bag|kit|pouch|case)$/, '');
 export function addList(doc, list) {
   const fresh = listDoc(list, 0);
   let next = doc;
-  const map = {}, free = (coll, id, prefix) => (next[coll][id] ? newId(prefix) : id);
+  const free = (coll, id, prefix) => (next[coll][id] ? newId(prefix) : id);
+  const there = (it, kind) => items(next).some(x => norm(x.name) === norm(it.name) && next.bags[x.bag]?.kind === kind && !gone(next.bags[x.bag]));
   for (const b of Object.values(fresh.bags).sort(byOrder)) {
-    const hit = bags(next).find(x => norm(x.name) === norm(b.name) && x.kind === b.kind);
-    if (hit) { map[b.id] = hit.id; continue; }
-    map[b.id] = free('bags', b.id, 'b');
-    next = putBag(next, { ...b, id: map[b.id], order: undefined });
-  }
-  for (const it of Object.values(fresh.items).sort((a, b) => fresh.bags[a.bag].order - fresh.bags[b.bag].order || a.order - b.order)) {
-    const bag = map[it.bag];
-    if (items(next, bag).some(x => norm(x.name) === norm(it.name))) continue;
-    next = putItem(next, { ...it, id: free('items', it.id, 'i'), bag, order: undefined });
+    let bag = bags(next).find(x => bagKey(x.name) === bagKey(b.name) && x.kind === b.kind)?.id;
+    const its = Object.values(fresh.items).filter(x => x.bag === b.id).sort(byOrder);
+    const make = () => { bag = free('bags', b.id, 'b'); next = putBag(next, { ...b, id: bag, order: undefined }); };
+    for (const it of its) {
+      if (there(it, b.kind)) continue;
+      if (!bag) make();
+      next = putItem(next, { ...it, id: free('items', it.id, 'i'), bag, order: undefined });
+    }
+    if (!its.length && !bag) make();
   }
   for (const g of Object.values(fresh.tags)) {
     if (tags(next).some(x => x.id === g.id || norm(x.name) === norm(g.name))) continue;

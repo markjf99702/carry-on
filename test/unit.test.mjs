@@ -715,6 +715,26 @@ test('replacing and adding lists', () => {
   assert.ok(M.bags(added).some(b => b.name === 'Bags'));
 });
 
+test('adding a list skips what’s already on it, in whichever bag, and adding it twice adds nothing', () => {
+  const doc = starter();
+  const live = d => M.items(d).map(x => `${d.bags[x.bag].name}: ${x.name}`);
+  const fresh = (d, was) => live(d).filter(n => !live(was).includes(n)).sort();
+  // A flat list: only the camera is new.
+  const flat = M.addList(doc, parsePaste('Toothbrush\nToothpaste\nphone charger\nSocks\nSwimsuit\nPassport\nSunglasses\nCamera'));
+  assert.deepEqual(fresh(flat, doc), ['Not in a bag: Camera']);
+  // "Toiletries" is the Toiletries bag; Tech is a new bag, with only what's new in it.
+  const mine = parsePaste('Toiletries:\n- Toothbrush\n- Floss\n- Retainer\nTech:\n- Phone charger\n- Camera\nLeaving the house:\n- Water the plants\n- Feed the cat');
+  const added = M.addList(doc, mine);
+  assert.deepEqual(fresh(added, doc), ['Leaving the house: Feed the cat', 'Tech: Camera', 'Toiletries bag: Retainer']);
+  assert.equal(M.bags(added).length, M.bags(doc).length + 1);
+  // A bag whose things are all here already doesn't come.
+  assert.equal(M.bags(M.addList(doc, parsePaste('Gym bag:\n- Socks\n- Shoes'))).length, M.bags(doc).length);
+  // A job isn't a thing to pack: Water the plants as a thing still comes.
+  assert.deepEqual(fresh(M.addList(doc, parsePaste('Water the plants')), doc), ['Not in a bag: Water the plants']);
+  // Twice: nothing more.
+  assert.equal(M.canon(M.addList(added, mine)), M.canon(added));
+});
+
 test('replacing a list can be undone, everywhere, without bringing back what was deleted before', () => {
   let before = M.putItem(starter(), { id: 'i-mine', name: 'My own thing', bag: 's-daybag' });
   before = M.putTag(M.removeBag(before, 's-work'), { id: 'o-wed', name: 'Wedding' });
