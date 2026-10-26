@@ -19,8 +19,10 @@
 //           for, so a lookup of a trip's old place, landing from another device, doesn't count for the new one
 //
 // t is when a record last changed, del when it was deleted. A deleted record keeps its details, so a deletion
-// on one device reaches the others instead of the record coming back from their copy. Starter records have
-// t = 0 ("untouched"): see mergeDocs for why that matters.
+// on one device reaches the others instead of the record coming back from their copy, and a change made after
+// the deletion brings it back. A bag deleted on one device while a thing was added to it (or changed) on another,
+// after the deletion, is still there while it holds that thing: see bags(). Starter records have t = 0
+// ("untouched"): see mergeDocs for why that matters.
 
 export const APP = 'carry-on';
 export const KINDS = ['bag', 'leave', 'back'];
@@ -198,8 +200,25 @@ export function touched(x) {
 }
 export const gone = x => !!x.del && x.del >= touched(x);
 const byOrder = (a, b) => a.order - b.order || a.name.localeCompare(b.name) || a.id.localeCompare(b.id);
-export const bags = doc => Object.values(doc.bags).filter(x => !gone(x)).sort(byOrder);
-export const items = (doc, bagId) => Object.values(doc.items).filter(x => !gone(x) && (!bagId || x.bag === bagId)).sort(byOrder);
+// The deleted bags still there: each holds a thing added or changed after the bag's deletion (on another device,
+// before the deletion reached it), so that thing has somewhere to show. The bag's other things stay deleted, and
+// it goes again if that thing does. Read from the doc, so merging is the same whatever the order.
+function held(doc) {
+  const out = new Set();
+  for (const x of Object.values(doc.items)) {
+    const b = own(doc.bags, x.bag);
+    if (b && gone(b) && !gone(x) && x.t > b.del) out.add(b.id);
+  }
+  return out;
+}
+// A bag that's there: not deleted, or held.
+const bagThere = (doc, b, h = held(doc)) => !!b && (!gone(b) || h.has(b.id));
+export const bags = doc => { const h = held(doc); return Object.values(doc.bags).filter(b => bagThere(doc, b, h)).sort(byOrder); };
+// The things in bags that are there.
+export const items = (doc, bagId) => {
+  const h = held(doc);
+  return Object.values(doc.items).filter(x => !gone(x) && (!bagId || x.bag === bagId) && bagThere(doc, own(doc.bags, x.bag), h)).sort(byOrder);
+};
 export const tags = doc => Object.values(doc.tags).filter(x => !gone(x)).sort(byOrder);
 export const trips = doc => Object.values(doc.trips).filter(x => !gone(x));
 export const extras = trip => Object.values(trip.extras || {}).filter(x => !gone(x));
@@ -259,12 +278,16 @@ const untouched = x => x.t === 0;
 //     the remote side's id; this side's trips follow, so their ticks stay.
 //   - Untouched starter records (t = 0) are the exception. A second phone that started from the starter list
 //     and then joins Drive shouldn't bring back starter things deleted elsewhere, or add them to a list that
-//     never had them: when the other side has a list of its own, they're dropped (kept as deletions, so the
-//     phone's next sync drops them there too). A starter bag holding a thing of the person's own stays, though,
-//     so that thing still shows.
+//     never had them: when the other side has a list of its own (a bag or a thing that isn't untouched),
+//     starter bags and their things are dropped together (kept as deletions, so the phone's next sync drops them
+//     there too). A starter bag holding a thing of the person's own stays, though, so that thing still shows.
 export function mergeDocs(local, remote, { first = false } = {}) {
   const out = { app: APP, v: 1 };
   const bagMap = Object.create(null), itemMap = Object.create(null);
+  // Whether a side has a list of its own, from its bags and things together, so starter bags and their things go
+  // or stay together.
+  const ownList = doc => ['bags', 'items'].some(n => Object.values(doc[n] || {}).some(x => !gone(x) && !untouched(x)));
+  const aHas = ownList(local), bHas = ownList(remote);
   for (const name of ['bags', 'items', 'tags', 'trips']) {
     let a = { ...local[name] };
     const b = remote[name];
@@ -283,8 +306,6 @@ export function mergeDocs(local, remote, { first = false } = {}) {
       }
     }
     if (first && name === 'trips') for (const [id, t] of Object.entries(a)) a[id] = followRenames(t, bagMap, itemMap);
-    const liveIn = m => Object.values(m).some(x => !gone(x) && !untouched(x));
-    const aHas = liveIn(a), bHas = liveIn(b);
     // A starter bag that someone put a thing of their own in is in use: it stays, with that thing.
     const inUse = new Set();
     if (first && name === 'bags') {
@@ -317,9 +338,11 @@ export function mergeDocs(local, remote, { first = false } = {}) {
 
 const nextOrder = (list) => (list.length ? Math.max(...list.map(x => x.order)) + 1 : 0);
 
+// Whether a record is there to change: for a bag, also one held (see bags()).
+const there = (doc, coll, x) => (coll === 'bags' ? bagThere(doc, x) : !!x && !gone(x));
 function put(doc, coll, clean, fields) {
   const old = doc[coll][fields.id];
-  const base = old && !gone(old) ? old : {};
+  const base = there(doc, coll, old) ? old : {};
   const x = clean({ ...base, ...fields, t: stamp(old) }, fields.id);
   if (!x) throw new Error('That needs a name.');
   delete x.del;
@@ -327,7 +350,7 @@ function put(doc, coll, clean, fields) {
 }
 function remove(doc, coll, id) {
   const old = doc[coll][id];
-  if (!old || gone(old)) return doc;
+  if (!there(doc, coll, old)) return doc;
   return { ...doc, [coll]: { ...doc[coll], [id]: { ...old, del: Math.max(Date.now(), touched(old) + 1) } } };
 }
 // Brings back something deleted, as it was (for Undo).
@@ -341,7 +364,7 @@ function restore(doc, coll, id) {
 
 export function putBag(doc, fields) {
   const id = fields.id || newId('b');
-  const order = doc.bags[id] && !gone(doc.bags[id]) ? doc.bags[id].order : nextOrder(bags(doc));
+  const order = there(doc, 'bags', doc.bags[id]) ? doc.bags[id].order : nextOrder(bags(doc));
   return put(doc, 'bags', cleanBag, { ...fields, order: fields.order ?? order, id });
 }
 // A bag goes with everything in it.
@@ -372,7 +395,7 @@ export const restoreItem = (doc, id) => restore(doc, 'items', id);
 // to swap orders instead, and in a run of three or more ties, renumbering.
 export function nudge(doc, coll, id, dir) {
   const x = doc[coll][id];
-  if (!x || gone(x)) return doc;
+  if (!there(doc, coll, x)) return doc;
   const list = coll === 'bags' ? bags(doc).filter(b => b.kind === x.kind) : items(doc, x.bag);
   const i = list.findIndex(y => y.id === id), j = i + dir;
   if (i < 0 || j < 0 || j >= list.length) return doc;
@@ -482,7 +505,7 @@ export function startWith(doc, list) {
 // kind, and a thing the id of one with the same name in that bag. A pasted list, or someone else's, has ids of
 // its own, and a trip's ticks, skips and moves are kept by id. An id already here counts first.
 function sameIds(doc, list) {
-  const live = (coll, id) => !!doc[coll][id] && !gone(doc[coll][id]);
+  const live = (coll, id) => there(doc, coll, doc[coll][id]);
   const bagMap = {}, itemMap = {};
   const bagsIn = list.bags || [], itemsIn = list.items || [];
   const takenB = new Set(bagsIn.filter(b => live('bags', b.id)).map(b => b.id));
@@ -524,16 +547,18 @@ export function replaceList(doc, list) {
 
 // Undoes replaceList: before and after are the doc either side of it. Every bag, thing and occasion it changed
 // goes back to how it was, newer than the replace so the undo reaches other devices too: what it deleted or
-// overwrote comes back, what it added is deleted, and what was deleted before stays deleted.
+// overwrote comes back, what it added is deleted, and what was deleted before stays deleted. So does a thing that
+// was out of sight in a deleted bag: brought back newer than the bag's deletion, it would bring the bag back.
 export function undoReplace(doc, before, after) {
   const out = { ...doc };
+  const shown = (coll, x) => there(before, coll, x) && (coll !== 'items' || bagThere(before, own(before.bags, x.bag)));
   for (const coll of ['bags', 'items', 'tags']) {
     out[coll] = { ...doc[coll] };
     for (const id of new Set([...Object.keys(before[coll]), ...Object.keys(after[coll])])) {
       const was = before[coll][id], cur = doc[coll][id];
       if (canon(was) === canon(after[coll][id]) || !cur) continue;
       const t = stamp(cur);
-      if (was && !gone(was)) { out[coll][id] = { ...was, t }; delete out[coll][id].del; } else out[coll][id] = { ...(was || cur), del: t };
+      if (shown(coll, was)) { out[coll][id] = { ...was, t }; delete out[coll][id].del; } else out[coll][id] = { ...(was || cur), del: t };
     }
   }
   return out;
@@ -548,13 +573,13 @@ export function addList(doc, list) {
   const fresh = listDoc(list, 0);
   let next = doc;
   const free = (coll, id, prefix) => (next[coll][id] ? newId(prefix) : id);
-  const there = (it, kind) => items(next).some(x => norm(x.name) === norm(it.name) && next.bags[x.bag]?.kind === kind && !gone(next.bags[x.bag]));
+  const onList = (it, kind) => items(next).some(x => norm(x.name) === norm(it.name) && next.bags[x.bag].kind === kind);
   for (const b of Object.values(fresh.bags).sort(byOrder)) {
     let bag = bags(next).find(x => bagKey(x.name) === bagKey(b.name) && x.kind === b.kind)?.id;
     const its = Object.values(fresh.items).filter(x => x.bag === b.id).sort(byOrder);
     const make = () => { bag = free('bags', b.id, 'b'); next = putBag(next, { ...b, id: bag, order: undefined }); };
     for (const it of its) {
-      if (there(it, b.kind)) continue;
+      if (onList(it, b.kind)) continue;
       if (!bag) make();
       next = putItem(next, { ...it, id: free('items', it.id, 'i'), bag, order: undefined });
     }

@@ -190,7 +190,8 @@ export function plan(doc, trip, mode = 'go') {
   // Coming home, what went comes back, though it's been deleted from My list since, alone or with its bag: in the
   // bag it went in this trip, or its own if that's still there, or else with the things not in a bag.
   if (mode === 'back') {
-    const deleted = Object.values(doc.items).filter(it => M.gone(it) && isPacked(it.id) && (doc.bags[it.bag]?.kind ?? 'bag') === 'bag');
+    const listed = new Set(M.items(doc).map(x => x.id));
+    const deleted = Object.values(doc.items).filter(it => !listed.has(it.id) && isPacked(it.id) && (doc.bags[it.bag]?.kind ?? 'bag') === 'bag');
     const rank = it => doc.bags[it.bag]?.order ?? 1e9;
     deleted.sort((a, b) => rank(a) - rank(b) || a.order - b.order || a.name.localeCompare(b.name));
     for (const it of deleted) {
