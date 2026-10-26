@@ -9,7 +9,7 @@ import { drive } from './sync.js';
 import { starterList } from './starter.js';
 import { parsePaste, encodeList, decodeList, guess, bagIcon } from './share.js';
 import { PLUGS, countryName } from './plugs.js';
-import { h, ICONS, toast, sheet, closeSheet, setupSheet, confirmBtn, pressedKey, byKey } from './ui.js';
+import { h, ICONS, toast, toastKeep, sheet, closeSheet, setupSheet, confirmBtn, pressedKey, byKey } from './ui.js';
 
 export const SITE = 'https://carry-on.junkdrawer.works/';
 const main = document.getElementById('app');
@@ -332,8 +332,9 @@ function tripView(t) {
   const p = R.plan(doc(), t, mode), c = p.cond;
   shownTrip = t.id + ':' + mode;
   const complete = p.total > 0 && p.done === p.total;
-  // Said once, when a change finishes the packing; never on opening a trip that's packed already.
-  if (packedSeen?.key === t.id + mode && !packedSeen.complete && complete) toast(mode === 'go' ? `Everything for ${title(t)} is packed.` : 'All back in the bags. Safe trip home.');
+  // Said once, when a change finishes the packing; never on opening a trip that's packed already. When the change
+  // said what it did with an Undo, just now, the Undo stays.
+  if (packedSeen?.key === t.id + mode && !packedSeen.complete && complete) toastKeep(mode === 'go' ? `Everything for ${title(t)} is packed.` : 'All back in the bags. Safe trip home.');
   packedSeen = { key: t.id + mode, complete };
   const n = D.nights(t.start, t.end);
   const onKeys = Object.keys(c.on).filter(k => c.on[k] && R.condInfo(doc(), k));
@@ -523,7 +524,14 @@ function itemSheet(t, r, mode, jobs) {
       return [
         h('p', { class: 'muted' }, 'Used up, given away, or staying on purpose? Count it as done.'),
         h('div', { class: 'stack' },
-          h('button', { type: 'button', class: 'btn', onclick: () => { done(); apply(d => M.mark(d, t.id, r.key, gone ? 0 : 2)); } }, gone ? 'It’s coming back after all' : 'Not bringing it back'))];
+          h('button', { type: 'button', class: 'btn', onclick: () => {
+            done();
+            const was = doc().trips[t.id]?.marks?.[r.key]?.v || 0;
+            store.apply(d => M.mark(d, t.id, r.key, gone ? 0 : 2));
+            // Before the redraw, so when it's the last thing, all back in the bags is said instead, with this Undo.
+            toast(gone ? `${r.name} is coming back after all.` : `${r.name}: not coming back.`, { label: 'Undo', run: () => apply(d => M.mark(d, t.id, r.key, was)) });
+            render();
+          } }, gone ? 'It’s coming back after all' : 'Not bringing it back'))];
     }
     const cur = t.marks?.['b:' + id]?.v || (r.extra ? t.extras[id].bag : doc().items[id]?.bag);
     // The bags coming on this trip, and the one it's in.

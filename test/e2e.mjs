@@ -688,6 +688,20 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   assert.equal(await said(), 'Socks needs more now (×5), so it’s unticked.');
   await page.goto(trip);
   assert.equal(await tick('Socks').getAttribute('aria-checked'), 'false');
+  // The bag that finishes the packing: it says everything's packed, and its Undo takes back just that bag.
+  await page.evaluate(() => {
+    const { store, M, R, render } = window.carryOn, id = location.hash.split('/')[2], p = R.plan(store.doc, store.doc.trips[id], 'go');
+    store.apply(d => M.markAll(d, id, p.groups.concat(p.tasks).filter(g => g.bag.name !== 'Toiletries bag').flatMap(g => g.rows).map(r => r.key), 1));
+    render();
+  });
+  await page.locator('.bag', { hasText: 'Toiletries bag' }).locator('.bag-head .icon-btn').click();
+  await page.click('text=It’s all packed already');
+  assert.equal(await said(), 'Everything for Chicago is packed.');
+  assert.equal(await page.locator('.progress p').innerText(), 'All packed');
+  await toastUndo(page);
+  const [done, of] = (await page.locator('.progress p').innerText()).match(/^(\d+) of (\d+)/).slice(1).map(Number);
+  assert.equal(of - done, 7, 'all but Floss in the Toiletries bag unticked again, and nothing else');
+  assert.equal(await page.locator('.bag', { hasText: 'Toiletries bag' }).locator('.count .sr-only').textContent(), '1 of 8 packed');
   await ctx.close();
 }
 
@@ -749,6 +763,41 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   assert.equal(await tick('Wool socks').getAttribute('aria-checked'), 'true', 'still packed');
   await page.click('text=Coming home');
   assert.deepEqual((await things()).sort(), ['Belt', 'Maple syrup', 'Shoes', 'Wool socks ×3']);
+  // Not bringing it back says so, with Undo, and so does changing your mind.
+  await more(page, 'Shoes');
+  await page.click('text=Not bringing it back');
+  assert.equal(await said(), 'Shoes: not coming back.');
+  assert.match(await row(page, 'Shoes').innerText(), /Not coming back/);
+  await toastUndo(page);
+  assert.doesNotMatch(await row(page, 'Shoes').innerText(), /Not coming back/, 'Undo brings it back');
+  assert.equal(await tick('Shoes').getAttribute('aria-checked'), 'false');
+  await tick('Shoes').click();
+  await more(page, 'Shoes');
+  await page.click('text=Not bringing it back');
+  await toastUndo(page);
+  assert.equal(await tick('Shoes').getAttribute('aria-checked'), 'true', 'Undo puts back the tick it had');
+  await more(page, 'Shoes');
+  await page.click('text=Not bringing it back');
+  await more(page, 'Shoes');
+  await page.click('text=It’s coming back after all');
+  assert.equal(await said(), 'Shoes is coming back after all.');
+  await toastUndo(page);
+  assert.match(await row(page, 'Shoes').innerText(), /Not coming back/, 'Undo leaves it behind again');
+  await more(page, 'Shoes');
+  await page.click('text=It’s coming back after all');
+  assert.equal(await tick('Shoes').getAttribute('aria-checked'), 'false');
+  // When it's the last thing, all's back in the bags, and Undo still takes back just that.
+  await page.evaluate(() => {
+    const { store, M, R, render } = window.carryOn, id = location.hash.split('/')[2], p = R.plan(store.doc, store.doc.trips[id], 'back');
+    store.apply(d => M.markAll(d, id, p.groups.concat(p.tasks).flatMap(g => g.rows).filter(r => r.name !== 'Shoes').map(r => r.key), 1));
+    render();
+  });
+  await more(page, 'Shoes');
+  await page.click('text=Not bringing it back');
+  assert.equal(await said(), 'All back in the bags. Safe trip home.');
+  await toastUndo(page);
+  assert.equal(await tick('Shoes').getAttribute('aria-checked'), 'false');
+  assert.match(await page.locator('.progress p').innerText(), /^\d+ of \d+ back in the bags$/);
   await page.click('.crumb');
   await page.waitForSelector('.tag-card');
   assert.equal(await page.locator('.tag-card .when').innerText(), 'NOW · BACK TODAY');

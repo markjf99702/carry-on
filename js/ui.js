@@ -44,6 +44,8 @@ export const ICONS = {
 // and the sheet's own while a sheet is open, since the rest of the page is hidden then; the words go in a moment
 // after it's emptied, so they're heard as new.
 let toastT = null, sayT = null, toastLeft = 0, toastEnd = 0, paused = false;
+// The last toast's action and when it came, for toastKeep.
+let last = { action: undefined, at: 0 };
 const lives = () => ['said', 'sheetSaid'].map(id => document.getElementById(id));
 function hideToast() {
   document.getElementById('toast').hidden = true;
@@ -60,6 +62,7 @@ function pause(on) {
   if (on) { clearTimeout(toastT); toastLeft = toastEnd - Date.now(); } else hideIn(Math.max(toastLeft, 1500));
 }
 export function toast(msg, action) {
+  last = { action, at: Date.now() };
   const el = document.getElementById('toast');
   placeToast();
   el.replaceChildren(h('span', {}, msg));
@@ -84,6 +87,10 @@ export function toast(msg, action) {
   clearTimeout(sayT);
   sayT = setTimeout(() => { live.textContent = msg; }, 50);
 }
+
+// A toast that follows straight on from another, in the same tap, keeps that one's action: when a whole bag packed
+// finishes the trip, "Everything is packed" takes the place of what the bag said, and its Undo stays.
+export const toastKeep = msg => toast(msg, Date.now() - last.at < 300 ? last.action : undefined);
 
 // An open sheet covers the rest of the page, so the toast goes inside it while it's open, and Undo stays in reach.
 function placeToast() {
