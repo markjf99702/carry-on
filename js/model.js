@@ -469,16 +469,45 @@ export function startWith(doc, list) {
   return { ...doc, bags: { ...doc.bags, ...over('bags') }, items: { ...doc.items, ...over('items') }, tags: { ...fresh.tags, ...doc.tags } };
 }
 
-// Swaps the list for another one. Trips keep their ticks: the ones for things that are still on the list
-// still count. Bags and things not in the new list are deleted (and so leave other devices' lists too).
+// What's on both lists keeps this one's ids: a bag coming in takes the id of a bag here with the same name and
+// kind, and a thing the id of one with the same name in that bag. A pasted list, or someone else's, has ids of
+// its own, and a trip's ticks, skips and moves are kept by id. An id already here counts first.
+function sameIds(doc, list) {
+  const live = (coll, id) => !!doc[coll][id] && !gone(doc[coll][id]);
+  const bagMap = {}, itemMap = {};
+  const bagsIn = list.bags || [], itemsIn = list.items || [];
+  const takenB = new Set(bagsIn.filter(b => live('bags', b.id)).map(b => b.id));
+  for (const b of bagsIn) {
+    if (live('bags', b.id)) continue;
+    const kind = KINDS.includes(b.kind) ? b.kind : 'bag';
+    const hit = bags(doc).find(x => !takenB.has(x.id) && x.kind === kind && norm(x.name) === norm(b.name));
+    if (hit) { takenB.add(hit.id); bagMap[b.id] = hit.id; }
+  }
+  const takenI = new Set(itemsIn.filter(x => live('items', x.id)).map(x => x.id));
+  for (const it of itemsIn) {
+    if (live('items', it.id)) continue;
+    const hit = items(doc, bagMap[it.bag] || it.bag).find(x => !takenI.has(x.id) && norm(x.name) === norm(it.name));
+    if (hit) { takenI.add(hit.id); itemMap[it.id] = hit.id; }
+  }
+  return {
+    ...list,
+    bags: bagsIn.map(b => (bagMap[b.id] ? { ...b, id: bagMap[b.id] } : b)),
+    items: itemsIn.map(x => ({ ...x, id: itemMap[x.id] || x.id, bag: bagMap[x.bag] || x.bag })),
+  };
+}
+
+// Swaps the list for another one. Trips keep their ticks: the ones for things on both lists still count.
+// Bags and things not in the new list are deleted (and so leave other devices' lists too). Something already
+// here just as it comes in is left as it is, so using the same list twice changes nothing.
 export function replaceList(doc, list) {
-  const now = Date.now(), fresh = listDoc(list, now);
+  const now = Date.now(), fresh = listDoc(sameIds(doc, list), now);
   let next = doc;
   for (const b of bags(doc)) if (!fresh.bags[b.id]) next = remove(next, 'bags', b.id);
   for (const x of items(doc)) if (!fresh.items[x.id]) next = remove(next, 'items', x.id);
+  const same = (old, x) => old && !gone(old) && old.t > 0 && canon({ ...old, t: 0 }) === canon({ ...x, t: 0 });
   const take = (coll, from) => {
     const out = { ...next[coll] };
-    for (const [id, x] of Object.entries(from)) out[id] = { ...x, t: Math.max(stamp(out[id]), now) };
+    for (const [id, x] of Object.entries(from)) if (!same(out[id], x)) out[id] = { ...x, t: Math.max(stamp(out[id]), now) };
     return out;
   };
   return { ...next, bags: take('bags', fresh.bags), items: take('items', fresh.items), tags: take('tags', fresh.tags) };

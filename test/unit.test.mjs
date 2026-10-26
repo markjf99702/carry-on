@@ -736,6 +736,45 @@ test('replacing a list can be undone, everywhere, without bringing back what was
   }
 });
 
+test('a list with the same names used instead keeps a trip’s ticks, skips and moves, and Undo brings the old one back', () => {
+  let before = M.setPref(starter(), 'home', 'US');
+  before = trip(before, { place: { name: 'Lisbon', cc: 'PT', country: 'Portugal' } });
+  for (const id of ['s-toiletries-toothbrush', 's-documents-passport', 's-clothes-socks']) before = M.mark(before, 't1', 'p:' + id, 1);
+  before = M.mark(before, 't1', 'x:s-daybag-snacks', 'skip');
+  before = M.mark(before, 't1', 'b:s-daybag-sunglasses', 's-clothes');
+  const was = plan(before, before.trips.t1);
+  // Pasted, so every id is different: b-… and i-… rather than the starter's s-….
+  const text = 'Toiletries bag:\n- toothbrush\n- Floss\nDocuments and money:\n- Passport\nClothes:\n- Socks\n- Retainer\nDay bag:\n- Snacks\n- Sunglasses\n- Eye mask and earplugs';
+  later();
+  const after = M.replaceList(before, parsePaste(text));
+  const p = plan(after, after.trips.t1);
+  assert.equal(p.done, 3, 'the three ticks still count');
+  assert.equal(p.done, was.done);
+  assert.ok(p.left.find(l => l.item.name === 'Snacks').skipped, 'still left off');
+  assert.ok(names(p, 'Clothes').includes('Sunglasses'), 'still moved to Clothes');
+  assert.equal(after.items['s-toiletries-toothbrush'].name, 'toothbrush', 'the same thing, under its new name');
+  assert.deepEqual(after.items['s-daybag-eye-mask-and-earplugs'].when, [], 'with the new list’s conditions');
+  assert.ok(M.items(after).some(x => x.name === 'Retainer'), 'what’s new comes in');
+  assert.ok(M.gone(after.items['s-toiletries-razor']), 'what isn’t on the new list goes');
+  // Another phone with the old list syncs: it gets the new one, and the ticks there still count.
+  for (const m of [M.mergeDocs(before, after), M.mergeDocs(after, before)]) {
+    assert.deepEqual(M.items(m).map(x => x.id + x.name), M.items(after).map(x => x.id + x.name));
+    assert.equal(plan(m, m.trips.t1).done, 3);
+  }
+  // The same list again: nothing changes.
+  later();
+  assert.equal(M.canon(M.replaceList(after, parsePaste(text))), M.canon(after));
+  // Undo: the old names, conditions and progress.
+  later();
+  const undone = M.undoReplace(after, before, after);
+  const shown = d => M.items(d).map(x => `${x.id} ${x.name} ${x.when} ${x.per}`);
+  assert.deepEqual(shown(undone), shown(before));
+  assert.deepEqual(M.bags(undone).map(b => `${b.id} ${b.name} ${b.icon}`), M.bags(before).map(b => `${b.id} ${b.name} ${b.icon}`));
+  const q = plan(undone, undone.trips.t1);
+  assert.equal(q.done, was.done);
+  assert.equal(q.total, was.total);
+});
+
 test('cleaning keeps junk out', () => {
   const doc = M.cleanDoc({ bags: { b1: { name: 'Ok', kind: 'nope', when: ['rain', 'bad key!'] }, '<x>': { name: 'bad id' } }, items: { i1: { name: '', bag: 'b1' } }, trips: { t1: { start: 'soon' } }, prefs: { units: { v: 'K', t: 1 } } });
   assert.deepEqual(Object.keys(doc.bags), ['b1']);

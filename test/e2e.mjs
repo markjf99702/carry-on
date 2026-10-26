@@ -727,6 +727,30 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await ctx.close();
 }
 
+// ================= Someone else's list with the same names, used instead: a trip's ticks stay =================
+{
+  const { ctx, page } = await phone();
+  await page.click('text=Start with a starter list');
+  await planTrip(page, { where: 'Lisb', from: 3, to: 7 });
+  for (const n of ['Toothbrush', 'Floss', 'Phone charger', 'Passport']) await row(page, n).locator('.tick').click();
+  assert.match(await page.locator('.progress p').innerText(), /^4 of /);
+  const tripAt = page.url();
+  // Their own ids, not the starter list's.
+  const code = await encodeList({
+    bags: [{ id: 'x1', name: 'Toiletries bag', icon: '🪥', kind: 'bag' }, { id: 'x2', name: 'Electronics', icon: '🔌', kind: 'bag' }, { id: 'x3', name: 'Documents and money', icon: '🛂', kind: 'bag' }],
+    items: [{ id: 'y1', name: 'Toothbrush', bag: 'x1' }, { id: 'y2', name: 'Floss', bag: 'x1' }, { id: 'y3', name: 'Phone charger', bag: 'x2' }, { id: 'y4', name: 'Camera', bag: 'x2' }, { id: 'y5', name: 'Passport', bag: 'x3', when: ['abroad'] }],
+    tags: [],
+  });
+  await page.goto(base + '#list=' + code);
+  await until(() => sheetOpen(page), 'the list offer');
+  await page.click('text=Use it instead of my list');
+  await page.waitForSelector('.bag.edit');
+  await page.goto(tripAt);
+  await page.waitForSelector('.pass h1');
+  assert.match(await page.locator('.progress p').innerText(), /^4 of 5\b/, 'the ticks still count');
+  await ctx.close();
+}
+
 // ================= What's typed stays put while the page redraws =================
 // Switching to another app and back, a forecast arriving, a sync landing or another tab saving all redraw the page.
 {
@@ -980,6 +1004,25 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   assert.equal(await bagCount(a.page), 9, 'the starter list stays after syncing');
   await b.page.click('#cloud');
   await until(async () => (await bagCount(b.page)) === 9, 'the starter list on the other phone');
+
+  // Someone else's list with some of the same names, used instead on one phone: on the other, the trip's ticks
+  // for those still count.
+  const code = await encodeList({
+    bags: [{ id: 'z1', name: 'Clothes', icon: '👕', kind: 'bag' }, { id: 'z2', name: 'Documents and money', icon: '🛂', kind: 'bag' }],
+    items: [{ id: 'z3', name: 'Belt', bag: 'z1' }, { id: 'z4', name: 'Shoes', bag: 'z1' }, { id: 'z5', name: 'Wallet', bag: 'z2' }, { id: 'z6', name: 'Camera', bag: 'z2' }],
+    tags: [],
+  });
+  await a.page.goto(base + '#list=' + code);
+  await until(() => sheetOpen(a.page), 'the list offer');
+  await a.page.click('text=Use it instead of my list');
+  await a.page.waitForSelector('.bag.edit');
+  await wait(1500);
+  await synced(a.page);
+  await b.page.click('#cloud');
+  await until(async () => (await bagCount(b.page)) === 2, 'the new list on the other phone');
+  await b.page.goto(base + '#/trip/' + await b.page.evaluate(() => Object.keys(window.carryOn.store.doc.trips)[0]));
+  await b.page.waitForSelector('.pass h1');
+  assert.match(await b.page.locator('.progress p').innerText(), /^3 of 4\b/, 'Belt, Shoes and Wallet still ticked');
   await a.ctx.close(); await b.ctx.close();
 }
 
