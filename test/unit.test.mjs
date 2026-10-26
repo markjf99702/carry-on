@@ -414,6 +414,28 @@ test('a backup brings back starter things deleted since it was saved, and says w
   store.erase();
 });
 
+test('a tab that missed another tab’s save reads it before saving over it', () => {
+  const mem = new Map();
+  globalThis.localStorage = { getItem: k => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, String(v)), removeItem: k => mem.delete(k) };
+  const saved = () => M.cleanDoc(JSON.parse(mem.get('carry-on')));
+  try {
+    store.erase();
+    store.apply(() => starter());
+    // Another tab deletes Leaving the house, and this one doesn't hear of it.
+    later();
+    mem.set('carry-on', M.canon(M.removeBag(saved(), 's-leave')));
+    store.apply(d => M.putItem(d, { id: 'i-mine', name: 'My own thing', bag: 's-daybag' }));
+    assert.ok(M.gone(saved().bags['s-leave']), 'the other tab’s deletion stays');
+    assert.ok(saved().items['i-mine'], 'and this tab’s change is saved too');
+    assert.ok(M.gone(store.doc.bags['s-leave']));
+    mem.set('carry-on', M.canon(M.removeItem(saved(), 'i-mine')));
+    assert.ok(M.gone(M.cleanDoc(JSON.parse(store.backup())).items['i-mine']), 'a backup has it too');
+  } finally {
+    delete globalThis.localStorage;
+    store.erase();
+  }
+});
+
 test('replacing and adding lists', () => {
   const doc = starter();
   const mine = parsePaste('Bags:\n- Camera\nToiletries bag:\n- Toothbrush\n- Retainer');

@@ -466,6 +466,18 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await redraws();
   assert.equal(await box.inputValue(), 'Cotton sw', 'the add box keeps its text');
   assert.equal(await page.evaluate(() => document.activeElement.placeholder), 'Add to Toiletries bag', 'and the cursor');
+
+  // A save this tab missed (written here behind its back, as when a page comes back from the browser's memory)
+  // isn't undone by its next change.
+  const behind = bag => page.evaluate(bag => { const { M } = window.carryOn, d = M.cleanDoc(JSON.parse(localStorage.getItem('carry-on'))); localStorage.setItem('carry-on', M.canon(M.removeBag(d, bag))); }, bag);
+  await behind('s-leave');
+  await box.press('Enter');
+  assert.deepEqual(await page.evaluate(() => { const { M } = window.carryOn, d = M.cleanDoc(JSON.parse(localStorage.getItem('carry-on'))); return [M.gone(d.bags['s-leave']), M.items(d).some(x => x.name === 'Cotton sw')]; }), [true, true]);
+  assert.ok(!(await page.locator('.bag.edit h2').allInnerTexts()).includes('LEAVING THE HOUSE'));
+  // Shown again from the browser's memory, it shows what was saved meanwhile.
+  await behind('s-back');
+  await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })));
+  assert.ok(!(await page.locator('.bag.edit h2').allInnerTexts()).includes('LEAVING THE HOTEL'));
   await other.close();
   await ctx.close();
 }

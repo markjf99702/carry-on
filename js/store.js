@@ -5,7 +5,9 @@ import * as M from './model.js';
 export const KEY = 'carry-on';
 const DEVICE = 'carry-on.device'; // this device only: hide packed, folded bags, which way each trip is showing
 
-function get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } }
+function text(k) { try { return localStorage.getItem(k); } catch { return null; } }
+function parse(s) { try { return JSON.parse(s); } catch { return null; } }
+const get = k => parse(text(k));
 function put(k, v) {
   try { localStorage.setItem(k, typeof v === 'string' ? v : JSON.stringify(v)); return true; } catch { return false; }
 }
@@ -17,12 +19,19 @@ function readDevice() {
   return { hide: !!d?.hide, open: map(d?.open), mode: map(d?.mode) };
 }
 let device = readDevice();
-let doc = M.cleanDoc(get(KEY));
+let last = text(KEY); // what this tab last read from storage or wrote there
+let doc = M.cleanDoc(parse(last));
 const listeners = [];
+
+function reload() { device = readDevice(); last = text(KEY); doc = M.cleanDoc(parse(last)); }
+// If something else saved since this tab last looked (a tab that missed the news, or a page brought back from the
+// browser's memory), a change goes onto that, so it can't put back what was there before.
+function fresh() { if (text(KEY) !== last) reload(); }
 
 function write(next) {
   doc = next;
-  const ok = put(KEY, M.canon(doc));
+  const out = M.canon(doc), ok = put(KEY, out);
+  if (ok) last = out;
   listeners.forEach(f => f(ok ? 'saved' : 'full'));
 }
 
@@ -30,9 +39,14 @@ export const store = {
   get doc() { return doc; },
   onSave(f) { listeners.push(f); },
   // Picks up what another tab or a sync wrote.
-  reload() { device = readDevice(); doc = M.cleanDoc(get(KEY)); },
+  reload,
   // Every change goes through here: store.apply(d => M.putItem(d, {...}))
-  apply(fn) { const next = fn(doc); if (next !== doc) write(next); return next; },
+  apply(fn) {
+    fresh();
+    const next = fn(doc);
+    if (next !== doc) write(next);
+    return next;
+  },
 
   get hide() { return device.hide; },
   set hide(v) { device.hide = !!v; put(DEVICE, device); },
@@ -41,7 +55,7 @@ export const store = {
   mode: id => device.mode[id],
   setMode(id, v) { device.mode[id] = v; put(DEVICE, device); },
 
-  backup: () => JSON.stringify({ ...M.cleanDoc(doc), saved: new Date().toISOString() }, null, 1),
+  backup() { fresh(); return JSON.stringify({ ...M.cleanDoc(doc), saved: new Date().toISOString() }, null, 1); },
   // Merges a backup in, record by record, so nothing here is lost. Returns how many of each it brought back or
   // changed: { things, jobs, bags, lists (of jobs), occasions, trips }.
   restoreBackup(text) {
@@ -49,6 +63,7 @@ export const store = {
     try { raw = JSON.parse(text); } catch { raw = null; }
     if (raw?.app !== M.APP || typeof raw.bags !== 'object') throw new Error('That file isn’t a Carry On backup.');
     const incoming = M.cleanDoc(raw);
+    fresh();
     // Where the backup and this device each made a thing of the same name, it becomes one with this device's id,
     // which Drive and the other devices hold too.
     const merged = M.mergeDocs(incoming, doc, { first: true });
@@ -76,6 +91,7 @@ export const store = {
   erase() {
     try { localStorage.removeItem(KEY); localStorage.removeItem(DEVICE); } catch { /* already gone */ }
     device = readDevice();
+    last = text(KEY);
     doc = M.blankDoc();
   },
 };

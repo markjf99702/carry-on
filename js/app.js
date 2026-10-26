@@ -920,6 +920,8 @@ drive.chip(document.getElementById('cloud'));
 store.onSave(r => { if (r === 'full') toast('This browser’s storage is full, so that wasn’t saved.'); else drive.changed(); });
 drive.onUpdate(() => { store.reload(); render(); });
 window.addEventListener('storage', e => { if (e.key === 'carry-on' || e.key === 'carry-on.device') { store.reload(); render(); } });
+// Back to a page the browser kept in memory (after the footer's links, say): it missed whatever was saved meanwhile.
+window.addEventListener('pageshow', e => { if (e.persisted) { store.reload(); render(); } });
 window.addEventListener('hashchange', render);
 // A new day can change which trips are coming up, and old weather gets looked up again.
 document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
