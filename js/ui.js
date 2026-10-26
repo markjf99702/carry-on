@@ -162,6 +162,13 @@ export function setupSheet() {
   t.addEventListener('focusout', () => pause(false));
   // A tap on the dimmed page around the sheet closes it.
   dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
+  // With the keyboard up, Chrome on Android makes the page shorter, and it counts a field behind the sheet's title
+  // or its buttons as in view, so the field being typed in is brought clear of them here (the sheet's
+  // scroll-padding says how far). An iPhone puts its keyboard over the page instead.
+  (window.visualViewport || window).addEventListener('resize', () => {
+    const f = document.activeElement;
+    if (dlg.open && dlg.contains(f) && f.matches('input, textarea, select')) f.scrollIntoView({ block: 'nearest' });
+  });
   dlg.addEventListener('close', () => { placeToast(); backToOpener(); const f = onClose; onClose = null; if (f) f(); });
   // Enter in a text box inside a sheet presses its main button rather than closing it.
   dlg.addEventListener('submit', e => { e.preventDefault(); dlg.querySelector('.sheet-body .btn.primary:not([disabled])')?.click(); });

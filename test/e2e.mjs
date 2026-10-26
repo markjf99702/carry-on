@@ -1204,6 +1204,68 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await ctx.close();
 }
 
+// ================= On a phone: fields stay clear of the keyboard =================
+// Chrome on Android makes the page shorter while the keyboard is up (index.html asks it to: interactive-widget), so
+// the keyboard here is the window getting shorter, with the focus in a field. iPhones put the keyboard over the page
+// instead, which this doesn't check.
+{
+  const { ctx, page } = await phone({ mobile: true });
+  await page.click('text=Start with a starter list');
+  await page.goto(base + '#/list');
+  // What's at the middle of the field with the focus (or near the bottom of a text area, where the typing is).
+  const clear = () => page.evaluate(() => {
+    const f = document.activeElement, r = f.getBoundingClientRect();
+    const y = f.tagName === 'TEXTAREA' ? Math.min(r.bottom - 8, innerHeight - 2) : r.top + r.height / 2;
+    const at = document.elementFromPoint(r.left + 20, y);
+    return at === f || f.contains(at) ? 'the field' : `${at?.closest('.sheet-top, .sheet-actions')?.className || at?.tagName} over ${f.tagName} at ${Math.round(r.top)}–${Math.round(r.bottom)}`;
+  });
+  const keyboard = async (w, h) => { await page.setViewportSize({ width: w, height: h }); await wait(300); };
+  const tapNote = async () => {
+    await until(() => sheetOpen(page), 'the item editor');
+    const note = page.locator('#sheet input[type=text]').nth(1);
+    await note.tap();
+    assert.equal(await page.evaluate(() => document.activeElement.placeholder), 'Shows under it on the list');
+  };
+  await page.locator('.edit-row', { hasText: 'Toothpaste' }).tap();
+  await tapNote();
+  await keyboard(390, 508);
+  assert.equal(await clear(), 'the field', 'Note clear of the Save bar with the keyboard up');
+  await keyboard(390, 844);
+  await closeSheet(page);
+  // On its side, the keyboard leaves very little room, and the title and the Save bar scroll with the rest.
+  await keyboard(844, 390);
+  await page.locator('.edit-row', { hasText: 'Toothpaste' }).tap();
+  await tapNote();
+  await keyboard(844, 190);
+  assert.equal(await clear(), 'the field', 'Note clear of the Save bar on its side');
+  await page.locator('#sheet input[type=text]').first().focus();
+  await keyboard(844, 189);
+  assert.equal(await clear(), 'the field', 'Name clear of the title on its side');
+  await keyboard(390, 844);
+  await closeSheet(page);
+  // Typing a long list into the paste box: the line being typed stays above Next.
+  await page.locator('.btn', { hasText: 'Paste a list' }).tap();
+  await until(() => sheetOpen(page), 'the paste sheet');
+  await keyboard(390, 508);
+  await page.keyboard.type(Array.from({ length: 16 }, (_, i) => `- Thing number ${i + 1}`).join('\n'));
+  await wait(200);
+  assert.equal(await clear(), 'the field', 'the line being typed clear of Next');
+  // A long name takes at most two lines at the top of the sheet; the Name box has all of it.
+  await keyboard(390, 844);
+  await closeSheet(page);
+  await page.locator('.edit-row', { hasText: 'Toothpaste' }).tap();
+  await until(() => sheetOpen(page), 'the item editor');
+  await page.fill('#sheet input[type=text] >> nth=0', 'Toothpaste in the small tube that fits the clear bag for the airport line');
+  await page.click('#sheet .btn.primary');
+  await until(async () => !(await sheetOpen(page)), 'Save');
+  await page.locator('.edit-row', { hasText: 'Toothpaste in the small tube' }).tap();
+  await until(() => sheetOpen(page), 'the item editor');
+  const lines = await page.locator('#sheetTitle').evaluate(t => Math.round(t.getBoundingClientRect().height / parseFloat(getComputedStyle(t).lineHeight)));
+  assert.equal(lines, 2, 'the title takes two lines');
+  assert.equal(await page.inputValue('#sheet input[type=text] >> nth=0'), 'Toothpaste in the small tube that fits the clear bag for the airport line');
+  await ctx.close();
+}
+
 // ================= Two phones, one Google Drive =================
 {
   const g = fakeGoogle();

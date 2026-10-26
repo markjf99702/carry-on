@@ -406,6 +406,9 @@ ul.chips .chip small { font-weight: 500; color: var(--muted); font-size: 13px; }
   border: 0; border-radius: 18px 18px 0 0;
   background: var(--paper); color: var(--ink);
   box-shadow: 0 -8px 30px rgba(0, 0, 0, .25);
+  /* A field scrolled into view (with the keyboard coming up, say) stops clear of the title, even at two lines, and
+     of the buttons, which stay over the sheet's ends. */
+  scroll-padding: 92px 0 84px;
 }
 .sheet.wide { max-width: 600px; }
 .sheet::backdrop { background: rgba(14, 18, 26, .5); }
@@ -416,7 +419,8 @@ ul.chips .chip small { font-weight: 500; color: var(--muted); font-size: 13px; }
   position: sticky; top: 0; z-index: 1; display: flex; align-items: flex-start; gap: 8px;
   margin: 0 -18px 4px; padding: 14px 18px 8px; background: var(--paper);
 }
-.sheet-top h2 { flex: 1; padding-top: 8px; font-size: 24px; overflow-wrap: anywhere; }
+/* A long name takes two lines at most up here; the Name box below has all of it. */
+.sheet-top h2 { flex: 1; padding-top: 8px; font-size: 24px; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
 .sheet-top .icon-btn { margin-right: -8px; }
 .sheet-actions {
   position: sticky; bottom: 0; z-index: 1; display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap;
@@ -445,3 +449,9 @@ ul.chips .chip small { font-weight: 500; color: var(--muted); font-size: 13px; }
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }
 .sheet .stack + p { margin-top: 12px; }
+/* A phone on its side, or with the keyboard up and little room left: the title and the buttons scroll with the
+   rest, rather than covering most of what's between them. */
+@media (max-height: 460px) {
+  .sheet-top, .sheet-actions { position: static; }
+  .sheet { scroll-padding: 8px; }
+}
