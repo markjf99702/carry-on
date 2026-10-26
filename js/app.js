@@ -361,6 +361,10 @@ function holdStill(y, redraw) {
   }
 }
 
+// The starter Liquids bag's note is the airport's rule for a carry-on (TSA's "3-1-1"), so it shows only when flying;
+// a note of your own always shows.
+const AIRPORT_NOTE = starterList().bags.find(b => b.id === 's-liquids')?.note;
+
 function bagCard(t, g, mode, hide, why, jobs = false) {
   const b = g.bag, done = g.rows.filter(r => r.done).length, all = done === g.rows.length;
   const held = linger.has(mode + ':' + b.id);
@@ -374,7 +378,7 @@ function bagCard(t, g, mode, hide, why, jobs = false) {
     b.id !== '_loose' ? h('button', { type: 'button', class: 'icon-btn small', 'aria-label': `More for ${b.name}`, html: ICONS.more, onclick: () => bagSheet(t, g, mode) }) : null);
   return h('section', { class: 'bag' + (all ? ' all' : '') + (jobs ? ' jobs' : ''), 'data-bag': b.id },
     head,
-    b.note ? h('p', { class: 'bag-note' }, b.note) : null,
+    b.note && !(b.id === 's-liquids' && t.travel !== 'fly' && b.note === AIRPORT_NOTE) ? h('p', { class: 'bag-note' }, b.note) : null,
     all && !open
       ? h('button', { type: 'button', class: 'bag-done', 'data-key': 'fold:' + b.id, onclick: () => { store.setOpen(t.id + ':' + b.id, true); render(); } }, jobs ? `All ${plural(g.rows.length, 'job')} done` : mode === 'go' ? `All ${g.rows.length} packed` : `All ${g.rows.length} back in`, h('span', { class: 'muted' }, ' · show'))
       : rows.length ? h('ul', { class: 'rows' }, rows.map(r => itemRow(t, g, r, mode, why, jobs, hide))) : h('p', { class: 'muted small pad' }, 'All done here.'),

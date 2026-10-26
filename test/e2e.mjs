@@ -100,6 +100,7 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   assert.ok(names.includes('Socks ×5'), 'socks for five days');
   assert.match(await row(page, 'Umbrella').innerText(), /Rain likely Fri|Rain likely \w{3}/);
   assert.match(await row(page, 'Plug adapter').innerText(), /Type C\/F, 230 V/);
+  assert.match(await page.locator('.bag', { hasText: 'Liquids bag' }).locator('.bag-note').innerText(), /quart bag, for a carry-on/, 'flying: the airport rule');
   const chips = await page.locator('.needs .chip').allInnerTexts();
   for (const c of ['Flying', 'Abroad', 'Other plugs', 'Rain', 'Work']) assert.ok(chips.some(x => x.includes(c)), `${c} chip`);
   await fits(page, 'the trip');
@@ -536,6 +537,11 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await planTrip(page, { where: 'Chic', from: 2, to: 4, by: 'Driving' });
   const tick = name => row(page, name).locator('.tick');
   const said = () => page.locator('#toast span').innerText();
+  // A drive: the Liquids bag's note about the airport's quart bag isn't for it, unless it's a note of your own.
+  const liquids = page.locator('.bag', { hasText: 'Liquids bag' });
+  assert.equal(await liquids.locator('.bag-note').count(), 0, 'no airport rule on a drive');
+  await page.evaluate(() => { const { store, M, render } = window.carryOn; store.apply(d => M.putBag(d, { id: 's-liquids', note: 'In the side pocket' })); render(); });
+  assert.equal(await liquids.locator('.bag-note').innerText(), 'In the side pocket');
 
   // Back two days later: three pairs of socks ticked aren't five, so the tick goes, and Undo puts it back.
   await tick('Socks').click();
