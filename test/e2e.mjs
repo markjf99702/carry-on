@@ -804,6 +804,11 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await page.goto(base + '#list=' + code);
   await until(() => sheetOpen(page), 'the list offer');
   assert.equal(await page.locator('#sheetTitle').innerText(), 'SOMEONE SENT YOU A PACKING LIST');
+  // It starts at its title, with no ring on Close before anything's been pressed, and Tab goes on to Close.
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'sheetTitle');
+  assert.equal(await page.evaluate(() => document.querySelector('#sheet [aria-label="Close"]').matches(':focus-visible')), false);
+  await page.keyboard.press('Tab');
+  assert.equal(await page.evaluate(() => document.activeElement.getAttribute('aria-label')), 'Close');
   const said = await page.locator('.sheet').innerText();
   assert.match(said, /It becomes your own copy on this phone\. Change anything; theirs stays as it is\. Their trips don’t come with it\./);
   assert.match(said, /2 bags and 2 things, and 1 list of jobs/);

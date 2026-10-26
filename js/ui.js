@@ -146,10 +146,14 @@ export function sheet(title, build, { wide = false, done } = {}) {
     ...[build(close)].flat(Infinity).filter(x => x !== null && x !== undefined && x !== false));
   // A sheet opens at its top. The sheet keeps where the last one was scrolled to, and with its title row staying
   // in view, putting the focus on the close button no longer scrolls back up.
-  if (!dlg.open) { dlg.showModal(); dlg.scrollTop = 0; }
+  const fresh = !dlg.open;
+  if (fresh) { dlg.showModal(); dlg.scrollTop = 0; }
   placeToast();
   const same = byKey(body, again), first = body.querySelector('[autofocus]');
   if (same) same.focus({ preventScroll: true }); else if (first) first.focus();
+  // With nothing to type into first, a new sheet starts at its title, so a screen reader starts there too, rather
+  // than on Close, which the browser would pick (and ring, when a link opened the sheet before any tap).
+  else if (fresh) { const top = body.querySelector('#sheetTitle'); top.tabIndex = -1; top.focus({ preventScroll: true }); }
   return close;
 }
 export function closeSheet() { const dlg = document.getElementById('sheet'); if (dlg.open) dlg.close(); }
