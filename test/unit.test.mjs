@@ -244,6 +244,18 @@ test('a first merge keeps everything, but untouched starter things give way to a
   assert.equal(M.items(both).length, M.items(starter()).length);
 });
 
+test('a starter bag with a thing of your own in it stays when the phone joins a Drive with another list', () => {
+  const drive = M.replaceList(M.blankDoc(), parsePaste('Electronics:\n- Phone charger\n- Headphones\nClothes:\n- Socks\n- Hat'));
+  const phone = M.putItem(starter(), { id: 'i-pill', name: 'Grandma’s pill box', bag: 's-toiletries' });
+  for (const [local, remote] of [[phone, drive], [drive, phone]]) {
+    const m = M.mergeDocs(local, remote, { first: true });
+    assert.deepEqual(M.items(m, 's-toiletries').map(x => x.name), ['Grandma’s pill box'], 'the starter things in it still go');
+    assert.deepEqual(M.bags(m).map(b => b.name).sort(), ['Clothes', 'Electronics', 'Toiletries bag']);
+    assert.ok(M.items(m).every(x => m.bags[x.bag] && !M.gone(m.bags[x.bag])), 'every thing is in a bag that shows');
+    assert.equal(M.canon(M.mergeDocs(m, remote)), M.canon(m), 'the next sync changes nothing');
+  }
+});
+
 test('a first merge: a deletion on one side does not take away what the other side still has', () => {
   const base = M.replaceList(M.blankDoc(), starterList());
   const a = M.removeItem(base, 's-daybag-snacks');

@@ -234,7 +234,8 @@ const untouched = x => x.t === 0;
 //   - Untouched starter records (t = 0) are the exception. A second phone that started from the starter list
 //     and then joins Drive shouldn't bring back starter things deleted elsewhere, or add them to a list that
 //     never had them: when the other side has a list of its own, they're dropped (kept as deletions, so the
-//     phone's next sync drops them there too).
+//     phone's next sync drops them there too). A starter bag holding a thing of the person's own stays, though,
+//     so that thing still shows.
 export function mergeDocs(local, remote, { first = false } = {}) {
   const out = { app: APP, v: 1 };
   let bagMap = {};
@@ -257,6 +258,12 @@ export function mergeDocs(local, remote, { first = false } = {}) {
     }
     const liveIn = m => Object.values(m).some(x => !gone(x) && !untouched(x));
     const aHas = liveIn(a), bHas = liveIn(b);
+    // A starter bag that someone put a thing of their own in is in use: it stays, with that thing.
+    const inUse = new Set();
+    if (first && name === 'bags') {
+      for (const x of Object.values(local.items)) if (!gone(x) && !untouched(x)) inUse.add(bagMap[x.bag] || x.bag);
+      for (const x of Object.values(remote.items)) if (!gone(x) && !untouched(x)) inUse.add(x.bag);
+    }
     const merged = {};
     for (const id of [...new Set([...Object.keys(a), ...Object.keys(b)])].sort()) {
       const x = a[id], y = b[id];
@@ -264,7 +271,7 @@ export function mergeDocs(local, remote, { first = false } = {}) {
       if (first && name !== 'tags') {
         const keep = [x, y].find(z => z && !gone(z));
         if (x && y && gone(m) && keep && !untouched(keep)) { m = { ...m }; delete m.del; }
-        else if (!gone(m) && untouched(m) && (x ? !y && bHas : aHas)) m = { ...m, del: 1 };
+        else if (!gone(m) && untouched(m) && (x ? !y && bHas : aHas) && !inUse.has(id)) m = { ...m, del: 1 };
       }
       merged[id] = m;
     }
