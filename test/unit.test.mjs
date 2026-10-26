@@ -8,7 +8,7 @@ import { summarize, stale } from '../js/weather.js';
 import { plugsFor, plugText } from '../js/plugs.js';
 import { parsePaste, encodeList, decodeList, guess } from '../js/share.js';
 import { starterList } from '../js/starter.js';
-import { add, span, yearsBack } from '../js/days.js';
+import { add, span, yearsBack, range, weekday, short, long } from '../js/days.js';
 
 const T = '2026-11-02';
 const starter = () => M.startWith(M.blankDoc(), starterList());
@@ -182,6 +182,16 @@ test('a whole bag or list of jobs left off one trip', () => {
   // Put back.
   doc = M.mark(doc, 't1', 'x:s-leave', 0);
   assert.deepEqual(plan(doc, doc.trips.t1).tasks.map(g => g.bag.name), ['Leaving the house']);
+});
+
+test('days: the same words as toLocaleDateString, a year of days', () => {
+  const was = (k, opts) => new Date(k + 'T12:00:00Z').toLocaleDateString('en-US', { timeZone: 'UTC', ...opts });
+  for (const k of range('2026-02-25', '2027-03-05')) {
+    assert.equal(weekday(k), was(k, { weekday: 'short' }));
+    assert.equal(short(k), was(k, { month: 'short', day: 'numeric' }));
+    assert.equal(long(k), was(k, { weekday: 'short', month: 'short', day: 'numeric' }));
+    assert.equal(span(k, add(k, 400), '2026'), `${was(k, { month: 'short', day: 'numeric', year: 'numeric' })} – ${was(add(k, 400), { month: 'short', day: 'numeric', year: 'numeric' })}`);
+  }
 });
 
 test('days: spans and years back', () => {

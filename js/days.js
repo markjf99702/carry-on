@@ -24,7 +24,13 @@ export function range(start, end) {
   return out;
 }
 
-const fmt = (k, opts) => new Date(k + 'T12:00:00Z').toLocaleDateString('en-US', { timeZone: 'UTC', ...opts });
+// Making a date formatter is slow (a trip screen shows dozens of dates), so each kind is made once.
+const formats = new Map();
+function fmt(k, opts) {
+  const id = JSON.stringify(opts);
+  if (!formats.has(id)) formats.set(id, new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', ...opts }));
+  return formats.get(id).format(new Date(k + 'T12:00:00Z'));
+}
 export const weekday = k => fmt(k, { weekday: 'short' });
 export const short = k => fmt(k, { month: 'short', day: 'numeric' });
 export const long = k => fmt(k, { weekday: 'short', month: 'short', day: 'numeric' });
