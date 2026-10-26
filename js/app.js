@@ -181,6 +181,8 @@ function homeView() {
 }
 
 const title = t => t.name || t.place?.name || 'Trip';
+// A bag by name in a sentence: "the Day bag", but "Electronics".
+const theBag = b => (/\b(bag|case|pack|backpack|suitcase|pouch|kit|box|tote|purse)\b/i.test(b.name) ? 'the ' + b.name : b.name);
 
 function tagCard(t) {
   const t0 = today(), n = D.nights(t.start, t.end);
@@ -319,7 +321,7 @@ function tripView(t) {
     p.groups.map(g => bagCard(t, g, mode, hide, c.why)),
     mode === 'go' && M.bags(doc()).some(b => b.kind === 'bag') ? h('button', { type: 'button', class: 'btn add-extra', onclick: () => extraSheet(t) }, h('span', { html: ICONS.plus }), 'Add something for this trip') : null,
     p.tasks.map(g => bagCard(t, g, mode, hide, c.why, true)),
-    p.left.length || p.leftBags.length ? leftOff(t, p.left, p.leftBags) : null,
+    p.left.length || p.leftBags.length ? leftOff(t, p.left, p.leftBags, mode) : null,
   ];
 }
 
@@ -409,9 +411,18 @@ function itemRow(t, g, r, mode, whyMap, jobs, hide) {
     jobs && mode === 'back' ? null : h('button', { type: 'button', class: 'icon-btn more', 'aria-label': `More for ${r.name}`, html: ICONS.more, onclick: () => itemSheet(t, r, mode, jobs) }));
 }
 
-function leftOff(t, left, leftBags) {
+function leftOff(t, left, leftBags, mode) {
   const open = store.isOpen(t.id + ':left');
-  const put = (id, skipped) => apply(d => M.mark(d, t.id, 'x:' + id, skipped ? 0 : 'add'));
+  // Packed, brought or put back: it says where on the list it went, since that's usually off screen.
+  const put = (id, skipped, name) => {
+    const was = t.marks?.['x:' + id]?.v;
+    apply(d => M.mark(d, t.id, 'x:' + id, skipped ? 0 : 'add'));
+    const p = R.plan(doc(), doc().trips[t.id], mode);
+    const g = [...p.groups, ...p.tasks].find(x => x.bag.id === id || x.rows.some(r => r.id === id));
+    const still = !g && (p.left.find(l => l.item.id === id) || p.leftBags.find(l => l.bag.id === id));
+    toast(still ? `${name} is still off: ${still.why.charAt(0).toLowerCase() + still.why.slice(1)}.` : g && g.bag.id !== id ? `${name} is on the list, in ${theBag(g.bag)}.` : `${name} is on the list.`,
+      { label: 'Undo', run: () => apply(d => M.mark(d, t.id, 'x:' + id, was || 0)) });
+  };
   return h('section', { class: 'left' },
     h('button', { type: 'button', class: 'left-head', 'aria-expanded': String(open), onclick: () => { store.setOpen(t.id + ':left', !open); render(); } },
       h('h2', {}, `Left off this trip (${left.length + leftBags.length})`),
@@ -421,13 +432,13 @@ function leftOff(t, left, leftBags) {
         h('div', { class: 'what' },
           h('span', { class: 'name' }, `${l.bag.icon} ${l.bag.name}`),
           h('small', {}, `${plural(l.count, l.bag.kind === 'bag' ? 'thing' : 'job')} · ${l.why}`)),
-        h('button', { type: 'button', class: 'btn small', 'data-key': 'x:' + l.bag.id, onclick: () => put(l.bag.id, l.skipped) }, l.skipped ? 'Put back' : 'Bring it'))),
+        h('button', { type: 'button', class: 'btn small', 'data-key': 'x:' + l.bag.id, onclick: () => put(l.bag.id, l.skipped, l.bag.name) }, l.skipped ? 'Put back' : 'Bring it'))),
       left.map(l => {
         // A job shows its list's icon, and is brought rather than packed.
         const list = doc().bags[l.item.bag], job = list && list.kind !== 'bag';
         return h('li', { class: 'row left-row' },
           h('div', { class: 'what' }, h('span', { class: 'name' }, job ? `${list.icon} ${l.item.name}` : l.item.name), h('small', {}, l.why)),
-          h('button', { type: 'button', class: 'btn small', 'data-key': 'x:' + l.item.id, onclick: () => put(l.item.id, l.skipped) }, l.skipped ? 'Put back' : job ? 'Bring it' : 'Pack it'));
+          h('button', { type: 'button', class: 'btn small', 'data-key': 'x:' + l.item.id, onclick: () => put(l.item.id, l.skipped, l.item.name) }, l.skipped ? 'Put back' : job ? 'Bring it' : 'Pack it'));
       })) : null);
 }
 
@@ -451,8 +462,13 @@ function itemSheet(t, r, mode, jobs) {
         r.extra
           ? h('button', { type: 'button', class: 'btn', onclick: () => { close(); apply(d => M.removeExtra(d, t.id, id)); toast(`${r.name} is off this trip.`, { label: 'Undo', run: () => apply(d => M.putExtra(d, t.id, { id: `${id}`, name: r.name, bag: cur })) }); } }, 'Take it off this trip')
           : h('button', { type: 'button', class: 'btn', onclick: () => { close(); apply(d => M.mark(d, t.id, 'x:' + id, 'skip')); toast(`${r.name} is off this trip.`, { label: 'Undo', run: () => apply(d => M.mark(d, t.id, 'x:' + id, pick || 0)) }); } }, 'Leave it off this trip'),
-        jobs ? null : h('label', { class: 'field' }, h('span', {}, 'Pack it in, this trip'),
-          h('select', { onchange: e => { close(); apply(d => M.mark(d, t.id, 'b:' + id, e.target.value)); } },
+        jobs ? null : h('label', { class: 'field' }, h('span', {}, 'Which bag, this trip'),
+          h('select', { onchange: e => {
+            close();
+            const was = t.marks?.['b:' + id]?.v, to = doc().bags[e.target.value];
+            apply(d => M.mark(d, t.id, 'b:' + id, to.id));
+            toast(`${r.name} goes in ${theBag(to)} this trip.`, { label: 'Undo', run: () => apply(d => M.mark(d, t.id, 'b:' + id, was || 0)) });
+          } },
             bagsList.map(b => h('option', { value: b.id, selected: b.id === cur }, `${b.icon} ${b.name}`)))),
         r.extra ? h('button', { type: 'button', class: 'btn', onclick: () => { close(); toList(t, r, cur); } }, 'Add it to my list for every trip')
           : h('button', { type: 'button', class: 'btn', onclick: () => { close(); itemEditor(doc().items[id]); } }, 'Change it in my list')),
@@ -484,7 +500,17 @@ function bagSheet(t, g, mode) {
   const all = g.rows.every(r => r.done);
   sheet(`${b.icon} ${b.name}`, close => [
     h('div', { class: 'stack' },
-      h('button', { type: 'button', class: 'btn', onclick: () => { close(); apply(d => M.markAll(d, t.id, keys, all ? 0 : 1)); } },
+      h('button', { type: 'button', class: 'btn', onclick: () => {
+        close();
+        const marks = doc().trips[t.id]?.marks || {}, was = keys.map(k => [k, marks[k]?.v || 0]), n = keys.length, one = g.rows[0].name;
+        store.apply(d => M.markAll(d, t.id, keys, all ? 0 : 1));
+        // Before the redraw, so finishing the whole trip says that instead.
+        toast(all ? `Everything in ${theBag(b)} is unticked.`
+          : b.kind !== 'bag' ? (n === 1 ? `${one} is done.` : `All ${n} jobs in ${b.name} are done.`)
+          : n === 1 ? `${one} is ${mode === 'go' ? 'packed' : 'back in'}.` : `All ${n} in ${theBag(b)} are ${mode === 'go' ? 'packed' : 'back in'}.`,
+        { label: 'Undo', run: () => apply(d => was.reduce((next, [k, v]) => M.mark(next, t.id, k, v), d)) });
+        render();
+      } },
         all ? 'Untick everything in it' : b.kind === 'bag' ? (mode === 'go' ? 'It’s all packed already' : 'It’s all back in') : 'All done'),
       b.kind === 'bag' && mode === 'go' ? h('button', { type: 'button', class: 'btn', onclick: () => { close(); extraSheet(t, b.id); } }, 'Add something to this bag') : null,
       h('button', { type: 'button', class: 'btn', onclick: () => {
@@ -499,9 +525,6 @@ function bagSheet(t, g, mode) {
       : 'Skipped, they wait under “Left off this trip” and stay on your list for other trips.'),
   ]);
 }
-
-// A bag by name in a sentence: "the Day bag", but "Electronics".
-const theBag = b => (/\b(bag|case|pack|backpack|suitcase|pouch|kit|box|tote|purse)\b/i.test(b.name) ? 'the ' + b.name : b.name);
 
 // Something for this trip, in the bag it was asked for from (a bag's ⋯), or else the bag picked last time.
 let lastBag = '';

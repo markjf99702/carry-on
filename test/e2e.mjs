@@ -575,6 +575,25 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await page.selectOption('.sheet select', { label: '🎒 Day bag' });
   await page.click('.sheet .btn.primary');
   assert.equal(await said(), 'Gift for the hosts is in the Day bag, just for this trip.');
+
+  // Moved to another bag, packed from Left off, a whole bag packed: each lands off screen, so each says so, with Undo.
+  await more(page, 'Sunglasses');
+  assert.equal(await page.locator('.sheet label', { hasText: 'Which bag, this trip' }).count(), 1);
+  await page.selectOption('.sheet select', { label: '👕 Clothes' });
+  assert.equal(await said(), 'Sunglasses goes in Clothes this trip.');
+  await toastUndo(page);
+  assert.match(await page.locator('.bag', { hasText: 'Day bag' }).innerText(), /Sunglasses/, 'Undo puts it back');
+  await page.click('.left-head');
+  await page.locator('.left .row', { hasText: 'Warm coat' }).locator('button').click();
+  assert.equal(await said(), 'Warm coat is on the list, in Clothes.');
+  await toastUndo(page);
+  assert.equal(await row(page, 'Warm coat').count(), 0, 'Undo leaves it off again');
+  await tick('Floss').click();
+  await page.locator('.bag', { hasText: 'Toiletries bag' }).locator('.bag-head .icon-btn').click();
+  await page.click('text=It’s all packed already');
+  assert.equal(await said(), 'All 8 in the Toiletries bag are packed.');
+  await toastUndo(page);
+  assert.deepEqual([await tick('Floss').getAttribute('aria-checked'), await tick('Razor').getAttribute('aria-checked')], ['true', 'false'], 'Undo puts back the ticks there were');
   await ctx.close();
 }
 
