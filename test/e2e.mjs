@@ -1225,6 +1225,16 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
     return at === f || f.contains(at) ? 'the field' : `${at?.closest('.sheet-top, .sheet-actions')?.className || at?.tagName} over ${f.tagName} at ${Math.round(r.top)}–${Math.round(r.bottom)}`;
   });
   const keyboard = async (w, h) => { await page.setViewportSize({ width: w, height: h }); await wait(300); };
+  // An occasion you have opens without the keyboard, which would cover its icons and Delete; a new one is typed
+  // straight into.
+  await page.locator('main .chip', { hasText: / Work$/ }).tap();
+  await until(() => sheetOpen(page), 'the occasion');
+  assert.equal(await page.evaluate(() => document.activeElement.tagName), 'H2', 'nothing to type in has the focus');
+  await closeSheet(page);
+  await page.locator('main .chip', { hasText: 'Add one' }).tap();
+  await until(() => sheetOpen(page), 'a new occasion');
+  assert.equal(await page.evaluate(() => document.activeElement.placeholder), 'Wedding', 'Name has the focus');
+  await closeSheet(page);
   const tapNote = async () => {
     await until(() => sheetOpen(page), 'the item editor');
     const note = page.locator('#sheet input[type=text]').nth(1);

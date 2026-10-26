@@ -1052,7 +1052,7 @@ function tagEditor(g) {
       apply(d => M.putTag(d, { id: g?.id, name: n, icon: iconPick }));
     };
     return [
-      h('label', { class: 'field' }, h('span', {}, 'Name'), name = h('input', { type: 'text', value: g?.name || '', maxlength: 30, autofocus: true, autocomplete: 'off', placeholder: 'Wedding' })),
+      h('label', { class: 'field' }, h('span', {}, 'Name'), name = h('input', { type: 'text', value: g?.name || '', maxlength: 30, autofocus: isNew, autocomplete: 'off', placeholder: 'Wedding' })),
       h('div', { class: 'field' }, h('span', { class: 'label' }, 'Icon'), icons),
       h('div', { class: 'sheet-actions' },
         isNew ? null : h('button', { type: 'button', class: 'btn danger-quiet', onclick: () => { close(); apply(d => M.removeTag(d, g.id)); toast(`${g.name} deleted.`); } }, 'Delete'),
