@@ -473,6 +473,8 @@ function condSheet(id) {
 
 // ---------- planning or changing a trip ----------
 
+const NO_PLACES = 'No places by that name.';
+
 function tripForm(t, again = false) {
   const editing = t && !again;
   const key = (editing ? 'edit/' : again ? 'again/' : 'new/') + (t ? t.id : '');
@@ -486,7 +488,9 @@ function tripForm(t, again = false) {
   const set = (k, v) => { st[k] = dr[k] = v; };
   const where = h('div', { class: 'where-field' });
   const input = h('input', { type: 'search', id: 'where', value: dr.typed, placeholder: 'A city or town', autocomplete: 'off', enterkeyhint: 'search', 'aria-describedby': 'whereHelp' });
-  const list = h('ul', { class: 'results', role: 'listbox', 'aria-label': 'Places' });
+  // A plain list of buttons, and a line under the box that says what the search found, which a screen reader reads out.
+  const list = h('ul', { class: 'results', 'aria-label': 'Places' });
+  const status = h('p', { class: 'where-status small', role: 'status' });
   const drawWhere = () => {
     if (st.place) {
       where.replaceChildren(h('div', { class: 'picked' },
@@ -494,11 +498,17 @@ function tripForm(t, again = false) {
         h('button', { type: 'button', class: 'icon-btn small', 'aria-label': 'Pick another place', html: ICONS.close, onclick: () => { set('place', null); drawWhere(); input.focus(); } })));
       return;
     }
-    list.replaceChildren(...dr.results.map(r => h('li', {}, h('button', { type: 'button', role: 'option', onclick: () => { set('place', r); dr.results = []; drawWhere(); } },
+    list.replaceChildren(...dr.results.map(r => h('li', {}, h('button', { type: 'button', onclick: () => { set('place', r); dr.results = []; drawWhere(); } },
       h('b', {}, r.name), ' ', h('span', { class: 'muted' }, [r.admin, r.country].filter(Boolean).join(', '))))));
     const typed = input.value.trim();
-    if (dr.searchErr && typed) list.append(h('li', { class: 'err small' }, single ? 'This copy can’t reach the weather service. Use what you typed and set the weather by hand, or open carry-on.junkdrawer.works for the forecast.' : dr.searchErr), h('li', {}, h('button', { type: 'button', onclick: () => { set('place', { name: typed, admin: '', country: '', cc: '' }); drawWhere(); } }, `Use “${typed}” without looking it up`)));
-    where.replaceChildren(input, list);
+    const failed = dr.searchErr && typed && dr.searchErr !== NO_PLACES;
+    status.className = 'where-status small ' + (failed ? 'err' : 'muted');
+    status.textContent = !typed ? '' : failed && single ? 'This copy can’t reach the weather service. Use what you typed and set the weather by hand, or open carry-on.junkdrawer.works for the forecast.'
+      : dr.searchErr || (dr.results.length ? plural(dr.results.length, 'place') : '');
+    if (dr.searchErr && typed) list.append(h('li', {}, h('button', { type: 'button', onclick: () => { set('place', { name: typed, admin: '', country: '', cc: '' }); drawWhere(); } }, `Use “${typed}” without looking it up`)));
+    // Put back only when coming back from a picked place: taking the box out of the page, even to put it straight
+    // back, takes the cursor out of it.
+    if (input.parentNode !== where) where.replaceChildren(input, status, list);
   };
   // A search that answers after a redraw shows on the form that's there now.
   dr.drawWhere = drawWhere;
@@ -509,7 +519,7 @@ function tripForm(t, again = false) {
     const q = input.value;
     dr.timer = setTimeout(() => {
       const ctl = dr.ctl = new AbortController();
-      W.searchPlaces(q, { signal: ctl.signal }).then(r => { dr.results = r; dr.searchErr = q.trim().length > 1 && !r.length ? 'No places by that name.' : ''; dr.drawWhere(); }, e => { if (e.name !== 'AbortError') { dr.results = []; dr.searchErr = e.message; dr.drawWhere(); } });
+      W.searchPlaces(q, { signal: ctl.signal }).then(r => { dr.results = r; dr.searchErr = q.trim().length > 1 && !r.length ? NO_PLACES : ''; dr.drawWhere(); }, e => { if (e.name !== 'AbortError') { dr.results = []; dr.searchErr = e.message; dr.drawWhere(); } });
     }, 300);
   });
   drawWhere();

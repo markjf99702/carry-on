@@ -341,8 +341,8 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await page.click('text=Start with a starter list');
   await page.click('text=Plan a trip');
   await page.fill('#where', 'Paris');
-  await page.waitForSelector('.results .err');
-  assert.match(await page.locator('.results').innerText(), /Couldn’t reach place search/);
+  await page.waitForSelector('.where-status.err');
+  assert.match(await page.locator('.where-status').innerText(), /Couldn’t reach place search/);
   await page.locator('.results button', { hasText: 'without looking it up' }).click();
   await page.fill('#start', await day(page, 1));
   await page.fill('#end', await day(page, 2));
@@ -356,6 +356,24 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   const names = await rowsText(page);
   assert.ok(names.includes('Warm coat') && names.includes('Passport'));
   assert.match(await row(page, 'Warm coat').innerText(), /You turned this on/);
+  await ctx.close();
+}
+
+// ================= Plan a trip: the place box =================
+{
+  const { ctx, page } = await phone();
+  await page.click('text=Start with a starter list');
+  await page.click('text=Plan a trip');
+  // Results arriving leave the cursor in the box, so typing carries on (and a phone's keyboard stays up).
+  await page.click('#where');
+  await page.keyboard.type('Li');
+  await page.waitForFunction(() => [...document.querySelectorAll('.results button')].some(b => b.textContent.startsWith('Lisbon')));
+  await page.keyboard.type('sbon');
+  assert.equal(await page.inputValue('#where'), 'Lisbon', 'typing carries on after the results come');
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'where', 'the cursor stays in the box');
+  assert.equal(await page.locator('[role=status]', { hasText: /^2 places$/ }).count(), 1, 'and what it found is said under the box');
+  await page.fill('#where', 'Lisbonx');
+  await until(async () => (await page.locator('.where-status').innerText()) === 'No places by that name.', 'no places');
   await ctx.close();
 }
 

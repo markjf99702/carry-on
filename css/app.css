@@ -324,7 +324,8 @@ ul.chips .chip small { font-weight: 500; color: var(--muted); font-size: 13px; }
 .results li + li { border-top: 1px solid var(--line); }
 .results button { display: block; width: 100%; padding: 11px 12px; border: 0; background: var(--paper); text-align: left; cursor: pointer; }
 @media (hover: hover) { .results button:hover { background: var(--chip); } }
-.results .err { padding: 10px 12px; }
+.where-status { margin: 4px 2px 0; }
+.where-status:empty { margin: 0; }
 .picked { display: flex; align-items: center; gap: 8px; min-height: 46px; padding: 4px 4px 4px 12px; border: 1.5px solid var(--ok); border-radius: 10px; background: var(--ok-soft); }
 .picked > span { flex: 1; min-width: 0; }
 
