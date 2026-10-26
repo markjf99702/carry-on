@@ -56,7 +56,11 @@
 }
 
 * { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
+/* The scrollbar's room is kept while a sheet holds the page still, so the page doesn't shift sideways under it. */
+html { -webkit-text-size-adjust: 100%; scrollbar-gutter: stable; }
+/* While a sheet is open the trip behind it holds still: a drag on the dimmed page, or one that carries on past the
+   end of the sheet's own scrolling, would otherwise scroll the page, and closing the sheet would land elsewhere. */
+html:has(#sheet[open]) { overflow: hidden; }
 body {
   margin: 0; min-height: 100vh; display: flex; flex-direction: column;
   background: var(--bg); color: var(--ink);
@@ -398,7 +402,7 @@ ul.chips .chip small { font-weight: 500; color: var(--muted); font-size: 13px; }
 /* Over a sheet, at the top of the screen, clear of the sheet's buttons. */
 .sheet .toast { top: calc(12px + env(safe-area-inset-top)); bottom: auto; }
 .sheet {
-  width: 100%; max-width: 520px; max-height: 92vh; max-height: 92dvh; margin: auto auto 0; padding: 0;
+  width: 100%; max-width: 520px; max-height: 92vh; max-height: 92dvh; margin: auto auto 0; padding: 0; overscroll-behavior: contain;
   border: 0; border-radius: 18px 18px 0 0;
   background: var(--paper); color: var(--ink);
   box-shadow: 0 -8px 30px rgba(0, 0, 0, .25);

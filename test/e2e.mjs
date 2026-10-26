@@ -35,8 +35,8 @@ const browser = await pw.chromium.launch();
 const problems = [];
 const ALLOWED = /^https:\/\/(geocoding-api|api|archive-api)\.open-meteo\.com\/|^https:\/\/(accounts\.google\.com|www\.googleapis\.com)\//;
 
-async function phone({ weather = {}, google = null, sw = 'block' } = {}) {
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, serviceWorkers: sw });
+async function phone({ weather = {}, google = null, sw = 'block', mobile = false } = {}) {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: mobile, serviceWorkers: sw });
   await openMeteo(ctx, weather);
   if (google) await google.install(ctx, { rewrite: { '**/js/sync.js': s => s.replace("['https://carry-on.junkdrawer.works']", `['https://carry-on.junkdrawer.works', '${origin}']`) } });
   const page = await ctx.newPage();
@@ -1157,6 +1157,46 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   assert.equal(await focused(), 'One more', 'the laundry + keeps the focus');
   await press(page.locator('.seg button', { hasText: '°C' }), 'Space');
   assert.equal(await focused(), '°C');
+  await ctx.close();
+}
+
+// ================= On a phone: sheets hold still =================
+{
+  const { ctx, page } = await phone({ mobile: true });
+  await page.click('text=Start with a starter list');
+  await planTrip(page, { where: 'Lisb', from: 3, to: 7 });
+  await page.waitForSelector('.wx-days li');
+  // A finger dragged up the screen, as Chrome on a phone gets it.
+  const cdp = await ctx.newCDPSession(page);
+  const drag = async (y0, y1) => {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 195, y: y0 }] });
+    for (let i = 1; i <= 12; i++) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 195, y: y0 + (y1 - y0) * i / 12 }] }); await wait(16); }
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await wait(300);
+  };
+  const y = () => page.evaluate(() => Math.round(scrollY));
+  await page.evaluate(() => scrollTo(0, 300));
+  await drag(780, 380);
+  assert.ok(await y() > 500, 'a drag on the page scrolls it');
+  // Dragging on past the end of a sheet's own scrolling, or on the dimmed page around it, leaves the trip where it
+  // was, so closing the sheet goes back to the same place.
+  await page.evaluate(() => scrollTo(0, 300));
+  await page.locator('.needs-head .btn').evaluate(b => b.click());
+  await until(() => sheetOpen(page), 'the conditions sheet');
+  let at = await y();
+  for (let i = 0; i < 4; i++) await drag(780, 380);
+  assert.ok(await page.evaluate(() => document.getElementById('sheet').scrollTop) > 0, 'the sheet scrolls');
+  await closeSheet(page);
+  assert.equal(await y(), at, 'the trip stays put behind the conditions sheet');
+  await page.evaluate(() => scrollTo(0, 1500));
+  await page.locator('main li.row .more').nth(8).evaluate(b => b.click());
+  await until(() => sheetOpen(page), 'a row’s sheet');
+  at = await y();
+  await drag(800, 600);
+  await drag(150, 450);
+  assert.ok(await sheetOpen(page), 'a drag on the dimmed page doesn’t close the sheet');
+  await closeSheet(page);
+  assert.equal(await y(), at, 'the trip stays put behind a row’s sheet');
   await ctx.close();
 }
 
