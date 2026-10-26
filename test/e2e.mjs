@@ -597,6 +597,45 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await ctx.close();
 }
 
+// ================= The last day: coming home =================
+{
+  const { ctx, page } = await phone();
+  await page.click('text=Start with a starter list');
+  await planTrip(page, { where: 'Chic', from: -2, to: 0, by: 'Driving' });
+  const tick = name => row(page, name).locator('.tick');
+  const said = () => page.locator('#toast span').innerText();
+  assert.equal(await page.locator('.seg.mode [aria-pressed="true"]').innerText(), 'Coming home');
+  // Nothing ticked going, so everything's listed: something bought there joins it.
+  const addHome = async (name, bag) => {
+    await page.click('text=Add something to bring home');
+    await until(() => sheetOpen(page), 'the sheet');
+    assert.equal(await page.locator('.sheet input[type=checkbox]').count(), 0, 'not a thing for every trip');
+    await page.fill('.sheet input[type="text"]', name);
+    await page.selectOption('.sheet select', { label: bag });
+    await page.click('.sheet .btn.primary');
+  };
+  await addHome('Souvenir mug', '🎒 Day bag');
+  assert.equal(await said(), 'Souvenir mug is in the Day bag, to bring home.');
+  assert.ok((await rowsText(page)).includes('Belt'), 'the rest still listed');
+  await tick('Souvenir mug').click();
+  assert.equal(await tick('Souvenir mug').getAttribute('aria-checked'), 'true');
+  await toastUndo(page);
+  assert.equal(await row(page, 'Souvenir mug').count(), 0, 'Undo takes it off');
+  // With things ticked going, coming home lists only those: something bought there is listed with them.
+  await page.click('text=Going');
+  for (const n of ['Belt', 'Shoes']) await tick(n).click();
+  await page.click('text=Coming home');
+  const things = () => page.locator('main .bag:not(.jobs) .name').allInnerTexts();
+  await addHome('Maple syrup', '👕 Clothes');
+  assert.deepEqual((await things()).sort(), ['Belt', 'Maple syrup', 'Shoes']);
+  await tick('Maple syrup').click();
+  assert.equal(await tick('Maple syrup').getAttribute('aria-checked'), 'true', 'and tickable');
+  await page.click('.crumb');
+  await page.waitForSelector('.tag-card');
+  assert.equal(await page.locator('.tag-card .when').innerText(), 'NOW · BACK TODAY');
+  await ctx.close();
+}
+
 // ================= A pasted list =================
 {
   const { ctx, page } = await phone();

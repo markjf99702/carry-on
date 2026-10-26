@@ -188,7 +188,7 @@ function tagCard(t) {
   const t0 = today(), n = D.nights(t.start, t.end);
   const p = R.progress(doc(), t), c = R.conditions(doc(), t);
   const now = t.start <= t0;
-  const when = now ? `Now · back ${D.weekday(t.end)}` : t.start === D.add(t0, 1) ? 'Tomorrow' : `In ${plural(D.num(t.start) - D.num(t0), 'day')}`;
+  const when = now ? `Now · back ${t.end === t0 ? 'today' : D.weekday(t.end)}` : t.start === D.add(t0, 1) ? 'Tomorrow' : `In ${plural(D.num(t.start) - D.num(t0), 'day')}`;
   const w = c.weather, pl = t.place;
   // Under the name: the place and, abroad, its country. A trip named after its place has just the country, or at
   // home the state or region, as the pass has.
@@ -319,7 +319,7 @@ function tripView(t) {
       ? h('p', { class: 'muted small hint' }, 'Nothing was ticked going, so this is everything that was on the list.') : null,
     M.hasList(doc()) ? null : h('p', { class: 'muted small hint' }, 'Your list is empty, so nothing from it is on this trip. ', h('a', { href: '#/' }, 'Start a list'), ' and it fills in.'),
     p.groups.map(g => bagCard(t, g, mode, hide, c.why)),
-    mode === 'go' && M.bags(doc()).some(b => b.kind === 'bag') ? h('button', { type: 'button', class: 'btn add-extra', onclick: () => extraSheet(t) }, h('span', { html: ICONS.plus }), 'Add something for this trip') : null,
+    M.bags(doc()).some(b => b.kind === 'bag') ? h('button', { type: 'button', class: 'btn add-extra', onclick: () => extraSheet(t, null, { home: mode === 'back' }) }, h('span', { html: ICONS.plus }), mode === 'go' ? 'Add something for this trip' : 'Add something to bring home') : null,
     p.tasks.map(g => bagCard(t, g, mode, hide, c.why, true)),
     p.left.length || p.leftBags.length ? leftOff(t, p.left, p.leftBags, mode) : null,
   ];
@@ -528,17 +528,20 @@ function bagSheet(t, g, mode) {
 
 // Something for this trip, in the bag it was asked for from (a bag's ⋯), or else the bag picked last time.
 let lastBag = '';
-function extraSheet(t, bagId) {
+// Coming home (home: true), it's something got on the trip: it goes in the bags now, so it counts as packed going,
+// which puts it on the list coming home. (When nothing was ticked going, coming home lists everything anyway, and
+// a tick going would hide all the rest.)
+function extraSheet(t, bagId, { home = false } = {}) {
   const bagsList = M.bags(doc()).filter(b => b.kind === 'bag');
   const first = [bagId, lastBag].find(id => bagsList.some(b => b.id === id)) || bagsList[0]?.id;
   let name, bag, keep;
-  sheet('Add something', close => {
+  sheet(home ? 'Bring something home' : 'Add something', close => {
     const save = () => {
       const n = name.value.trim();
       if (!n) { name.focus(); return; }
       close();
       lastBag = bag.value;
-      if (keep.checked) {
+      if (keep?.checked) {
         const g = guess(n);
         const id = M.newId('i');
         store.apply(d => M.putItem(d, { id, name: n, bag: bag.value, ...g }));
@@ -547,15 +550,16 @@ function extraSheet(t, bagId) {
         toast(`${n} is on your list now.`);
       } else {
         const id = M.newId('e'), b = doc().bags[bag.value];
-        store.apply(d => M.putExtra(d, t.id, { id, name: n, bag: b.id }));
-        toast(`${n} is in ${theBag(b)}, just for this trip.`, { label: 'Undo', run: () => apply(d => M.removeExtra(d, t.id, id)) });
+        const ticked = home && Object.entries(doc().trips[t.id]?.marks || {}).some(([k, m]) => k.startsWith('p:') && m.v === 1);
+        store.apply(d => { const next = M.putExtra(d, t.id, { id, name: n, bag: b.id }); return ticked ? M.mark(next, t.id, 'p:' + id, 1) : next; });
+        toast(`${n} is in ${theBag(b)}, ${home ? 'to bring home' : 'just for this trip'}.`, { label: 'Undo', run: () => apply(d => { const next = M.removeExtra(d, t.id, id); return ticked ? M.mark(next, t.id, 'p:' + id, 0) : next; }) });
       }
       render();
     };
     return [
-      h('label', { class: 'field' }, h('span', {}, 'What is it?'), name = h('input', { type: 'text', autofocus: true, maxlength: 80, placeholder: 'A gift for the hosts', autocomplete: 'off' })),
+      h('label', { class: 'field' }, h('span', {}, 'What is it?'), name = h('input', { type: 'text', autofocus: true, maxlength: 80, placeholder: home ? 'Something you got there' : 'A gift for the hosts', autocomplete: 'off' })),
       h('label', { class: 'field' }, h('span', {}, 'Which bag?'), bag = h('select', {}, bagsList.map(b => h('option', { value: b.id, selected: b.id === first }, `${b.icon} ${b.name}`)))),
-      h('label', { class: 'check' }, keep = h('input', { type: 'checkbox' }), h('span', {}, 'Put it on my list for every trip')),
+      home ? null : h('label', { class: 'check' }, keep = h('input', { type: 'checkbox' }), h('span', {}, 'Put it on my list for every trip')),
       h('div', { class: 'sheet-actions' }, h('button', { type: 'button', class: 'btn primary', onclick: save }, 'Add it')),
     ];
   });
