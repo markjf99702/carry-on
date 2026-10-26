@@ -74,6 +74,36 @@ export function archiveUrl(p, start, end) {
   })}`;
 }
 
+// Typical weather for some days (in order): the same dates in each of the last three years, averaged. Each year
+// is read by its own dates, so 29 February, which most years don't have, reads 1 March. A year that fails adds
+// its error to errors, and the days are made from the others.
+async function typical(place, keys, today, signal, errors) {
+  // The archive runs about a week behind, so only years whose dates are already in it.
+  const years = YEARS.filter(n => yearsBack(keys.at(-1), n) <= add(today, -7));
+  const got = await Promise.allSettled(years.map(n => reach(archiveUrl(place, yearsBack(keys[0], n), yearsBack(keys.at(-1), n)), signal, 'the weather history service')));
+  const sets = [];
+  got.forEach((g, i) => {
+    if (g.status === 'rejected') { errors.push(g.reason); return; }
+    const s = g.value.daily || {};
+    sets.push({ n: years[i], s, row: new Map((s.time || []).map((k, j) => [k, j])) });
+  });
+  const out = {};
+  for (const k of keys) {
+    const rows = sets.map(({ n, s, row }) => {
+      const j = row.get(yearsBack(k, n));
+      return j === undefined ? null : { hi: s.temperature_2m_max?.[j], lo: s.temperature_2m_min?.[j], mm: s.precipitation_sum?.[j], rain: s.rain_sum?.[j], sn: s.snowfall_sum?.[j], rad: s.shortwave_radiation_sum?.[j] };
+    }).filter(r => r && r.hi != null && r.lo != null);
+    if (!rows.length) continue;
+    const mean = f => rows.reduce((a, r) => a + (r[f] ?? 0), 0) / rows.length;
+    out[k] = {
+      d: k, typ: 1, hi: mean('hi'), lo: mean('lo'), mm: mean('mm'), rad: mean('rad'),
+      wet: rows.filter(r => rainOf({ mm: r.mm, snow: r.sn, rain: r.rain }) >= 1).length / rows.length,
+      sn: rows.filter(r => (r.sn ?? 0) >= 0.5).length / rows.length,
+    };
+  }
+  return out;
+}
+
 // The weather for each day of a trip: the forecast for the days it reaches, and for the rest the average of
 // the same days in the last three years. Days long gone get nothing (a past trip keeps what it had).
 export async function tripWeather(place, start, end, today, { signal, now = Date.now() } = {}) {
@@ -98,24 +128,7 @@ export async function tripWeather(place, start, end, today, { signal, now = Date
       });
     }).catch(e => { errors.push(e); }));
   }
-  if (ty.length) {
-    // The archive runs about a week behind, so only years whose dates are already in it.
-    const years = YEARS.filter(n => yearsBack(ty.at(-1), n) <= add(today, -7));
-    const got = await Promise.allSettled(years.map(n => reach(archiveUrl(place, yearsBack(ty[0], n), yearsBack(ty.at(-1), n)), signal, 'the weather history service')));
-    const sets = got.filter(g => g.status === 'fulfilled').map(g => g.value.daily || {});
-    got.forEach(g => { if (g.status === 'rejected') errors.push(g.reason); });
-    ty.forEach((k, i) => {
-      const rows = sets.map(s => ({ hi: s.temperature_2m_max?.[i], lo: s.temperature_2m_min?.[i], mm: s.precipitation_sum?.[i], rain: s.rain_sum?.[i], sn: s.snowfall_sum?.[i], rad: s.shortwave_radiation_sum?.[i] }))
-        .filter(r => r.hi != null && r.lo != null);
-      if (!rows.length) return;
-      const mean = f => rows.reduce((a, r) => a + (r[f] ?? 0), 0) / rows.length;
-      out[k] = {
-        d: k, typ: 1, hi: mean('hi'), lo: mean('lo'), mm: mean('mm'), rad: mean('rad'),
-        wet: rows.filter(r => rainOf({ mm: r.mm, snow: r.sn, rain: r.rain }) >= 1).length / rows.length,
-        sn: rows.filter(r => (r.sn ?? 0) >= 0.5).length / rows.length,
-      };
-    });
-  }
+  if (ty.length) Object.assign(out, await typical(place, ty, today, signal, errors));
   await Promise.all(jobs);
   const list = days.map(k => out[k]).filter(Boolean);
   if (signal?.aborted) throw new DOMException('Stopped', 'AbortError');

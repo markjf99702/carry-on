@@ -192,6 +192,24 @@ test('a forecast east of UTC after local midnight asks only for the days Open-Me
   assert.equal(stale(wx, '2026-11-10', '2026-11-11', today, now + 3600e3), false);
 });
 
+test('typical weather lines each past year up by its own dates, 29 February too', async () => {
+  // Each past day's high is its day of the month, and its low its month, so a day read from the wrong row shows.
+  const byDate = () => ({ daily: { temperature_2m_max: d => +d.slice(8), temperature_2m_min: d => +d.slice(5, 7) } });
+  // A trip over 29 February 2028: the years before have no such day, so it takes 1 March, and 2 March is still there.
+  let now = Date.parse('2027-12-01T12:00:00Z'), stub = weatherStub(now, byDate);
+  try {
+    const wx = await tripWeather(PLACE, '2028-02-27', '2028-03-02', '2027-12-01', { now });
+    assert.deepEqual(wx.days.map(d => [d.d, d.hi, d.lo]), [['2028-02-27', 27, 2], ['2028-02-28', 28, 2], ['2028-02-29', 1, 3], ['2028-03-01', 1, 3], ['2028-03-02', 2, 3]]);
+  } finally { stub.restore(); }
+  // A 2027 trip over the end of February: three years back is 2024, whose 29 February isn't 1 March.
+  now = Date.parse('2026-12-01T12:00:00Z'); stub = weatherStub(now, byDate);
+  try {
+    const wx = await tripWeather(PLACE, '2027-02-26', '2027-03-03', '2026-12-01', { now });
+    assert.ok(stub.calls.includes('archive 2024-02-26 2024-03-03'), stub.calls.join(', '));
+    assert.deepEqual(wx.days.map(d => [d.d, d.hi, d.lo]), [['2027-02-26', 26, 2], ['2027-02-27', 27, 2], ['2027-02-28', 28, 2], ['2027-03-01', 1, 3], ['2027-03-02', 2, 3], ['2027-03-03', 3, 3]]);
+  } finally { stub.restore(); }
+});
+
 test('Open-Meteo’s out-of-range answer reads as plain words', async () => {
   const now = Date.parse('2026-10-26T20:00:00Z');
   const stub = weatherStub(now, kind => (kind === 'forecast' ? { status: 400, reason: "Parameter 'end_date' is out of allowed range from 2026-07-25 to 2026-11-10" } : {}));
