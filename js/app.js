@@ -610,7 +610,7 @@ function tripForm(t, again = false) {
   if (draft?.key !== key) draft = { key, results: [], searchErr: '', typed: '', err: '' };
   const dr = draft;
   const st = {
-    place: t?.place || null, start: editing ? t.start : '', end: editing ? t.end : '', travel: t?.travel || 'fly', name: editing ? t.name : '',
+    place: t?.place || null, start: editing ? t.start : '', end: editing ? t.end : '', travel: t?.travel || 'fly', name: t?.name || '',
     tags: new Set(Object.entries(t?.set || {}).filter(([k, m]) => m.v === true && doc().tags[k]).map(([k]) => k)),
   };
   for (const k of Object.keys(st)) if (k in dr) st[k] = dr[k];

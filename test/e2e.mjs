@@ -437,6 +437,16 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await until(async () => (await heading()) === 'LAKE WEEKEND', 'the trip, saved');
   await back();
   assert.equal(await heading(), 'TRIPS', 'Back after Save goes to Trips');
+  // Go again starts with the trip's name, and Back from the new trip doesn't reopen the form either.
+  await page.goto(base + '#/again/' + id);
+  assert.equal(await heading(), 'LAKE WEEKEND AGAIN');
+  assert.equal(await page.inputValue('#name'), 'Lake weekend');
+  await page.fill('#start', await day(page, 10));
+  await page.fill('#end', await day(page, 11));
+  await page.click('button:text-is("Make my list")');
+  await page.waitForSelector('.pass h1');
+  await back();
+  assert.equal(await heading(), 'TRIPS', 'Back from Go again’s new trip');
   // Edit's own way back does the same.
   await page.click('.tag-card');
   await page.click('[aria-label="Edit this trip"]');
