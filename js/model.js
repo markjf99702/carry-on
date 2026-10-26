@@ -15,7 +15,8 @@
 //   marks   'p:ID' packed (1), 'r:ID' back in the bag coming home (1) or not coming back (2), 'x:ID' 'skip' or
 //           'add' for this trip only, 'b:ID' the bag it goes in this trip → { v, t }
 //   extras  things added for this trip only: { id: { name, bag, t, del? } }
-//   wx      the weather looked up for it (weather.js), the newest lookup wins
+//   wx      the weather looked up for it (weather.js), the newest lookup wins. for: the place it was looked up
+//           for, so a lookup of a trip's old place, landing from another device, doesn't count for the new one
 //
 // t is when a record last changed, del when it was deleted. A deleted record keeps its details, so a deletion
 // on one device reaches the others instead of the record coming back from their copy. Starter records have
@@ -117,10 +118,12 @@ function cleanDay(d) {
   }
   return out;
 }
+// for: the place it was looked up for, "lat,lon" (weather.js placeKey).
 export function cleanWx(w) {
   if (!w || typeof w !== 'object' || !Array.isArray(w.days)) return null;
   const days = w.days.map(cleanDay).filter(Boolean).slice(0, 120);
-  return { at: tOk(w.at), days, ...(w.err ? { err: str(w.err, 140) } : {}) };
+  const where = typeof w.for === 'string' && w.for.length <= 30 && /^-?\d+(\.\d+)?,-?\d+(\.\d+)?$/.test(w.for) ? w.for : '';
+  return { at: tOk(w.at), ...(where ? { for: where } : {}), days, ...(w.err ? { err: str(w.err, 140) } : {}) };
 }
 
 const cleanMark = m => {

@@ -145,22 +145,29 @@ export async function tripWeather(place, start, end, today, { signal, now = Date
   if (signal?.aborted) throw new DOMException('Stopped', 'AbortError');
   const list = days.map(k => out[k]).filter(Boolean);
   if (!list.length) throw fcErr || errors[0] || new Error('No weather came back for those days.');
-  const wx = { at: now, days: list };
+  const wx = { at: now, for: placeKey(place), days: list };
   const err = days.some(k => k >= first && !out[k]) ? SHORT.missing : fcErr ? SHORT.forecast : gaps.length ? SHORT.gaps : errors.length ? SHORT.years : '';
   if (err) wx.err = err;
   return wx;
 }
 
+// The place a lookup was for, as "lat,lon" the way a trip keeps them (model.js cleanPlace, to 4 decimals), and ''
+// for a place that wasn't looked up (typed by hand).
+const r4 = x => Math.round(x * 1e4) / 1e4;
+export const placeKey = p => (typeof p?.lat === 'number' && typeof p?.lon === 'number' ? `${r4(p.lat)},${r4(p.lon)}` : '');
+// Whether saved weather is for the trip's place. A lookup saved before lookups said where they were for counts.
+const forPlace = (wx, place) => !wx?.for || wx.for === placeKey(place);
+
 // The saved days that belong to a trip. A lookup from before its place or dates changed can come back from
-// another device's copy, with days that aren't the trip's.
-export const tripDays = (wx, start, end) => (wx?.days || []).filter(d => d.d >= start && d.d <= end);
+// another device's copy, with days that aren't the trip's: another place's days don't count at all.
+export const tripDays = (wx, start, end, place) => (forPlace(wx, place) ? (wx?.days || []).filter(d => d.d >= start && d.d <= end) : []);
 
 // Old enough to look up again: a forecast after three hours. Typical weather doesn't change, so only once the
 // forecast reaches it (or after a week). A lookup that didn't all come back, after half an hour, and one that
-// isn't for these days (the dates changed) at once.
-export function stale(wx, start, end, today, now = Date.now()) {
+// isn't for these days (the dates changed) or this place, at once.
+export function stale(wx, start, end, today, now = Date.now(), place) {
   if (end < add(today, -1)) return false;
-  if (!wx || !wx.days.length) return true;
+  if (!wx || !wx.days.length || !forPlace(wx, place)) return true;
   if (wx.err) return now - wx.at > 30 * 60e3;
   const have = new Set(wx.days.map(d => d.d)), first = add(today, -60);
   if (range(start > first ? start : first, end).some(k => !have.has(k))) return true;

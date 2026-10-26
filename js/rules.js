@@ -80,7 +80,7 @@ export function conditions(doc, trip) {
     if (p) why.plug = plugText(p) + (p.voltsDiffer ? ' · check anything that heats up' : '');
     if (p && !p.need) no.plug = 'Your plugs fit there';
   }
-  const w = summarize({ days: tripDays(trip.wx, trip.start, trip.end) });
+  const w = summarize({ days: tripDays(trip.wx, trip.start, trip.end, place) });
   if (w) {
     for (const k of ['hot', 'cool', 'cold', 'rain', 'snow', 'sun']) auto[k] = w[k];
     // Each in the words of the rule that brought it (weather.js summarize).

@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as M from '../js/model.js';
 import { plan, conditions, qtyOf, units, grown, whyNot, passes, whenWords } from '../js/rules.js';
-import { summarize, stale, tripWeather, forecastEdge, dayIcon, dayWords } from '../js/weather.js';
+import { summarize, stale, tripWeather, tripDays, placeKey, forecastEdge, dayIcon, dayWords } from '../js/weather.js';
 import { plugsFor, plugText, localCountry } from '../js/plugs.js';
 import { parsePaste, encodeList, decodeList, guess, bagIcon, bagKind } from '../js/share.js';
 import { starterList } from '../js/starter.js';
@@ -303,8 +303,8 @@ test('a lookup that half fails says so, fills its gaps with typical weather, and
     assert.equal(wx.err, 'Couldn’t get the forecast, so these days show typical weather.');
     assert.ok(stub.calls.includes('archive 2025-11-12 2025-11-17') && stub.calls.includes('archive 2025-11-18 2025-11-22'), stub.calls.join(', '));
     assert.equal(M.cleanWx(wx).err, wx.err, 'the saved copy keeps the note');
-    assert.equal(stale(wx, '2026-11-12', '2026-11-22', today, now + 60e3), false, 'not straight away');
-    assert.equal(stale(wx, '2026-11-12', '2026-11-22', today, now + soon), true, 'but after half an hour');
+    assert.equal(stale(wx, '2026-11-12', '2026-11-22', today, now + 60e3, PLACE), false, 'not straight away');
+    assert.equal(stale(wx, '2026-11-12', '2026-11-22', today, now + soon, PLACE), true, 'but after half an hour');
   } finally { stub.restore(); }
   // One past year fails: the days come from the other two, and it says so.
   stub = weatherStub(now, (kind, u) => (u.searchParams.get('start_date').startsWith('2024') ? { status: 500, reason: 'Oops' } : { daily: { temperature_2m_max: () => (u.searchParams.get('start_date').startsWith('2025') ? 10 : 20) } }));
@@ -312,7 +312,7 @@ test('a lookup that half fails says so, fills its gaps with typical weather, and
     const wx = await tripWeather(PLACE, '2026-12-20', '2026-12-22', today, { now });
     assert.deepEqual(wx.days.map(d => [d.d, d.hi]), [['2026-12-20', 15], ['2026-12-21', 15], ['2026-12-22', 15]]);
     assert.equal(wx.err, 'Couldn’t get every past year, so typical weather comes from fewer of them.');
-    assert.equal(stale(wx, '2026-12-20', '2026-12-22', today, now + soon), true);
+    assert.equal(stale(wx, '2026-12-20', '2026-12-22', today, now + soon, PLACE), true);
   } finally { stub.restore(); }
   // A forecast day with no temperatures: typical weather stands in for it.
   stub = weatherStub(now, kind => (kind === 'forecast' ? { daily: { temperature_2m_max: d => (d === '2026-11-05' ? null : 20) } } : {}));
@@ -339,7 +339,7 @@ test('a lookup that half fails says so, fills its gaps with typical weather, and
   try {
     const wx = await tripWeather(PLACE, '2026-11-12', '2026-11-22', today, { now });
     assert.equal(wx.err, undefined);
-    assert.equal(stale(wx, '2026-11-12', '2026-11-22', today, now + soon), false);
+    assert.equal(stale(wx, '2026-11-12', '2026-11-22', today, now + soon, PLACE), false);
   } finally { stub.restore(); }
 });
 
@@ -534,6 +534,57 @@ test('a trip whose place or dates change loses its old weather on every device',
   const wider = M.putTrip(other, { id: 't1', start: '2026-12-21', end: '2026-12-23' });
   assert.equal(stale(wider.trips.t1.wx, '2026-12-21', '2026-12-23', today, now), false);
   assert.equal(conditions(wider, wider.trips.t1).weather.minLo, 11);
+});
+
+test('another phone’s lookup of a trip’s old place doesn’t count for its new one', async () => {
+  const lisbon = { name: 'Lisbon', cc: 'PT', country: 'Portugal', lat: 38.7167, lon: -9.1333 };
+  const porto = { name: 'Porto', cc: 'PT', country: 'Portugal', lat: 41.1496, lon: -8.611 };
+  const today = '2026-11-02';
+  const lookup = place => ({ at: Date.now(), for: placeKey(place), days: range('2026-11-10', '2026-11-13').map(d => ({ d, hi: 32, lo: 22, mm: 0, pop: 0, uv: 9, code: 0 })) });
+  let a = M.setPref(starter(), 'home', 'US');
+  a = M.putTrip(a, { id: 't1', place: lisbon, start: '2026-11-10', end: '2026-11-13', travel: 'fly' });
+  a = M.setWx(a, 't1', lookup(lisbon));
+  assert.equal(a.trips.t1.wx.for, '38.7167,-9.1333');
+  assert.equal(conditions(a, a.trips.t1).on.hot, true);
+  let b = a; // phone B, synced
+  later();
+  a = M.clearWx(M.putTrip(a, { id: 't1', place: porto }), 't1'); // phone A changes the place to Porto
+  later();
+  b = M.setWx(b, 't1', lookup(lisbon)); // phone B, still on Lisbon, looks it up again before its sync lands
+  for (const m of [M.mergeDocs(a, b), M.mergeDocs(b, a)]) {
+    const t = m.trips.t1;
+    assert.equal(t.place.name, 'Porto');
+    assert.equal(t.wx.for, '38.7167,-9.1333', 'the newest lookup was Lisbon’s');
+    assert.deepEqual(tripDays(t.wx, t.start, t.end, t.place), [], 'none of Lisbon’s days');
+    assert.equal(conditions(m, t).weather, null);
+    assert.ok(!conditions(m, t).on.hot && !conditions(m, t).on.sun, 'no Lisbon reasons');
+    assert.equal(stale(t.wx, t.start, t.end, today, Date.now(), t.place), true, 'so Porto is looked up at once');
+    assert.equal(M.cleanTrip(t).wx.for, '38.7167,-9.1333', 'and where it was for is kept when saved');
+  }
+  // A place typed by hand in place of a looked-up one has no coordinates: no lookup is for it.
+  const typed = M.putTrip(b, { id: 't1', place: { name: 'The cabin' } });
+  assert.equal(typed.trips.t1.wx.days.length, 4);
+  assert.deepEqual(tripDays(typed.trips.t1.wx, '2026-11-10', '2026-11-13', typed.trips.t1.place), []);
+  assert.equal(conditions(typed, typed.trips.t1).weather, null);
+  assert.equal(stale(typed.trips.t1.wx, '2026-11-10', '2026-11-13', today, Date.now(), typed.trips.t1.place), true);
+  // Weather saved before lookups said where they were for still counts.
+  const old = M.setWx(b, 't1', { ...lookup(lisbon), for: undefined });
+  assert.equal(old.trips.t1.wx.for, undefined);
+  assert.equal(conditions(old, old.trips.t1).on.hot, true);
+  assert.equal(stale(old.trips.t1.wx, '2026-11-10', '2026-11-13', today, Date.now(), lisbon), false);
+  // The place key reads the coordinates as a trip keeps them, and junk in a saved one goes.
+  assert.equal(placeKey({ lat: 38.7, lon: -9.1 }), '38.7,-9.1');
+  assert.equal(placeKey({ lat: 38.71674, lon: -9.13333 }), '38.7167,-9.1333');
+  assert.equal(placeKey(M.cleanPlace({ name: 'X', lat: 38.716749, lon: -9.133349 })), placeKey({ lat: 38.716749, lon: -9.133349 }));
+  assert.equal(placeKey({ name: 'The cabin' }), '');
+  for (const junk of ['Lisbon', '1,2,3', '1e5,2', 7, '1'.repeat(40) + ',2']) assert.equal(M.cleanWx({ ...lookup(lisbon), for: junk }).for, undefined, String(junk));
+  // A lookup says which place it was for.
+  const now = Date.parse('2026-11-02T12:00:00Z'), stub = weatherStub(now);
+  try {
+    const wx = await tripWeather(lisbon, '2026-11-10', '2026-11-11', today, { now });
+    assert.equal(wx.for, '38.7167,-9.1333');
+    assert.equal(stale(wx, '2026-11-10', '2026-11-11', today, now, M.cleanPlace(lisbon)), false);
+  } finally { stub.restore(); }
 });
 
 test('a first merge keeps everything, but untouched starter things give way to a real list', () => {

@@ -237,7 +237,7 @@ function tagCard(t) {
     h('h2', {}, title(t)),
     where ? h('span', { class: 'where' }, where) : null,
     h('span', { class: 'dates' }, `${D.span(t.start, t.end, t0.slice(0, 4))} · ${n ? plural(n, 'night') : 'day trip'} · ${R.CONDITIONS.find(x => x.k === t.travel).icon}`),
-    w ? h('span', { class: 'glance' }, `${W.dayIcon(W.tripDays(t.wx, t.start, t.end)[0])} ${W.temp(w.minLo, c.units)}–${W.temp(w.maxHi, c.units)}${w.rain ? ' · rain' + (w.rainDays.length ? ' likely' : ' some days') : ''}${w.snow ? ' · snow' : ''}`) : null,
+    w ? h('span', { class: 'glance' }, `${W.dayIcon(W.tripDays(t.wx, t.start, t.end, t.place)[0])} ${W.temp(w.minLo, c.units)}–${W.temp(w.maxHi, c.units)}${w.rain ? ' · rain' + (w.rainDays.length ? ' likely' : ' some days') : ''}${w.snow ? ' · snow' : ''}`) : null,
     h('span', { class: 'meter', 'aria-hidden': 'true' }, h('i', { style: { width: (p.total ? (100 * p.done / p.total) : 0) + '%' } })),
     h('span', { class: 'packed' }, p.done === p.total && p.total ? 'All packed' : `${p.done} of ${p.total} packed`));
 }
@@ -247,7 +247,7 @@ function tagCard(t) {
 const wxBusy = {}, wxErr = {}, wxTried = {};
 function maybeWeather(t, force = false) {
   if (!t.place || t.place.lat === undefined || wxBusy[t.id]) return;
-  if (!force && !W.stale(t.wx, t.start, t.end, today())) return;
+  if (!force && !W.stale(t.wx, t.start, t.end, today(), undefined, t.place)) return;
   if (!force && Date.now() - (wxTried[t.id] || 0) < 60000) return;
   wxTried[t.id] = Date.now();
   wxBusy[t.id] = W.tripWeather(t.place, t.start, t.end, today()).then(wx => {
@@ -282,7 +282,7 @@ function weatherStrip(t, c) {
   if (t.place.lat === undefined) {
     return h('section', { class: 'wx none' }, h('p', { class: 'muted small' }, 'No weather for this trip: its place wasn’t looked up. Set the weather by hand under ', h('b', {}, 'Change'), ', or pick the place again in ', h('a', { href: `#/edit/${t.id}` }, 'Edit'), '.'));
   }
-  const days = W.tripDays(t.wx, t.start, t.end);
+  const days = W.tripDays(t.wx, t.start, t.end, t.place);
   const fc = days.some(d => !d.typ), ty = days.some(d => d.typ);
   const label = !days.length ? 'Weather' : fc && ty ? 'Forecast, then typical' : fc ? 'Forecast' : 'Typical weather';
   const u = c.units;
@@ -317,7 +317,7 @@ function weatherStrip(t, c) {
       h('span', { class: 'hi', 'aria-hidden': 'true' }, W.temp(d.hi, u)),
       h('span', { class: 'lo', 'aria-hidden': 'true' }, W.temp(d.lo, u)),
       h('span', { class: 'rp', 'aria-hidden': 'true' }, d.typ ? (d.wet >= 0.3 ? `${Math.round(d.wet * 100)}%` : '') : (d.pop >= 30 ? `${d.pop}%` : ''))))) : null,
-    t.wx?.err ? h('p', { class: 'muted small' }, t.wx.err) : null,
+    days.length && t.wx.err ? h('p', { class: 'muted small' }, t.wx.err) : null,
     typNote || pct ? h('p', { class: 'muted small' }, [typNote, pct].filter(Boolean).join(' ')) : null);
 }
 
