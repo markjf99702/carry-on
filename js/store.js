@@ -58,9 +58,8 @@ export const store = {
   backup() { fresh(); return JSON.stringify({ ...M.cleanDoc(doc), saved: new Date().toISOString() }, null, 1); },
   // Merges a backup in, record by record, so nothing here is lost. Returns how many of each it brought back or
   // changed: { things, jobs, bags, lists (of jobs), occasions, trips }.
-  restoreBackup(text) {
-    let raw;
-    try { raw = JSON.parse(text); } catch { raw = null; }
+  restoreBackup(json) {
+    const raw = parse(json);
     if (raw?.app !== M.APP || typeof raw.bags !== 'object') throw new Error('That file isn’t a Carry On backup.');
     const incoming = M.cleanDoc(raw);
     fresh();
