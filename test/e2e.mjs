@@ -1012,6 +1012,34 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await page.press('.sheet input[type=text] >> nth=0', 'Enter');
   await until(async () => !(await sheetOpen(page)), 'Enter to save and close the bag editor', 2000);
   assert.ok((await page.locator('.bag.edit h2').allInnerTexts()).includes('DAY PACK'));
+
+  // Arrow keys on the bag picker go through the bags without closing the sheet, each move saying where it is now.
+  // Escape closes it, and the toast's Undo puts it back where it was.
+  await page.goto(base + '#/');
+  await planTrip(page, { where: 'Chic', from: 2, to: 4, by: 'Driving' });
+  const said = () => page.locator('#toast span').innerText();
+  await more(page, 'Floss');
+  await page.focus('.sheet select');
+  await page.keyboard.press('ArrowDown');
+  await wait(300);
+  assert.ok(await sheetOpen(page), 'the sheet stays open after an arrow key');
+  assert.equal(await page.evaluate(() => document.activeElement.tagName), 'SELECT', 'with the focus on the picker');
+  assert.equal(await page.locator('.sheet .moved').innerText(), 'Floss goes in Electronics this trip.');
+  assert.match(await page.locator('main .bag', { hasText: 'Electronics' }).innerText(), /Floss/);
+  await page.keyboard.press('ArrowDown');
+  assert.equal(await page.locator('.sheet .moved').innerText(), 'Floss goes in Documents and money this trip.');
+  await page.keyboard.press('Escape');
+  await until(async () => !(await sheetOpen(page)), 'Escape to close the sheet');
+  await until(async () => (await said()) === 'Floss goes in Documents and money this trip.', 'the toast for the move');
+  await toastUndo(page);
+  assert.match(await page.locator('main .bag', { hasText: 'Toiletries bag' }).innerText(), /Floss/, 'Undo puts it back');
+  // Enter closes it too.
+  await more(page, 'Floss');
+  await page.focus('.sheet select');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await until(async () => !(await sheetOpen(page)), 'Enter to close the sheet');
+  assert.match(await page.locator('main .bag', { hasText: 'Electronics' }).innerText(), /Floss/);
   await ctx.close();
 }
 

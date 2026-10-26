@@ -468,33 +468,58 @@ function leftOff(t, left, leftBags, mode) {
 function itemSheet(t, r, mode, jobs) {
   const id = r.id;
   const pick = t.marks?.['x:' + id]?.v;
+  // The bag it was in when the sheet opened, and the one arrow keys have moved it to since.
+  const was = t.marks?.['b:' + id]?.v;
+  let movedTo = null;
+  const goesIn = to => toast(`${r.name} goes in ${theBag(to)} this trip.`, { label: 'Undo', run: () => apply(d => M.mark(d, t.id, 'b:' + id, was || 0)) });
   sheet(r.name, close => {
+    // Each button here says what it did, so a move made with the keys first goes unsaid.
+    const done = () => { movedTo = null; close(); };
     if (mode === 'back') {
       const gone = t.marks?.[r.key]?.v === 2;
       return [
         h('p', { class: 'muted' }, 'Used up, given away, or staying on purpose? Count it as done.'),
         h('div', { class: 'stack' },
-          h('button', { type: 'button', class: 'btn', onclick: () => { close(); apply(d => M.mark(d, t.id, r.key, gone ? 0 : 2)); } }, gone ? 'It’s coming back after all' : 'Not bringing it back'))];
+          h('button', { type: 'button', class: 'btn', onclick: () => { done(); apply(d => M.mark(d, t.id, r.key, gone ? 0 : 2)); } }, gone ? 'It’s coming back after all' : 'Not bringing it back'))];
     }
     const bagsList = M.bags(doc()).filter(b => b.kind === 'bag');
     const cur = t.marks?.['b:' + id]?.v || (r.extra ? t.extras[id].bag : doc().items[id]?.bag);
+    // Arrow keys and letters change a closed picker's bag without opening it (Chrome on Windows and Linux, screen
+    // readers), a bag a key. A change that follows a key moves it and says so here, and the sheet stays open to look
+    // further; Enter or Escape closes it, and the toast says where it went. A change from the picker itself closes it.
+    let keyed = false;
+    const moved = h('p', { class: 'small moved', role: 'status' });
     return [
       h('div', { class: 'stack' },
         r.extra
-          ? h('button', { type: 'button', class: 'btn', onclick: () => { close(); apply(d => M.removeExtra(d, t.id, id)); toast(`${r.name} is off this trip.`, { label: 'Undo', run: () => apply(d => M.putExtra(d, t.id, { id: `${id}`, name: r.name, bag: cur })) }); } }, 'Take it off this trip')
-          : h('button', { type: 'button', class: 'btn', onclick: () => { close(); apply(d => M.mark(d, t.id, 'x:' + id, 'skip')); toast(`${r.name} is off this trip.`, { label: 'Undo', run: () => apply(d => M.mark(d, t.id, 'x:' + id, pick || 0)) }); } }, 'Leave it off this trip'),
+          ? h('button', { type: 'button', class: 'btn', onclick: () => { done(); apply(d => M.removeExtra(d, t.id, id)); toast(`${r.name} is off this trip.`, { label: 'Undo', run: () => apply(d => M.putExtra(d, t.id, { id: `${id}`, name: r.name, bag: cur })) }); } }, 'Take it off this trip')
+          : h('button', { type: 'button', class: 'btn', onclick: () => { done(); apply(d => M.mark(d, t.id, 'x:' + id, 'skip')); toast(`${r.name} is off this trip.`, { label: 'Undo', run: () => apply(d => M.mark(d, t.id, 'x:' + id, pick || 0)) }); } }, 'Leave it off this trip'),
         jobs ? null : h('label', { class: 'field' }, h('span', {}, 'Which bag, this trip'),
-          h('select', { onchange: e => {
-            close();
-            const was = t.marks?.['b:' + id]?.v, to = doc().bags[e.target.value];
-            apply(d => M.mark(d, t.id, 'b:' + id, to.id));
-            toast(`${r.name} goes in ${theBag(to)} this trip.`, { label: 'Undo', run: () => apply(d => M.mark(d, t.id, 'b:' + id, was || 0)) });
-          } },
+          h('select', {
+            onpointerdown: () => { keyed = false; },
+            onkeydown: e => {
+              if (e.key === 'Enter') { e.preventDefault(); close(); return; }
+              if (!e.ctrlKey && !e.metaKey && !e.altKey && (e.key.length === 1 || /^(Arrow|Home$|End$|Page)/.test(e.key))) keyed = true;
+            },
+            onchange: e => {
+              const to = doc().bags[e.target.value];
+              if (keyed) {
+                movedTo = to;
+                store.apply(d => M.mark(d, t.id, 'b:' + id, to.id));
+                render();
+                moved.textContent = `${r.name} goes in ${theBag(to)} this trip.`;
+                return;
+              }
+              done();
+              apply(d => M.mark(d, t.id, 'b:' + id, to.id));
+              goesIn(to);
+            } },
             bagsList.map(b => h('option', { value: b.id, selected: b.id === cur }, `${b.icon} ${b.name}`)))),
-        r.extra ? h('button', { type: 'button', class: 'btn', onclick: () => { close(); toList(t, r, cur); } }, 'Add it to my list for every trip')
-          : h('button', { type: 'button', class: 'btn', onclick: () => { close(); itemEditor(doc().items[id]); } }, 'Change it in my list')),
+        jobs ? null : moved,
+        r.extra ? h('button', { type: 'button', class: 'btn', onclick: () => { done(); toList(t, r, cur); } }, 'Add it to my list for every trip')
+          : h('button', { type: 'button', class: 'btn', onclick: () => { done(); itemEditor(doc().items[id]); } }, 'Change it in my list')),
     ];
-  });
+  }, { done: () => { if (movedTo && movedTo.id !== (was || (r.extra ? t.extras[id].bag : doc().items[id]?.bag))) goesIn(movedTo); } });
 }
 
 // Something added just for this trip goes on the list for every trip. It becomes a new thing, so its tick and its

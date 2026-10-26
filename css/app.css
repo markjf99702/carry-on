@@ -390,6 +390,9 @@ ul.chips .chip small { font-weight: 500; color: var(--muted); font-size: 13px; }
 .sheet-actions .btn.primary { min-width: 120px; }
 .sheet h3:first-of-type { margin-top: 0; }
 .sheet .field { margin-bottom: 14px; }
+/* Under the bag picker: where arrow keys have moved something to. Empty, it takes no room. */
+.moved { margin: -16px 0 0; font-weight: 600; color: var(--ok); }
+.moved:empty { margin-bottom: 8px; }
 
 @media (min-width: 720px) {
   .sheet { margin: auto; border-radius: 16px; }
