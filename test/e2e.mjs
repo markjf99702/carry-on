@@ -140,7 +140,8 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await page.click('#toast button');
   await closeSheet(page);
   assert.ok((await rowsText(page)).includes('Snacks'), 'Undo brought it back');
-  assert.ok(await page.evaluate(() => document.getElementById('toast').parentNode === document.body), 'the toast is back on the page');
+  // The dialog's close event, which moves the toast back, comes a moment after the sheet closes.
+  await until(() => page.evaluate(() => document.getElementById('toast').parentNode === document.body), 'the toast back on the page', 2000);
   // Pack something the rules left off.
   await page.locator('.left .row', { hasText: 'Hiking boots' }).locator('button').click();
   assert.match(await row(page, 'Hiking boots').innerText(), /Added for this trip/);
