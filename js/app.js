@@ -33,7 +33,7 @@ function render() {
   if (hash.startsWith('#list=')) { takeLink(hash.slice(6)); return; }
   const [, page = '', id = ''] = hash.slice(1).split('/');
   const screen = page + '/' + id, moved = screen !== current;
-  if (moved) draft = null;
+  if (moved) { draft = null; linger.clear(); clearTimeout(lingerT); lingerT = null; }
   // Focus, where the cursor was in a text box, and anything half-typed in an add box come through the redraw.
   const was = document.activeElement;
   const key = was?.dataset?.key, fid = !moved && !key && main.contains(was) ? was.id : '';
@@ -231,29 +231,74 @@ function tripView(t) {
   ];
 }
 
+// Just after a tick the list holds still for a moment, so the tick shows where it was tapped and a quick next tap
+// lands on what was there: a bag the tick finished stays open, and with Hide done on, the ticked row stays. Every
+// tap starts the moment again. When it ends, the list closes up around the rows under the finger.
+const linger = new Set(); // 'go:BAGID' or 'back:BAGID' for a bag, a row's mark key for a row
+let lingerT = null, lingerAt = '';
+const LINGER_MS = 1200;
+
+function settle() {
+  lingerT = null;
+  linger.clear();
+  const f = document.activeElement, fk = f?.dataset?.key, card = fk && f.closest('.bag');
+  // If the focus was on a tick that goes, it moves to the next one in that bag, or to the folded bag.
+  const next = card ? [...card.querySelectorAll('[data-key]')].map(x => x.dataset.key) : [];
+  const i = next.indexOf(fk);
+  const tapped = lingerAt && main.querySelector(`[data-key="${CSS.escape(lingerAt)}"]`)?.getBoundingClientRect().top;
+  holdStill(tapped > 0 && tapped < innerHeight ? tapped : innerHeight / 2, render);
+  if (card && !main.contains(document.activeElement)) {
+    for (const k of [...next.slice(i + 1), ...next.slice(0, i).reverse(), 'fold:' + card.dataset.bag]) {
+      const x = main.querySelector(`[data-key="${CSS.escape(k)}"]`);
+      if (x) { x.focus({ preventScroll: true }); break; }
+    }
+  }
+}
+
+// Redraws with the row nearest y kept at the same place on the screen, taking the nearest at or below it first:
+// packing down the list, that's where the next tap goes. render() replaces every row, so the browser can't do this.
+function holdStill(y, redraw) {
+  const was = [...main.querySelectorAll('[data-key]')].map(x => [x.dataset.key, x.getBoundingClientRect().top]).filter(([, top]) => top > 0 && top < innerHeight);
+  was.sort(([, a], [, b]) => (a < y) - (b < y) || Math.abs(a - y) - Math.abs(b - y));
+  redraw();
+  for (const [k, top] of was) {
+    const x = main.querySelector(`[data-key="${CSS.escape(k)}"]`);
+    if (x) { window.scrollBy(0, x.getBoundingClientRect().top - top); return; }
+  }
+}
+
 function bagCard(t, g, mode, hide, why, jobs = false) {
   const b = g.bag, done = g.rows.filter(r => r.done).length, all = done === g.rows.length;
-  const open = !all || store.isOpen(t.id + ':' + b.id);
-  const rows = g.rows.filter(r => !hide || !r.done);
+  const held = linger.has(mode + ':' + b.id);
+  const open = !all || held || store.isOpen(t.id + ':' + b.id);
+  const rows = g.rows.filter(r => !hide || !r.done || linger.has(r.key));
   const head = h('header', { class: 'bag-head' },
     h('span', { class: 'bag-icon', 'aria-hidden': 'true' }, b.icon),
     h('h2', {}, b.name),
     b.when?.length ? h('span', { class: 'bag-cond' }, b.when.map(k => R.condInfo(doc(), k)?.icon).join('')) : null,
     h('span', { class: 'count' + (all ? ' all' : '') }, all ? h('span', { html: ICONS.check }) : null, `${done}/${g.rows.length}`),
     b.id !== '_loose' ? h('button', { type: 'button', class: 'icon-btn small', 'aria-label': `More for ${b.name}`, html: ICONS.more, onclick: () => bagSheet(t, g, mode) }) : null);
-  return h('section', { class: 'bag' + (all ? ' all' : '') + (jobs ? ' jobs' : '') },
+  return h('section', { class: 'bag' + (all ? ' all' : '') + (jobs ? ' jobs' : ''), 'data-bag': b.id },
     head,
     b.note ? h('p', { class: 'bag-note' }, b.note) : null,
     all && !open
-      ? h('button', { type: 'button', class: 'bag-done', onclick: () => { store.setOpen(t.id + ':' + b.id, true); render(); } }, jobs ? `All ${plural(g.rows.length, 'job')} done` : mode === 'go' ? `All ${g.rows.length} packed` : `All ${g.rows.length} back in`, h('span', { class: 'muted' }, ' · show'))
-      : rows.length ? h('ul', { class: 'rows' }, rows.map(r => itemRow(t, r, mode, why, jobs))) : h('p', { class: 'muted small pad' }, 'All done here.'),
-    all && open ? h('button', { type: 'button', class: 'bag-done', onclick: () => { store.setOpen(t.id + ':' + b.id, false); render(); } }, 'Fold it up') : null);
+      ? h('button', { type: 'button', class: 'bag-done', 'data-key': 'fold:' + b.id, onclick: () => { store.setOpen(t.id + ':' + b.id, true); render(); } }, jobs ? `All ${plural(g.rows.length, 'job')} done` : mode === 'go' ? `All ${g.rows.length} packed` : `All ${g.rows.length} back in`, h('span', { class: 'muted' }, ' · show'))
+      : rows.length ? h('ul', { class: 'rows' }, rows.map(r => itemRow(t, g, r, mode, why, jobs, hide))) : h('p', { class: 'muted small pad' }, 'All done here.'),
+    all && open && !held ? h('button', { type: 'button', class: 'bag-done', 'data-key': 'fold:' + b.id, onclick: () => { store.setOpen(t.id + ':' + b.id, false); render(); } }, 'Fold it up') : null);
 }
 
-function itemRow(t, r, mode, whyMap, jobs) {
+function itemRow(t, g, r, mode, whyMap, jobs, hide) {
   const toggle = () => {
     const was = (t.marks?.[r.key]?.v || 0) > 0;
     store.apply(d => M.mark(d, t.id, r.key, was ? 0 : 1));
+    const bag = mode + ':' + g.bag.id;
+    if (was) { linger.delete(r.key); linger.delete(bag); } else {
+      if (hide) linger.add(r.key);
+      if (g.rows.every(x => x === r || x.done)) linger.add(bag);
+    }
+    clearTimeout(lingerT);
+    lingerT = linger.size ? setTimeout(settle, LINGER_MS) : null;
+    lingerAt = r.key;
     render();
   };
   const why = r.hits.map(k => { const info = R.condInfo(doc(), k); return info ? `${info.icon} ${whyMap[k] || info.name}` : ''; }).filter(Boolean);

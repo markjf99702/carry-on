@@ -3,8 +3,8 @@
 // the occasions decide what's on the list, things get ticked, left off, added and moved, and the coming-home
 // pass lists only what went. A trip too far off for a forecast gets typical weather; one with no connection is
 // set by hand. The list is changed, sent as a link and opened on another phone, a list is pasted in, what's typed
-// stays put while the page redraws, and two phones share one list and its ticks through a stand-in Google Drive
-// (test/fake-google.mjs).
+// stays put while the page redraws, quick taps tick what was tapped, and two phones share one list and its ticks
+// through a stand-in Google Drive (test/fake-google.mjs).
 import { createRequire } from 'node:module';
 import { execSync } from 'node:child_process';
 import { createServer } from 'node:http';
@@ -388,6 +388,62 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   assert.equal(await box.inputValue(), 'Cotton sw', 'the add box keeps its text');
   assert.equal(await page.evaluate(() => document.activeElement.placeholder), 'Add to Toiletries bag', 'and the cursor');
   await other.close();
+  await ctx.close();
+}
+
+// ================= Quick taps while packing =================
+// A tick lands where it was tapped, and the list moves only after a moment, keeping what's under the finger still.
+{
+  const { ctx, page } = await phone();
+  await page.click('text=Start with a starter list');
+  await planTrip(page, { where: 'Chic', from: 2, to: 4, by: 'Driving' });
+  const bag = name => page.locator('.bag', { hasText: name });
+  const top = async name => (await row(page, name).boundingBox())?.y;
+  const tap = async name => { const b = await row(page, name).locator('.tick').boundingBox(); return page.touchscreen.tap(b.x + 40, b.y + b.height / 2); };
+  const ticked = () => page.evaluate(() => { const { store } = window.carryOn; const t = Object.values(store.doc.trips)[0]; return Object.keys(t.marks || {}).filter(k => t.marks[k].v === 1).map(k => store.doc.items[k.slice(2)].name).sort(); });
+
+  // With Hide done on, two quick taps down the list tick the two things tapped.
+  await page.locator('.switch input').check();
+  await row(page, 'Floss').evaluate(el => el.scrollIntoView({ block: 'center' }));
+  const [floss, razor] = [await row(page, 'Floss').boundingBox(), await row(page, 'Razor').boundingBox()];
+  await page.touchscreen.tap(floss.x + 40, floss.y + floss.height / 2);
+  await wait(150);
+  await page.touchscreen.tap(razor.x + 40, razor.y + razor.height / 2);
+  assert.deepEqual(await ticked(), ['Floss', 'Razor'], 'the two things tapped');
+  assert.equal(await row(page, 'Floss').count(), 1, 'still showing right after');
+  await until(async () => !(await row(page, 'Razor').count()), 'Hide done to put them away');
+  await page.locator('.switch input').uncheck();
+
+  // The last thing in a bag: the tick shows where it was tapped, then the bag folds and the next one stays put.
+  const docs = bag('Documents and money');
+  for (const n of ['Wallet', 'ID', 'Credit cards']) await row(page, n).locator('.tick').click();
+  await row(page, 'Health insurance card').evaluate(el => el.scrollIntoView({ block: 'center' }));
+  const next = await top('Underwear');
+  await tap('Health insurance card');
+  assert.equal(await row(page, 'Health insurance card').locator('.tick').getAttribute('aria-checked'), 'true', 'ticked, and still there');
+  assert.match(await docs.locator('.count').innerText(), /4\/4/);
+  assert.equal(await top('Underwear'), next, 'nothing moved yet');
+  await until(async () => /All 4 packed/.test(await docs.innerText()), 'the bag to fold', 3000);
+  assert.ok(Math.abs((await top('Underwear')) - next) <= 2, `the next bag stayed put (${next} → ${await top('Underwear')})`);
+  // Changing your mind in that moment: the bag waits for the last tap.
+  for (const n of ['Toothbrush', 'Hairbrush or comb', 'Nail clippers', 'Lip balm', 'Prescriptions']) await row(page, n).locator('.tick').click();
+  await row(page, 'Pain reliever').evaluate(el => el.scrollIntoView({ block: 'center' }));
+  await tap('Pain reliever');
+  await wait(300);
+  await tap('Pain reliever');
+  await wait(800);
+  await tap('Pain reliever');
+  await wait(400);
+  assert.equal(await row(page, 'Pain reliever').locator('.tick').getAttribute('aria-checked'), 'true');
+  assert.doesNotMatch(await bag('Toiletries bag').innerText(), /All 8 packed/, 'still open after the first tap’s moment');
+  await until(async () => /All 8 packed/.test(await bag('Toiletries bag').innerText()), 'the bag to fold');
+  // From the keyboard, the bag's fold button takes the focus once it folds.
+  for (const n of ['Phone charger', 'Headphones', 'Laptop and charger', 'Watch charger']) await row(page, n).locator('.tick').click();
+  await row(page, 'Power bank').locator('.tick').focus();
+  await page.keyboard.press('Space');
+  assert.equal(await page.evaluate(() => document.activeElement.closest('li')?.textContent), 'Power bank');
+  await until(async () => /All 5 packed/.test(await bag('Electronics').innerText()), 'the bag to fold');
+  assert.match(await page.evaluate(() => document.activeElement.textContent), /All 5 packed/, 'focus on the folded bag');
   await ctx.close();
 }
 
