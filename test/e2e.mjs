@@ -604,6 +604,22 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   assert.equal(await said(), 'All 8 in the Toiletries bag are packed.');
   await toastUndo(page);
   assert.deepEqual([await tick('Floss').getAttribute('aria-checked'), await tick('Razor').getAttribute('aria-checked')], ['true', 'false'], 'Undo puts back the ticks there were');
+
+  // Laundry after four days: socks stop at four, and the row says why. Back up to five, the tick on four comes off.
+  const trip = page.url();
+  await page.goto(base + '#/settings');
+  for (let i = 0; i < 3; i++) await page.click('[aria-label="One fewer"]');
+  assert.equal(await page.locator('.stepper output').innerText(), '4 days');
+  await page.goto(trip);
+  assert.equal(await row(page, 'Socks').locator('.name').innerText(), 'Socks ×4');
+  assert.match(await row(page, 'Socks').innerText(), /One a day, up to 4: laundry after that/);
+  assert.equal(await tick('Socks').getAttribute('aria-checked'), 'true', 'fewer is still packed');
+  assert.doesNotMatch(await row(page, 'Belt').innerText(), /laundry/);
+  await page.goto(base + '#/settings');
+  await page.click('[aria-label="One more"]');
+  assert.equal(await said(), 'Socks needs more now (×5), so it’s unticked.');
+  await page.goto(trip);
+  assert.equal(await tick('Socks').getAttribute('aria-checked'), 'false');
   await ctx.close();
 }
 

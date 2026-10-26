@@ -104,7 +104,8 @@ export function whyNot(doc, rule, res) {
 // conditions say no ('add'), the same way a single thing can.
 // Returns { groups: [{ bag, rows }], tasks: [{ bag, rows }], left: [{ item, why, skipped }] (things, then jobs),
 //   leftBags: [{ bag, why, skipped, count }], done, total, cond }
-// A row: { id, name, note, qty, hits: [condition keys], key: the mark key, done, extra?, gone? }
+// A row: { id, name, note, qty, capped (one a day, stopped at the laundry limit), hits: [condition keys],
+//   key: the mark key, done, extra?, gone? }
 export function plan(doc, trip, mode = 'go') {
   const cond = conditions(doc, trip), on = cond.on;
   const marks = trip.marks || {};
@@ -142,7 +143,7 @@ export function plan(doc, trip, mode = 'go') {
     if (mode === 'back' && anyPacked && !packed) continue;
     const bag = bagFor(mv(it.id)) || home;
     groupOf(bag).rows.push({
-      id: it.id, name: it.name, note: it.note, qty: qtyOf(doc, trip, it),
+      id: it.id, name: it.name, note: it.note, qty: qtyOf(doc, trip, it), capped: it.per === 'day' && days(trip) > laundry(doc),
       hits: res.hits, key: (mode === 'go' ? 'p:' : 'r:') + it.id,
       added: p === 'add', moved: bag !== home, packedOnly: (!res.ok || !bagIn) && p !== 'add',
     });

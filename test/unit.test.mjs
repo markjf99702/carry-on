@@ -847,6 +847,18 @@ test('ticks on too few: a longer trip, a higher laundry limit or a higher How ma
   assert.deepEqual(grown(doc, M.removeTrip(longer, 't1'), 't1'), []);
 });
 
+test('one a day stops at the laundry limit, and the row says so', () => {
+  let doc = M.setPref(starter(), 'home', 'US');
+  doc = trip(doc, { place: { name: 'Chicago', cc: 'US', country: 'United States' } }); // 5 days
+  const row = (d, name) => plan(d, d.trips.t1).groups.flatMap(g => g.rows).find(r => r.name === name);
+  assert.deepEqual([row(doc, 'Socks').qty, row(doc, 'Socks').capped], [5, false], 'under the limit of 7');
+  doc = M.setPref(doc, 'laundry', 5);
+  assert.equal(row(doc, 'Socks').capped, false, 'a limit the same as the days');
+  doc = M.setPref(doc, 'laundry', 4);
+  assert.deepEqual([row(doc, 'Socks').qty, row(doc, 'Socks').capped], [4, true]);
+  assert.equal(row(doc, 'Belt').capped, false, 'not one a day');
+});
+
 test('qty', () => {
   let doc = M.setPref(starter(), 'laundry', 3);
   doc = trip(doc, {});
