@@ -5,19 +5,20 @@ import { nights, weekday } from './days.js';
 import { summarize, temp, tripDays, LIMITS } from './weather.js';
 import { plugsFor, plugText, countryName, localCountry } from './plugs.js';
 
-// The conditions a thing can depend on, besides the trip's occasions (tags in the list).
+// The conditions a thing can depend on, besides the trip's occasions (tags in the list). The phrase finishes "Only
+// when …" and "Not when …".
 export const CONDITIONS = [
-  { k: 'fly', icon: '✈️', name: 'Flying', group: 'Getting there' },
-  { k: 'drive', icon: '🚗', name: 'Driving', group: 'Getting there' },
-  { k: 'train', icon: '🚆', name: 'Train', group: 'Getting there' },
-  { k: 'abroad', icon: '🌍', name: 'Abroad', group: 'Where' },
-  { k: 'plug', icon: '🔌', name: 'Other plugs', group: 'Where' },
-  { k: 'hot', icon: '🌡️', name: 'Hot', group: 'Weather' },
-  { k: 'cool', icon: '🧥', name: 'Cool', group: 'Weather' },
-  { k: 'cold', icon: '❄️', name: 'Cold', group: 'Weather' },
-  { k: 'rain', icon: '☔', name: 'Rain', group: 'Weather' },
-  { k: 'snow', icon: '🌨️', name: 'Snow', group: 'Weather' },
-  { k: 'sun', icon: '😎', name: 'Strong sun', group: 'Weather' },
+  { k: 'fly', icon: '✈️', name: 'Flying', phrase: 'you’re flying', group: 'Getting there' },
+  { k: 'drive', icon: '🚗', name: 'Driving', phrase: 'you’re driving', group: 'Getting there' },
+  { k: 'train', icon: '🚆', name: 'Train', phrase: 'you’re taking the train', group: 'Getting there' },
+  { k: 'abroad', icon: '🌍', name: 'Abroad', phrase: 'abroad', group: 'Where' },
+  { k: 'plug', icon: '🔌', name: 'Different plugs', phrase: 'the plugs are different', group: 'Where' },
+  { k: 'hot', icon: '🌡️', name: 'Hot', phrase: 'it’s hot', group: 'Weather' },
+  { k: 'cool', icon: '🧥', name: 'Cool', phrase: 'it’s cool', group: 'Weather' },
+  { k: 'cold', icon: '❄️', name: 'Cold', phrase: 'it’s cold', group: 'Weather' },
+  { k: 'rain', icon: '☔', name: 'Rain', phrase: 'rain’s likely', group: 'Weather' },
+  { k: 'snow', icon: '🌨️', name: 'Snow', phrase: 'snow’s likely', group: 'Weather' },
+  { k: 'sun', icon: '😎', name: 'Strong sun', phrase: 'the sun’s strong', group: 'Weather' },
 ];
 const BY_KEY = Object.fromEntries(CONDITIONS.map(c => [c.k, c]));
 export const AUTO_KEYS = ['abroad', 'plug', 'hot', 'cool', 'cold', 'rain', 'snow', 'sun'];
@@ -43,18 +44,41 @@ function dayList(list) {
   return names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
 }
 
+// When something comes along, as words that finish a sentence: a condition by its phrase ("when it's cool", "when
+// abroad"), an occasion by its name ("for work"), and a mix "when it's hot or for swimming". wrap(info, words) can
+// dress each one, with its icon say; parts come back as a list, words as a string.
+export function whenParts(doc, keys, wrap = (info, words) => words) {
+  const infos = keys.map(k => condInfo(doc, k)).filter(Boolean);
+  const conds = infos.filter(i => i.phrase), occasions = infos.filter(i => !i.phrase);
+  const list = (items, words) => items.flatMap((i, n) => [n ? ' or ' : '', wrap(i, words(i))]);
+  const out = [];
+  if (conds.length) out.push('when ', ...list(conds, i => i.phrase));
+  if (occasions.length) out.push(conds.length > 1 ? ', or for ' : conds.length ? ' or for ' : 'for ', ...list(occasions, i => i.name.toLowerCase()));
+  return out.filter(x => x !== '');
+}
+export const whenWords = (doc, keys) => whenParts(doc, keys).join('');
+
+// "about 5 days in 10", from a share of days (0 to 1); '' when it rounds to none.
+function inTen(share) {
+  const n = Math.round(share * 10);
+  return n ? `about ${n} ${n === 1 ? 'day' : 'days'} in 10` : '';
+}
+
 // Every condition for this trip: what the place and weather say (auto), what the person set (set), the
-// result (on), and a few words on why for each one that's on.
+// result (on), a few words on why for each one that's on (why), and for one the place or weather says no to, why
+// not (no).
 export function conditions(doc, trip) {
   const u = units(doc), from = home(doc), place = trip.place;
-  const auto = { [trip.travel]: true }, why = {};
+  const auto = { [trip.travel]: true }, why = {}, no = {};
   why[trip.travel] = BY_KEY[trip.travel].name;
   if (place?.cc) {
     auto.abroad = place.cc !== from;
     if (auto.abroad) why.abroad = place.country || countryName(place.cc);
+    else no.abroad = no.plug = 'In your home country';
     const p = auto.abroad ? plugsFor(from, place.cc) : null;
     auto.plug = !!p?.need;
     if (p) why.plug = plugText(p) + (p.voltsDiffer ? ' · check anything that heats up' : '');
+    if (p && !p.need) no.plug = 'Your plugs fit there';
   }
   const w = summarize({ days: tripDays(trip.wx, trip.start, trip.end) });
   if (w) {
@@ -67,6 +91,12 @@ export function conditions(doc, trip) {
     why.rain = w.rainDays.length ? `Rain ${w.rainLikely ? 'likely' : 'forecast'} ${dayList(w.rainDays)}` : often(w.wet, 'Rains');
     why.snow = w.snowDays.length ? `Snow likely ${dayList(w.snowDays)}` : often(w.sn, 'Snows');
     why.sun = w.forecast && w.uv >= 6 ? `UV up to ${Math.round(w.uv)}` : 'Strong sun then';
+    no.hot = `Highs up to ${temp(w.maxHi, u)}`;
+    no.cool = w.cold ? 'Cold instead' : `Lows ${temp(w.minLo, u)} and up`;
+    no.cold = `Lows ${temp(w.minLo, u)} and up`;
+    no.rain = w.forecast ? 'No rain forecast' : inTen(w.wet) ? `Rain on ${inTen(w.wet)}` : 'Hardly any rain then';
+    no.snow = w.forecast ? 'No snow forecast' : inTen(w.sn) ? `Snow on ${inTen(w.sn)}` : 'Hardly any snow then';
+    no.sun = w.forecast && w.uv ? `UV up to ${Math.round(w.uv)}` : 'Not much sun then';
   }
   const on = { ...auto };
   for (const [k, m] of Object.entries(trip.set || {})) {
@@ -75,7 +105,7 @@ export function conditions(doc, trip) {
     if (m.v && auto[k] !== true) why[k] = BY_KEY[k] ? 'You turned this on' : condInfo(doc, k)?.name || '';
   }
   for (const g of M.tags(doc)) if (on[g.id]) why[g.id] = g.name;
-  return { auto, on, why, weather: w, units: u };
+  return { auto, on, why, no, weather: w, units: u };
 }
 
 // Whether a rule (when/unless) lets something come along, and the conditions that brought it.
@@ -89,12 +119,11 @@ export function passes(rule, on) {
 export const days = trip => nights(trip.start, trip.end) + 1;
 export const qtyOf = (doc, trip, item) => (item.per === 'day' ? Math.min(days(trip), laundry(doc)) : item.qty || 1);
 
-// Why something isn't coming: "Only when it's cold or snowing", "Not when you're driving".
+// Why something isn't coming: "Only when it's cold or snow's likely", "Only for work", "Not when you're driving".
 export function whyNot(doc, rule, res) {
-  const names = ks => ks.map(k => condInfo(doc, k)?.name.toLowerCase()).filter(Boolean);
-  if (!res.ok && res.blocks?.length) return `Not when ${names(res.blocks).join(' or ')}`;
-  const n = names(rule.when);
-  return n.length ? `Only for ${n.join(' or ')}` : '';
+  if (!res.ok && res.blocks?.length) return `Not ${whenWords(doc, res.blocks)}`;
+  const w = whenWords(doc, rule.when);
+  return w ? `Only ${w}` : '';
 }
 
 // The list for one trip.

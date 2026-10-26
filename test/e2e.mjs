@@ -106,7 +106,7 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   assert.match(await row(page, 'Plug adapter').innerText(), /Type C\/F, 230 V/);
   assert.match(await page.locator('.bag', { hasText: 'Liquids bag' }).locator('.bag-note').innerText(), /quart bag, for a carry-on/, 'flying: the airport rule');
   const chips = await page.locator('.needs .chip').allInnerTexts();
-  for (const c of ['Flying', 'Abroad', 'Other plugs', 'Rain', 'Work']) assert.ok(chips.some(x => x.includes(c)), `${c} chip`);
+  for (const c of ['Flying', 'Abroad', 'Different plugs', 'Rain', 'Work']) assert.ok(chips.some(x => x.includes(c)), `${c} chip`);
   await fits(page, 'the trip');
 
   // Ticking, and it keeps.
@@ -127,7 +127,8 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await page.click('.left-head');
   const left = page.locator('.left .row', { hasText: 'Snacks' });
   assert.match(await left.innerText(), /You left it off this trip/);
-  assert.match(await page.locator('.left .row', { hasText: 'Warm coat' }).innerText(), /Only for cold/);
+  assert.match(await page.locator('.left .row', { hasText: 'Warm coat' }).innerText(), /Only when it’s cold/);
+  assert.match(await page.locator('.left .row', { hasText: 'Workout clothes' }).innerText(), /Only for working out/);
   await left.locator('button').click();
   assert.ok((await rowsText(page)).includes('Snacks'));
   // The Undo toast lets taps through to the list under it, and stays in reach over the next sheet.
@@ -242,13 +243,13 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   const day1 = page.locator('.bag.edit', { hasText: 'Day bag' });
   await day1.locator('input').fill('Poncho');
   await day1.locator('input').press('Enter');
-  assert.match(await day1.innerText(), /Poncho\s+Only for ☔ rain/);
-  assert.match(await page.locator('#toast').innerText(), /only for rain/);
+  assert.match(await day1.innerText(), /Poncho\s+Only when ☔ rain’s likely/);
+  assert.match(await page.locator('#toast').innerText(), /^Poncho: only when rain’s likely\./);
   // Change it to every trip.
   await page.locator('.edit-row', { hasText: 'Poncho' }).click();
   await page.selectOption('.sheet select >> nth=2', 'all');
   await page.click('.sheet .btn.primary');
-  assert.doesNotMatch(await page.locator('.edit-row', { hasText: 'Poncho' }).innerText(), /Only for/);
+  assert.doesNotMatch(await page.locator('.edit-row', { hasText: 'Poncho' }).innerText(), /Only when/);
   // Delete, and undo.
   await page.locator('.edit-row', { hasText: 'Poncho' }).click();
   await page.click('.sheet .btn.danger-quiet');
@@ -593,7 +594,7 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   assert.equal(await tick('Travel umbrella').getAttribute('aria-checked'), 'true', 'still on the trip, still ticked');
   assert.match(await row(page, 'Travel umbrella').innerText(), /Added for this trip/);
   assert.equal(await page.locator('.progress p').innerText(), packed, 'the same count packed');
-  assert.equal(await said(), 'Travel umbrella is on your list now, only for rain. Tap it in My list to change that.');
+  assert.equal(await said(), 'Travel umbrella is on your list now, only when rain’s likely. Tap it in My list to change that.');
 
   // From a bag's ⋯, something just for this trip goes in that bag, and says so.
   const electronics = page.locator('.bag', { hasText: 'Electronics' });
@@ -703,7 +704,7 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await page.click('.sheet .btn.primary');
   await until(async () => /Your pasted list/i.test(await page.locator('.sheet').innerText()), 'the preview');
   assert.match(await page.locator('.sheet').innerText(), /2 bags and 5 things, and 1 list of jobs/);
-  assert.match(await page.locator('.sheet').innerText(), /First guesses: Socks one a day · Swimsuit only for hot or swimming\. Change any of them in My list\./);
+  assert.match(await page.locator('.sheet').innerText(), /First guesses: Socks one a day · Swimsuit only when it’s hot or for swimming\. Change any of them in My list\./);
   await fits(page, 'the pasted list’s preview');
   // Back to the text, as it was pasted, and on again.
   await page.click('.sheet button:text-is("Back")');
@@ -715,7 +716,7 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await page.waitForSelector('.bag.edit');
   assert.deepEqual(await page.locator('.bag.edit h2').allInnerTexts(), ['ELECTRONICS', 'ATTIRE', 'NOT IN A BAG', 'LEAVING THE HOUSE']);
   assert.match(await page.locator('.edit-row', { hasText: 'Socks' }).innerText(), /one a day/);
-  assert.match(await page.locator('.edit-row', { hasText: 'Swimsuit' }).innerText(), /Only for 🌡️ hot or 🏊 swimming/);
+  assert.match(await page.locator('.edit-row', { hasText: 'Swimsuit' }).innerText(), /Only when 🌡️ it’s hot or for 🏊 swimming/);
   await ctx.close();
 }
 

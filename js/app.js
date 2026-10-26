@@ -545,8 +545,8 @@ function toList(t, r, bag) {
     if (g.when.length) next = M.mark(next, t.id, 'x:' + nid, 'add');
     return M.removeExtra(next, t.id, r.id);
   });
-  const when = g.when.map(k => R.condInfo(doc(), k)?.name.toLowerCase()).filter(Boolean);
-  toast(when.length || g.per ? `${r.name} is on your list now, ${g.per ? 'one for each day' : `only for ${when.join(' or ')}`}. Tap it in My list to change that.` : `${r.name} is on your list for every trip now.`);
+  const when = R.whenWords(doc(), g.when);
+  toast(when || g.per ? `${r.name} is on your list now, ${g.per ? 'one for each day' : `only ${when}`}. Tap it in My list to change that.` : `${r.name} is on your list for every trip now.`);
 }
 
 function bagSheet(t, g, mode) {
@@ -636,7 +636,7 @@ function condSheet(id) {
         return h('button', { type: 'button', 'data-key': 'travel:' + k, 'aria-pressed': String(t.travel === k), onclick: () => { store.apply(d => M.putTrip(d, { id, travel: k })); draw(); render(); } }, `${info.icon} ${info.name}`);
       })),
       h('h3', {}, 'Place and weather'),
-      h('p', { class: 'muted small' }, 'These follow the place and the forecast. Set one yourself if you know better.'),
+      h('p', { class: 'muted small' }, 'Auto follows the place and the forecast. Yes or No sets it for this trip only.'),
       h('ul', { class: 'auto-list' }, R.AUTO_KEYS.map(k => {
         const info = R.condInfo(doc(), k), set = t.set?.[k]?.v;
         const state = set === true ? 'on' : set === false ? 'off' : 'auto';
@@ -644,7 +644,7 @@ function condSheet(id) {
         const pickState = s => { store.apply(d => M.setCond(d, id, k, s === 'auto' ? null : s === 'on')); draw(); render(); };
         return h('li', {},
           h('span', { class: 'auto-name' }, h('span', { 'aria-hidden': 'true' }, info.icon), ' ', h('b', {}, info.name),
-            h('small', {}, `Automatic: ${autoText}${c.auto[k] && c.why[k] ? ` · ${c.why[k]}` : ''}`)),
+            h('small', {}, `Automatic: ${autoText}${c.auto[k] && c.why[k] ? ` · ${c.why[k]}` : c.auto[k] === false && c.no[k] ? ` · ${c.no[k]}` : ''}`)),
           h('div', { class: 'seg tiny', role: 'group', 'aria-label': info.name },
             ['auto', 'on', 'off'].map(s => h('button', { type: 'button', 'data-key': `cond:${k}:${s}`, 'aria-pressed': String(state === s), onclick: () => pickState(s) }, s === 'auto' ? 'Auto' : s === 'on' ? 'Yes' : 'No'))));
       })),
@@ -803,12 +803,14 @@ function tripForm(t, again = false) {
 
 // ---------- my list ----------
 
+// "Only when ☔ rain's likely", "Only when 🌡️ it's hot or for 🏊 swimming", "Not when 🚗 you're driving".
 function condChips(x) {
-  const when = x.when.map(k => R.condInfo(doc(), k)).filter(Boolean), unless = x.unless.map(k => R.condInfo(doc(), k)).filter(Boolean);
+  const icon = (i, words) => [h('span', { 'aria-hidden': 'true' }, i.icon), ' ', words];
+  const when = R.whenParts(doc(), x.when, icon), unless = R.whenParts(doc(), x.unless, icon);
   if (!when.length && !unless.length) return null;
   return h('span', { class: 'conds' },
-    when.length ? h('span', {}, 'Only for ', when.map(i => `${i.icon} ${i.name.toLowerCase()}`).join(' or ')) : null,
-    unless.length ? h('span', {}, `${when.length ? ', not' : 'Not'} for `, unless.map(i => `${i.icon} ${i.name.toLowerCase()}`).join(' or ')) : null);
+    when.length ? h('span', {}, 'Only ', when) : null,
+    unless.length ? h('span', {}, when.length ? ', not ' : 'Not ', unless) : null);
 }
 
 function listView() {
@@ -855,7 +857,7 @@ function listBag(b) {
     render();
     const again = main.querySelector(`[data-key="add:${b.id}"]`);
     again?.focus();
-    if (g.when.length || g.per) toast(`${n}: ${g.per ? 'one for each day' : `only for ${g.when.map(k => R.condInfo(doc(), k).name.toLowerCase()).join(' or ')}`}. Tap it to change that.`);
+    if (g.when.length || g.per) toast(`${n}: ${g.per ? 'one for each day' : `only ${R.whenWords(doc(), g.when)}`}. Tap it to change that.`);
   };
   return h('section', { class: 'bag edit' + (b.kind !== 'bag' ? ' jobs' : ''), 'data-bag': b.id },
     h('header', { class: 'bag-head' },
@@ -1023,12 +1025,13 @@ function listSummary(list) {
   return (bags.length ? `${plural(bags.length, 'bag')} and ${things}` : `${things}, not in bags yet`) + (jobs ? `, and ${plural(jobs, 'list of jobs', 'lists of jobs')}` : '');
 }
 
-// The first guesses on a pasted list, as one line: "Passport only abroad · Swimsuit only for hot or swimming".
+// The first guesses on a pasted list, as one line: "Passport only when abroad · Swimsuit only when it's hot or for
+// swimming".
 function guessLine(list) {
   const parts = list.items.filter(x => x.per === 'day' || x.when.length).map(x => {
     if (x.per === 'day') return `${x.name} one a day`;
-    const names = [...x.when].sort().map(k => R.condInfo(doc(), k)?.name.toLowerCase()).filter(Boolean); // in My list's order
-    return names.length ? `${x.name} only ${names.join() === 'abroad' ? 'abroad' : `for ${names.join(' or ')}`}` : '';
+    const when = R.whenWords(doc(), [...x.when].sort()); // in My list's order
+    return when ? `${x.name} only ${when}` : '';
   }).filter(Boolean);
   if (!parts.length) return null;
   const more = parts.length - 6;

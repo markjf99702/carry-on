@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as M from '../js/model.js';
-import { plan, conditions, qtyOf, units, grown } from '../js/rules.js';
+import { plan, conditions, qtyOf, units, grown, whyNot, passes, whenWords } from '../js/rules.js';
 import { summarize, stale, tripWeather, forecastEdge } from '../js/weather.js';
 import { plugsFor, plugText, localCountry } from '../js/plugs.js';
 import { parsePaste, encodeList, decodeList, guess, bagIcon, bagKind } from '../js/share.js';
@@ -133,6 +133,38 @@ test('the reasons say what the rules saw', () => {
   assert.equal(why([typ('2027-01-10', -2, -8, { wet: 0.4, sn: 0.2 })]).rain, 'Rains about 4 days in 10 then');
   // The plug: one line, no brackets.
   assert.equal(why([day('2026-11-02', 15, 8)], { name: 'Lisbon', cc: 'PT', country: 'Portugal' }).plug, 'Type C/F, 230 V · check anything that heats up');
+});
+
+test('why something isn’t coming, in words: conditions by their phrase, occasions by name', () => {
+  const doc = starter(), work = M.tags(doc).find(g => g.name === 'Work').id, swim = M.tags(doc).find(g => g.name === 'Swimming').id;
+  const why = (when, unless = [], on = {}) => whyNot(doc, { when, unless }, passes({ when, unless }, on));
+  assert.equal(why(['cool']), 'Only when it’s cool');
+  assert.equal(why(['abroad']), 'Only when abroad');
+  assert.equal(why(['cold', 'snow']), 'Only when it’s cold or snow’s likely');
+  assert.equal(why([work]), 'Only for work');
+  assert.equal(why(['hot', swim]), 'Only when it’s hot or for swimming');
+  assert.equal(why(['hot', 'sun', swim]), 'Only when it’s hot or the sun’s strong, or for swimming');
+  assert.equal(why([], ['drive'], { drive: true }), 'Not when you’re driving');
+  assert.equal(why([], [work], { [work]: true }), 'Not for work');
+  assert.equal(whenWords(doc, ['plug']), 'when the plugs are different');
+});
+
+test('the conditions sheet says why the place or weather says no', () => {
+  const doc = M.setPref(M.setPref(starter(), 'home', 'US'), 'units', 'F');
+  const no = (days, place = { name: 'Seattle', cc: 'US' }) => {
+    const d = trip(doc, { place, start: days[0].d, end: days.at(-1).d, wx: days.length ? { at: 1, days } : undefined });
+    return conditions(d, d.trips.t1).no;
+  };
+  const typ = (d, hi, lo, extra = {}) => ({ d, typ: 1, hi, lo, mm: 0, wet: 0, sn: 0, rad: 5, ...extra });
+  const mild = no([day('2026-11-02', 22, 16, { pop: 10, uv: 4 }), day('2026-11-03', 24, 17, { pop: 20, uv: 5 })]);
+  assert.deepEqual([mild.hot, mild.cool, mild.cold, mild.rain, mild.snow, mild.sun, mild.abroad, mild.plug],
+    ['Highs up to 75°', 'Lows 61° and up', 'Lows 61° and up', 'No rain forecast', 'No snow forecast', 'UV up to 5', 'In your home country', 'In your home country']);
+  assert.equal(no([day('2026-12-01', 3, -4)]).cool, 'Cold instead');
+  const far = no([typ('2027-03-01', 14, 8, { wet: 0.2, sn: 0 }), typ('2027-03-02', 13, 7, { wet: 0.2, sn: 0.1 })]);
+  assert.deepEqual([far.rain, far.snow, far.sun], ['Rain on about 2 days in 10', 'Snow on about 1 day in 10', 'Not much sun then']);
+  assert.equal(no([typ('2027-03-01', 14, 8, { wet: 0.02 })]).rain, 'Hardly any rain then');
+  // Abroad where the plugs fit.
+  assert.equal(no([day('2026-11-02', 15, 8)], { name: 'Tokyo', cc: 'JP', country: 'Japan' }).plug, 'Your plugs fit there');
 });
 
 test('snow isn’t rain: no umbrella on a snow day, both on a day of sleet', () => {
@@ -403,7 +435,7 @@ test('a single job left off one trip, or one its conditions leave off, waits und
   const leftJobs = p => p.left.filter(l => ['s-leave', 's-back'].includes(l.item.bag)).map(l => [l.item.name, l.skipped, l.why]);
   let p = plan(doc, doc.trips.t1);
   assert.ok(!jobs(p).includes('Take out the trash') && !jobs(p).includes('Bring in the patio cushions'));
-  assert.deepEqual(leftJobs(p), [['Take out the trash', true, 'You left it off this trip'], ['Bring in the patio cushions', false, 'Only for rain']]);
+  assert.deepEqual(leftJobs(p), [['Take out the trash', true, 'You left it off this trip'], ['Bring in the patio cushions', false, 'Only when rain’s likely']]);
   // Brought along anyway, and put back.
   doc = M.mark(doc, 't1', 'x:cushions', 'add');
   doc = M.mark(doc, 't1', 'x:s-leave-take-out-the-trash', 0);
@@ -414,7 +446,7 @@ test('a single job left off one trip, or one its conditions leave off, waits und
   // Coming home, a hotel job the conditions leave off waits there too; the things in bags don't show there.
   const back = plan(doc, doc.trips.t1, 'back');
   assert.ok(!jobs(back).includes('Leave a tip'));
-  assert.deepEqual(back.left.map(l => [l.item.name, l.skipped, l.why]), [['Leave a tip', false, 'Not when driving']]);
+  assert.deepEqual(back.left.map(l => [l.item.name, l.skipped, l.why]), [['Leave a tip', false, 'Not when you’re driving']]);
   // A whole list left off covers its jobs with its own line.
   doc = M.mark(doc, 't1', 'x:s-leave', 'skip');
   doc = M.mark(doc, 't1', 'x:s-leave-water-the-plants', 'skip');

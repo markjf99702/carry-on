@@ -7,7 +7,7 @@
 <p align="center">
   <img src="docs/phone-trips.png" alt="The trips screen: luggage tags for Lisbon in 3 days, 7 of 50 packed, and Reykjavík in 46 days, with the temperatures and rain for each" width="250">
   &nbsp;
-  <img src="docs/phone-trip.png" alt="A trip to Lisbon: the dates and nights on a boarding pass, five days of forecast with rain on Friday, and what the trip calls for: flying, abroad, other plugs, hot, rain, strong sun and work" width="250">
+  <img src="docs/phone-trip.png" alt="A trip to Lisbon: the dates and nights on a boarding pass, five days of forecast with rain on Friday, and what the trip calls for: flying, abroad, different plugs, hot, rain, strong sun and work" width="250">
   &nbsp;
   <img src="docs/phone-bags.png" alt="Packing the Electronics bag: phone charger and headphones ticked, and a plug adapter on the list because Portugal's sockets are type C and F at 230 volts" width="250">
 </p>
