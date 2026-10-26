@@ -853,6 +853,17 @@ test('guesses', () => {
   assert.equal(guess('Underwear').per, 'day');
 });
 
+test('a count typed with a thing is its How many, not part of its name', () => {
+  const l = parsePaste('Clothes:\n- Socks x5\n- 3 T-shirts\n- Shorts (2)\n- 2x jeans\n- 5 pairs of underwear\n- Hats ×2\n- Underwear\nToiletries:\n- 100 ml shampoo\n- 3-1-1 bag\n- 2-in-1 charger\n- 4G hotspot\n- Floss x40');
+  const got = Object.fromEntries(l.items.map(x => [x.name, `${x.qty}${x.per ? ' a day' : ''}`]));
+  assert.deepEqual(got, {
+    'Socks': '5', 'T-shirts': '3', 'Shorts': '2', 'Jeans': '2', 'Underwear': '1 a day', 'Hats': '2',
+    '100 ml shampoo': '1', '3-1-1 bag': '1', '2-in-1 charger': '1', '4G hotspot': '1', 'Floss': '20',
+  });
+  // "5 pairs of underwear" and "Underwear" are two lines of the same name: both stay, the first with its count.
+  assert.deepEqual(l.items.filter(x => x.name === 'Underwear').map(x => `${x.qty}${x.per}`), ['5', '1day']);
+});
+
 test('first guesses, name by name: nothing everyday left off a trip by a word inside another', () => {
   // name | when (or "day" for one a day; nothing for always)
   const table = `Toothbrush|

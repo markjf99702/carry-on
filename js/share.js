@@ -109,6 +109,21 @@ export function bagKind(name) {
 }
 
 // ---------- pasted lists ----------
+
+// A count typed with a thing: "Socks x5", "Socks ×5", "Shorts (2)", "2x jeans", "5 pairs of socks", "3 T-shirts".
+// Gives the name without it, and the count (1 to 20, as a thing's How many goes), or no count. A number with a
+// unit or a hyphen after it is part of the name: "100 ml", "3-1-1 bag", "2-in-1 charger", "4G hotspot".
+const UNIT = /^(ml|l|fl|oz|g|kg|mg|lbs?|mm|cm|m|in|inch(es)?|ft|gb|tb|mb|mah|v|w|am|pm|days?|nights?|weeks?|hours?|hrs?|mins?)\b/i;
+export function counted(line) {
+  let m, n = '', name = line, front = false;
+  if ((m = /^(.*\S)\s+[x×]\s?(\d{1,2})$/i.exec(line)) || (m = /^(.*\S)\s*\(\s*[x×]?\s?(\d{1,2})\s*\)$/i.exec(line))) [, name, n] = m;
+  else if ((m = /^(\d{1,2})\s?[x×]\s+(\S.*)$/i.exec(line)) || (m = /^(\d{1,2})\s+pairs?\s+of\s+(\S.*)$/i.exec(line))
+    || ((m = /^(\d{1,2})\s+(\p{L}.*)$/u.exec(line)) && !UNIT.test(m[2]))) { [, n, name] = m; front = true; }
+  if (!n) return { name: line, qty: 0 };
+  // "2x jeans" is Jeans, but "2 iPads" stays iPads.
+  if (front && !/^\p{Ll}\p{Lu}/u.test(name)) name = name[0].toUpperCase() + name.slice(1);
+  return { name, qty: Math.min(20, Math.max(1, +n)) };
+}
 // Takes the text of a list from Google Keep, Apple Notes, Google Docs or a plain text file:
 //   - a line ending with ":" starts a bag, and so does a line with more-indented lines under it;
 //   - "●" and "○" bullets (Google Docs) count as levels the same way indents do;
@@ -154,11 +169,14 @@ export function parsePaste(text) {
     bags.push(b);
     return b;
   };
-  const addItem = (bag, name) => {
+  const addItem = (bag, line) => {
+    const { name, qty } = counted(line);
     const g = bag.kind === 'bag' ? guess(name) : { when: [], unless: [], per: '' };
     // The bag already says it (a badge in the work bag).
     if (g.when.length && g.when.every(k => bag.when.includes(k))) g.when = [];
-    items.push({ id: uid('i-' + slug(bag.name).slice(0, 12) + '-' + slug(name).slice(0, 28)), name, bag: bag.id, when: g.when, unless: g.unless, qty: 1, per: g.per, note: '' });
+    // "Socks x5" is five socks, not one a day.
+    if (qty) g.per = '';
+    items.push({ id: uid('i-' + slug(bag.name).slice(0, 12) + '-' + slug(name).slice(0, 28)), name, bag: bag.id, when: g.when, unless: g.unless, qty: qty || 1, per: g.per, note: '' });
   };
   let colon = false;
   lines.forEach((ln, i) => {
