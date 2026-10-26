@@ -461,7 +461,7 @@ function condSheet(id) {
         const pickState = s => { store.apply(d => M.setCond(d, id, k, s === 'auto' ? null : s === 'on')); draw(); render(); };
         return h('li', {},
           h('span', { class: 'auto-name' }, h('span', { 'aria-hidden': 'true' }, info.icon), ' ', h('b', {}, info.name),
-            h('small', {}, `Automatic: ${autoText}${c.auto[k] && c.why[k] ? ` (${c.why[k]})` : ''}`)),
+            h('small', {}, `Automatic: ${autoText}${c.auto[k] && c.why[k] ? ` · ${c.why[k]}` : ''}`)),
           h('div', { class: 'seg tiny', role: 'group', 'aria-label': info.name },
             ['auto', 'on', 'off'].map(s => h('button', { type: 'button', 'aria-pressed': String(state === s), onclick: () => pickState(s) }, s === 'auto' ? 'Auto' : s === 'on' ? 'Yes' : 'No'))));
       })),
@@ -909,7 +909,8 @@ function settingsView() {
     h('section', { class: 'card' },
       h('h2', {}, 'About'),
       h('p', { class: 'small' }, 'Forecasts, past weather and place search come from ', h('a', { href: 'https://open-meteo.com/', target: '_blank', rel: 'noopener' }, 'Open-Meteo'), '. Looking up a trip sends its place and dates there; nothing else leaves this browser unless you turn on Google Drive. Plug types are from the IEC’s list of world plugs.'),
-      h('p', { class: 'small muted' }, 'Hot means a high of 28 °C (82 °F) or more; cool, a low of 13 °C (55 °F) or less; cold, a low of 4 °C (39 °F) or less. Rain means a 50% chance or more on any day, or, for typical weather, rain on 3 days in 10. Strong sun means a UV index of 6 or more.')),
+      // Every rule in weather.js summarize(), with no break between a number and its unit.
+      h('p', { class: 'small muted' }, 'Hot means a high of 28\u00a0°C (82\u00a0°F) or more; cool, a low of 13\u00a0°C (55\u00a0°F) or less; cold, a low of 4\u00a0°C (39\u00a0°F) or less, or highs that average 10\u00a0°C (50\u00a0°F) or less. Rain means a 50% chance of rain or more, or 3\u00a0mm (0.1\u00a0in) or more, on any day; for typical weather, rain on 3 days in 10. Snow means 0.5\u00a0cm (0.2\u00a0in) or more on any day; for typical weather, snow on 3 days in 20. Strong sun means a UV index of 6 or more; for typical weather, it’s estimated from how much sunshine those days had.')),
     h('div', { class: 'danger-zone' }, confirmBtn('Erase everything on this device', 'Tap again to erase it all', () => {
       drive.stop();
       store.erase();

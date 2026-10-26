@@ -113,6 +113,28 @@ test('weather: cold, cool and typical weather', () => {
   assert.equal(typ.typical, true); assert.equal(typ.rain, true); assert.equal(typ.sun, false); assert.equal(typ.cool, true);
 });
 
+test('the reasons say what the rules saw', () => {
+  const doc = M.setPref(starter(), 'home', 'US');
+  const why = (days, place = { name: 'Seattle', cc: 'US' }) => {
+    const d = trip(doc, { place, start: days[0].d, end: days.at(-1).d, wx: { at: 1, days } });
+    return conditions(d, d.trips.t1).why;
+  };
+  const typ = (d, hi, lo, extra = {}) => ({ d, typ: 1, hi, lo, mm: 0, wet: 0, sn: 0, rad: 5, ...extra });
+  // Seattle in late November: cold from the highs, not the lows.
+  assert.equal(why([typ('2026-11-23', 9, 5), typ('2026-11-24', 9, 6)]).cold, 'Highs around 48°');
+  assert.equal(why([day('2026-12-01', 3, -4), day('2026-12-02', 5, -2)]).cold, 'Lows down to 25°');
+  // Rain from the millimetres on a day with a low chance is forecast, not likely.
+  assert.equal(why([day('2026-11-02', 15, 8, { pop: 20, mm: 4 }), day('2026-11-03', 15, 8, { pop: 10 })]).rain, 'Rain forecast Mon');
+  assert.equal(why([day('2026-11-02', 15, 8, { pop: 70, mm: 4 }), day('2026-11-03', 15, 8, { pop: 20, mm: 5 })]).rain, 'Rain forecast Mon and Tue');
+  assert.equal(why([day('2026-11-02', 15, 8, { pop: 70, mm: 4 }), day('2026-11-03', 15, 8, { pop: 60 })]).rain, 'Rain likely Mon and Tue');
+  // Typical weather that's wet or snowy nearly every day.
+  assert.equal(why([typ('2027-01-10', -2, -8, { wet: 0.9, sn: 0.95 })]).rain, 'Rains most days then');
+  assert.equal(why([typ('2027-01-10', -2, -8, { wet: 0.9, sn: 0.95 })]).snow, 'Snows most days then');
+  assert.equal(why([typ('2027-01-10', -2, -8, { wet: 0.4, sn: 0.2 })]).rain, 'Rains about 4 days in 10 then');
+  // The plug: one line, no brackets.
+  assert.equal(why([day('2026-11-02', 15, 8)], { name: 'Lisbon', cc: 'PT', country: 'Portugal' }).plug, 'Type C/F, 230 V · check anything that heats up');
+});
+
 test('snow isn’t rain: no umbrella on a snow day, both on a day of sleet', () => {
   // Open-Meteo's precipitation total and its chance of precipitation count snow too. Chicago in January.
   const snowDay = { pop: 85, mm: 6.2, snow: 4.3, code: 73 };

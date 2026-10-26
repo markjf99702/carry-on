@@ -2,7 +2,7 @@
 // No page code, so the tests run it in Node.
 import * as M from './model.js';
 import { nights, weekday } from './days.js';
-import { summarize, temp, tripDays } from './weather.js';
+import { summarize, temp, tripDays, LIMITS } from './weather.js';
 import { plugsFor, plugText, countryName, localCountry } from './plugs.js';
 
 // The conditions a thing can depend on, besides the trip's occasions (tags in the list).
@@ -54,15 +54,18 @@ export function conditions(doc, trip) {
     if (auto.abroad) why.abroad = place.country || countryName(place.cc);
     const p = auto.abroad ? plugsFor(from, place.cc) : null;
     auto.plug = !!p?.need;
-    if (p) why.plug = plugText(p) + (p.voltsDiffer ? ' (check anything that heats up)' : '');
+    if (p) why.plug = plugText(p) + (p.voltsDiffer ? ' · check anything that heats up' : '');
   }
   const w = summarize({ days: tripDays(trip.wx, trip.start, trip.end) });
   if (w) {
     for (const k of ['hot', 'cool', 'cold', 'rain', 'snow', 'sun']) auto[k] = w[k];
+    // Each in the words of the rule that brought it (weather.js summarize).
+    const often = (share, verb) => (share >= 0.85 ? `${verb} most days then` : `${verb} about ${Math.max(1, Math.round(share * 10))} days in 10 then`);
     why.hot = `Highs up to ${temp(w.maxHi, u)}`;
-    why.cool = why.cold = `Lows down to ${temp(w.minLo, u)}`;
-    why.rain = w.rainDays.length ? `Rain likely ${dayList(w.rainDays)}` : `Rains about ${Math.max(1, Math.round(w.wet * 10))} days in 10 then`;
-    why.snow = w.snowDays.length ? `Snow likely ${dayList(w.snowDays)}` : `Snows about ${Math.max(1, Math.round(w.sn * 10))} days in 10 then`;
+    why.cool = `Lows down to ${temp(w.minLo, u)}`;
+    why.cold = w.minLo <= LIMITS.cold ? why.cool : `Highs around ${temp(w.meanHi, u)}`;
+    why.rain = w.rainDays.length ? `Rain ${w.rainLikely ? 'likely' : 'forecast'} ${dayList(w.rainDays)}` : often(w.wet, 'Rains');
+    why.snow = w.snowDays.length ? `Snow likely ${dayList(w.snowDays)}` : often(w.sn, 'Snows');
     why.sun = w.forecast && w.uv >= 6 ? `UV up to ${Math.round(w.uv)}` : 'Strong sun then';
   }
   const on = { ...auto };

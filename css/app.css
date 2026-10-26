@@ -335,10 +335,10 @@ ul.chips .chip small { font-weight: 500; color: var(--muted); font-size: 13px; }
 .drive .row { display: flex; flex-wrap: wrap; gap: 8px; }
 .drive .btn.quiet { border-color: transparent; color: var(--muted); }
 .auto-list { list-style: none; margin: 0 0 10px; padding: 0; }
-.auto-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+/* The name and its reason take what's left, so every Auto/Yes/No stays in one column at the right. */
+.auto-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .auto-name { display: block; min-width: 0; }
 .auto-name small { display: block; color: var(--muted); font-size: 13px; }
-.auto-list .seg { flex: none; }
 
 /* ---------- footer, toast and sheet ---------- */
 .jd-foot { padding: 0 16px calc(20px + env(safe-area-inset-bottom)); text-align: center; font-size: 14px; color: var(--muted); }
@@ -395,7 +395,6 @@ ul.chips .chip small { font-weight: 500; color: var(--muted); font-size: 13px; }
 @media (max-width: 420px) {
   .pass-row { grid-template-columns: 1fr 1fr; row-gap: 10px; }
   .welcome h1 { font-size: 38px; }
-  .auto-list li { flex-wrap: wrap; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }

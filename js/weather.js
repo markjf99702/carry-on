@@ -185,12 +185,14 @@ export function summarize(wx) {
   const maxHi = Math.max(...days.map(d => d.hi)), minLo = Math.min(...days.map(d => d.lo));
   const meanHi = mean(days, 'hi');
   const rainDays = fc.filter(rainy).map(d => d.d);
+  // Likely when each of them had a 50% chance; otherwise some came from the millimetres alone.
+  const rainLikely = fc.filter(rainy).every(d => (d.pop ?? 0) >= LIMITS.rainPop);
   const snowDays = fc.filter(d => (d.snow ?? 0) >= LIMITS.snowCm).map(d => d.d);
   const wet = mean(ty, 'wet'), sn = mean(ty, 'sn');
   const uv = fc.length ? Math.max(...fc.map(d => d.uv ?? 0)) : 0, rad = mean(ty, 'rad');
   const cold = minLo <= LIMITS.cold || meanHi <= LIMITS.coldDay;
   return {
-    maxHi, minLo, rainDays, snowDays, wet, sn, uv, rad,
+    maxHi, minLo, meanHi, rainDays, rainLikely, snowDays, wet, sn, uv, rad,
     typical: ty.length > 0, forecast: fc.length > 0,
     hot: maxHi >= LIMITS.hot,
     cold,
