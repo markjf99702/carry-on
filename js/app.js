@@ -56,7 +56,7 @@ function render() {
   // Focus, where the cursor was in a text box, and anything half-typed in an add box come through the redraw. The
   // focus goes back to the control with the same key (the one tapped, in Safari), and if that's gone (left off,
   // packed, deleted), to the nearest one still there.
-  const was = document.activeElement;
+  const was = document.activeElement, onTitle = !moved && was?.tagName === 'H1' && main.contains(was);
   const key = moved ? '' : pressedKey(main), fid = !moved && !key && main.contains(was) ? was.id : '';
   const near = key ? around(byKey(main, key)) : [];
   const caret = was?.selectionStart != null ? [was.selectionStart, was.selectionEnd] : null;
@@ -64,7 +64,13 @@ function render() {
   const nodes = view(page, decodeURIComponent(id));
   main.replaceChildren(...[nodes].flat(Infinity).filter(Boolean));
   for (const [k, v] of typed) { const x = byKey(main, k); if (x && !x.value) x.value = v; }
-  if (moved) { current = screen; window.scrollTo(0, scrolls.get(shownTrip) || 0); tripY = scrollY; main.focus({ preventScroll: true }); }
+  // The screen's heading names the page in the tab and the history ("Lisbon · Carry On"; Trips and the first screen
+  // are plain "Carry On"), and on a new screen the focus goes to it, so a screen reader says where it is.
+  const h1 = main.querySelector('h1');
+  if (h1) h1.tabIndex = -1;
+  document.title = page && h1 && !main.querySelector('.welcome') ? `${h1.textContent} · Carry On` : 'Carry On';
+  if (moved) { current = screen; window.scrollTo(0, scrolls.get(shownTrip) || 0); tripY = scrollY; (h1 || main).focus({ preventScroll: true }); }
+  else if (onTitle) h1?.focus({ preventScroll: true });
   const back = key ? byKey(main, key) : fid ? main.querySelector('#' + CSS.escape(fid)) : null;
   if (back) {
     back.focus({ preventScroll: true });
@@ -1165,8 +1171,8 @@ function settingsView() {
     if (!atDrive || driveHost.hidden) return;
     window.scrollTo(0, driveHost.getBoundingClientRect().top + scrollY - document.querySelector('.bar').offsetHeight - 12);
     drive.watch(() => {
-      const at = document.activeElement;
-      if (!driveHost.isConnected || (at && at !== document.body && at !== main && !driveHost.contains(at))) return false;
+      const at = document.activeElement, free = !at || at === document.body || at === main || (at.tagName === 'H1' && main.contains(at));
+      if (!driveHost.isConnected || (!free && !driveHost.contains(at))) return false;
       driveHost.querySelector('button')?.focus({ preventScroll: true });
     });
   });

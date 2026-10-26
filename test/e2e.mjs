@@ -95,6 +95,9 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
 
   await planTrip(page, { where: 'Lisb', from: 3, to: 7, on: ['Work'] });
   assert.equal(await page.locator('.pass h1').innerText(), 'LISBON');
+  // Each screen names the page, and a new screen puts the focus on its heading, so a screen reader says where it is.
+  assert.equal(await page.title(), 'Lisbon · Carry On');
+  assert.deepEqual(await page.evaluate(() => [document.activeElement.tagName, document.activeElement.textContent]), ['H1', 'Lisbon']);
   await page.waitForSelector('.wx-days li');
   assert.equal(await page.locator('.wx-days li').count(), 5, 'five days of forecast');
   assert.equal(await page.locator('.wx-head h2').innerText(), 'FORECAST');
@@ -225,6 +228,7 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   // The trip on the trips screen.
   await page.click('.crumb');
   const card = page.locator('.tag-card').first();
+  await until(async () => (await page.title()) === 'Carry On', 'Trips to be plain Carry On');
   assert.match(await card.innerText(), /IN 3 DAYS[\s\S]*Lisbon[\s\S]*4 nights[\s\S]*packed/i);
   await fits(page, 'the trips screen');
 
@@ -240,6 +244,7 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
 
   // ---------- my list ----------
   await page.goto(base + '#/list');
+  assert.equal(await page.title(), 'My list · Carry On');
   const day1 = page.locator('.bag.edit', { hasText: 'Day bag' });
   await day1.locator('input').fill('Poncho');
   await day1.locator('input').press('Enter');

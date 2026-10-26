@@ -60,7 +60,7 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 main { flex: 1; width: 100%; max-width: 720px; margin: 0 auto; padding: 8px 16px 32px; }
-main:focus, main:focus-visible { outline: none; }
+main:focus, main:focus-visible, main h1:focus { outline: none; }
 h1, h2, h3, h4 { margin: 0; line-height: 1.15; }
 h1 { font: 700 34px/1.05 var(--display); text-transform: uppercase; letter-spacing: .01em; }
 h2 { font: 700 22px/1.1 var(--display); text-transform: uppercase; letter-spacing: .02em; }
