@@ -782,16 +782,25 @@ function listSummary(list) {
   return `${plural(bags.length, 'bag')} and ${plural(list.items.filter(x => bags.some(b => b.id === x.bag)).length, 'thing')}: ${bags.slice(0, 4).map(b => b.name).join(', ')}${bags.length > 4 ? '…' : ''}`;
 }
 
-// Use a list that came in: replace this one with it, or add it.
+// Use a list that came in: add it to this one, or put it in this one's place (which Undo takes back).
 function offerList(list, from, after) {
   const has = M.hasList(doc());
+  const replace = close => {
+    close();
+    let before = null;
+    const done = store.apply(d => M.replaceList(before = d, list));
+    after?.();
+    toast('Your list is in.', has ? { label: 'Undo', run: () => apply(d => M.undoReplace(d, before, done)) } : undefined);
+    go('#/list');
+  };
+  const add = close => { close(); store.apply(d => M.addList(d, list)); after?.(); toast('Added to your list.'); go('#/list'); };
   sheet(from, close => [
     h('p', {}, listSummary(list)),
     list.bags.length ? h('ul', { class: 'preview' }, list.bags.map(b => h('li', {}, h('span', { 'aria-hidden': 'true' }, b.icon), ' ', h('b', {}, b.name), ' ',
       h('span', { class: 'muted' }, list.items.filter(x => x.bag === b.id).map(x => x.name).slice(0, 6).join(', ') + (list.items.filter(x => x.bag === b.id).length > 6 ? '…' : ''))))) : null,
     h('div', { class: 'stack' },
-      h('button', { type: 'button', class: 'btn primary', onclick: () => { close(); store.apply(d => M.replaceList(d, list)); after?.(); toast('Your list is in.'); go('#/list'); } }, has ? 'Use it instead of my list' : 'Use this list'),
-      has ? h('button', { type: 'button', class: 'btn', onclick: () => { close(); store.apply(d => M.addList(d, list)); after?.(); toast('Added to your list.'); go('#/list'); } }, 'Add it to my list') : null,
+      has ? h('button', { type: 'button', class: 'btn primary', onclick: () => add(close) }, 'Add it to my list') : null,
+      h('button', { type: 'button', class: has ? 'btn' : 'btn primary', onclick: () => replace(close) }, has ? 'Use it instead of my list' : 'Use this list'),
       has ? h('p', { class: 'muted small' }, 'Using it instead keeps your trips. Their ticks still count for things on both lists.') : null),
   ], { wide: true });
 }

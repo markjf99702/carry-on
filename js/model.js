@@ -477,6 +477,23 @@ export function replaceList(doc, list) {
   return { ...next, bags: take('bags', fresh.bags), items: take('items', fresh.items), tags: take('tags', fresh.tags) };
 }
 
+// Undoes replaceList: before and after are the doc either side of it. Every bag, thing and occasion it changed
+// goes back to how it was, newer than the replace so the undo reaches other devices too: what it deleted or
+// overwrote comes back, what it added is deleted, and what was deleted before stays deleted.
+export function undoReplace(doc, before, after) {
+  const out = { ...doc };
+  for (const coll of ['bags', 'items', 'tags']) {
+    out[coll] = { ...doc[coll] };
+    for (const id of new Set([...Object.keys(before[coll]), ...Object.keys(after[coll])])) {
+      const was = before[coll][id], cur = doc[coll][id];
+      if (canon(was) === canon(after[coll][id]) || !cur) continue;
+      const t = stamp(cur);
+      if (was && !gone(was)) { out[coll][id] = { ...was, t }; delete out[coll][id].del; } else out[coll][id] = { ...(was || cur), del: t };
+    }
+  }
+  return out;
+}
+
 // Adds another list to this one. A bag with the same name as one already here is that bag, and a thing
 // already in it stays as it is; everything else comes in after what's here.
 export function addList(doc, list) {

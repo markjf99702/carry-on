@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { openMeteo, calls } from './fixture.mjs';
 import { fakeGoogle } from './fake-google.mjs';
+import { encodeList } from '../js/share.js';
 
 const require = createRequire(import.meta.url);
 let pw;
@@ -358,6 +359,31 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   assert.deepEqual(await page.locator('.bag.edit h2').allInnerTexts(), ['ELECTRONICS', 'ATTIRE', 'NOT IN A BAG', 'LEAVING THE HOUSE']);
   assert.match(await page.locator('.edit-row', { hasText: 'Socks' }).innerText(), /one a day/);
   assert.match(await page.locator('.edit-row', { hasText: 'Swimsuit' }).innerText(), /Only for 🌡️ hot or 🏊 swimming/);
+  await ctx.close();
+}
+
+// ================= A link on a phone that has a list: using it instead can be undone =================
+{
+  const { ctx, page } = await phone();
+  await page.click('text=Start with a starter list');
+  // Deleted before: Undo mustn't bring it back.
+  await page.goto(base + '#/list');
+  await page.click('[aria-label="Change Work bag"]');
+  await page.click('.sheet .btn.danger-quiet');
+  await page.click('.sheet .btn.danger-quiet');
+  const mine = await page.locator('.bag.edit h2').allInnerTexts();
+  assert.ok(!mine.includes('WORK BAG'));
+  const code = await encodeList({ bags: [{ id: 'b-beach', name: 'Beach bag', icon: '🏖️', kind: 'bag' }], items: [{ id: 'i-towel', name: 'Towel', bag: 'b-beach' }], tags: [] });
+  await page.goto(base + '#list=' + code);
+  await until(() => sheetOpen(page), 'the list offer');
+  assert.equal(await page.locator('.sheet .btn.primary').innerText(), 'Add it to my list', 'adding is the main button');
+  await page.click('text=Use it instead of my list');
+  await page.waitForSelector('.bag.edit');
+  assert.deepEqual(await page.locator('.bag.edit h2').allInnerTexts(), ['BEACH BAG']);
+  assert.match(await page.locator('#toast').innerText(), /^Your list is in\./);
+  await toastUndo(page);
+  assert.deepEqual(await page.locator('.bag.edit h2').allInnerTexts(), mine, 'the starter bags are back, and the Work bag stays deleted');
+  await fits(page, 'my list after Undo');
   await ctx.close();
 }
 

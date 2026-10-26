@@ -426,6 +426,27 @@ test('replacing and adding lists', () => {
   assert.ok(M.bags(added).some(b => b.name === 'Bags'));
 });
 
+test('replacing a list can be undone, everywhere, without bringing back what was deleted before', () => {
+  let before = M.putItem(starter(), { id: 'i-mine', name: 'My own thing', bag: 's-daybag' });
+  before = M.putTag(M.removeBag(before, 's-work'), { id: 'o-wed', name: 'Wedding' });
+  const shown = d => ({ bags: M.bags(d).map(b => `${b.id} ${b.name}`), items: M.items(d).map(x => `${x.id} ${x.name}`), tags: M.tags(d).map(g => `${g.id} ${g.name}`) });
+  // A pasted list, and a link from someone whose list started from the starter list too: their Day bag is called
+  // Backpack, their Work bag wasn't deleted, and their Wedding occasion is a party.
+  let link = M.putBag(starter(), { id: 's-daybag', name: 'Backpack' });
+  link = M.putTag(link, { id: 'o-wed', name: 'Party' });
+  for (const list of [parsePaste('Beach bag:\n- Towel\n- Sunscreen'), M.listOf(link)]) {
+    later();
+    const after = M.replaceList(before, list);
+    assert.notDeepEqual(shown(after), shown(before));
+    later();
+    const undone = M.undoReplace(after, before, after);
+    assert.deepEqual(shown(undone), shown(before));
+    assert.ok(M.gone(undone.bags['s-work']), 'the Work bag stays deleted');
+    // Other devices got the replaced list meanwhile: the undo wins there too.
+    for (const m of [M.mergeDocs(undone, after), M.mergeDocs(after, undone)]) assert.deepEqual(shown(m), shown(before));
+  }
+});
+
 test('cleaning keeps junk out', () => {
   const doc = M.cleanDoc({ bags: { b1: { name: 'Ok', kind: 'nope', when: ['rain', 'bad key!'] }, '<x>': { name: 'bad id' } }, items: { i1: { name: '', bag: 'b1' } }, trips: { t1: { start: 'soon' } }, prefs: { units: { v: 'K', t: 1 } } });
   assert.deepEqual(Object.keys(doc.bags), ['b1']);
