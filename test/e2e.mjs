@@ -731,6 +731,24 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
     await until(async () => !(await sheetOpen(page)) && (await page.locator('#toast span').innerText()) === 'That list wasn’t added. Open the link again to see it.', `the not-added toast after ${how}`);
     assert.ok(await page.locator('.welcome').count(), 'and the first screen is there');
   }
+  // It says someone sent it, what that means, and that it brings the occasion Wedding.
+  await page.goto(base + '#list=' + code);
+  await until(() => sheetOpen(page), 'the list offer');
+  assert.equal(await page.locator('#sheetTitle').innerText(), 'SOMEONE SENT YOU A PACKING LIST');
+  const said = await page.locator('.sheet').innerText();
+  assert.match(said, /It becomes your own copy on this phone\. Change anything; theirs stays as it is\. Their trips don’t come with it\./);
+  assert.match(said, /2 bags and 2 things, and 1 list of jobs/);
+  assert.match(said, /With the occasion Wedding/);
+  await page.click('text=Use this list');
+  await page.waitForSelector('.bag.edit');
+  // No trips yet: on to planning one, from the toast or from My list.
+  assert.match(await page.locator('main .card.ready').innerText(), /Your list is ready\. Plan a trip and it picks what this one calls for\./);
+  assert.equal(await page.locator('#toast span').innerText(), 'Your list is in.');
+  await page.locator('#toast button', { hasText: 'Plan a trip' }).waitFor();
+  await wait(500);
+  await page.click('#toast button');
+  await until(() => page.evaluate(() => location.hash === '#/new'), 'Plan a trip');
+  await page.waitForSelector('#where');
   await ctx.close();
 }
 

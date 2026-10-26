@@ -778,6 +778,9 @@ function listView() {
   return [
     h('div', { class: 'page-head' }, h('h1', {}, 'My list')),
     h('p', { class: 'lede muted' }, 'Everything you might pack, by bag. Something with conditions only comes along when a trip calls for it. Tap anything to change it.'),
+    M.trips(doc()).length ? null : h('section', { class: 'card ready' },
+      h('p', {}, 'Your list is ready. Plan a trip and it picks what this one calls for.'),
+      h('a', { class: 'btn primary', href: '#/new' }, h('span', { html: ICONS.plus }), 'Plan a trip')),
     kinds.map(([kind, label]) => {
       const bs = all.filter(b => b.kind === kind);
       return [
@@ -1012,12 +1015,14 @@ function added(was, now) {
 function offerList(list, title, { back = null, link = false } = {}) {
   const has = M.hasList(doc());
   let chose = false;
+  // With no trips yet, the toast leads on to planning one. Undo comes first, after using a list instead of one.
+  const onward = () => (M.trips(doc()).length ? undefined : { label: 'Plan a trip', run: () => go('#/new') });
   const replace = close => {
     chose = true;
     close();
     let before = null;
     const done = store.apply(d => M.replaceList(before = d, list));
-    toast('Your list is in.', has ? { label: 'Undo', run: () => apply(d => M.undoReplace(d, before, done)) } : undefined);
+    toast('Your list is in.', has ? { label: 'Undo', run: () => apply(d => M.undoReplace(d, before, done)) } : onward());
     go('#/list');
   };
   const add = close => {
@@ -1025,13 +1030,16 @@ function offerList(list, title, { back = null, link = false } = {}) {
     close();
     let was = null;
     const now = store.apply(d => M.addList(was = d, list));
-    toast(added(was, now));
+    toast(added(was, now), onward());
     go('#/list');
   };
+  const occasions = list.tags.map(g => g.name);
   sheet(title, close => [
+    link ? h('p', { class: 'muted small' }, 'It becomes your own copy on this phone. Change anything; theirs stays as it is. Their trips don’t come with it.') : null,
     h('p', {}, listSummary(list)),
     list.bags.length ? h('ul', { class: 'preview' }, list.bags.map(b => h('li', {}, h('span', { 'aria-hidden': 'true' }, b.icon), ' ', h('b', {}, b.name), ' ',
       h('span', { class: 'muted' }, list.items.filter(x => x.bag === b.id).map(x => x.name).slice(0, 6).join(', ') + (list.items.filter(x => x.bag === b.id).length > 6 ? '…' : ''))))) : null,
+    occasions.length ? h('p', { class: 'small' }, occasions.length === 1 ? `With the occasion ${occasions[0]}` : `With ${occasions.length} occasions: ${occasions.join(', ')}`) : null,
     back ? guessLine(list) : null,
     h('div', { class: 'stack' },
       has ? h('button', { type: 'button', class: 'btn primary', onclick: () => add(close) }, 'Add it to my list') : null,
@@ -1046,7 +1054,7 @@ async function takeLink(code) {
   render();
   try {
     const list = await decodeList(code);
-    offerList(list, 'A packing list', { link: true });
+    offerList(list, 'Someone sent you a packing list', { link: true });
   } catch (e) { toast(e.message); }
 }
 
