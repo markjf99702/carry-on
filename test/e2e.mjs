@@ -1175,20 +1175,24 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
     await wait(300);
   };
   const y = () => page.evaluate(() => Math.round(scrollY));
+  // Where the page comes to rest, once a flick has run out.
+  const still = async () => { let last = -1, same = 0; while (same < 3) { const now = await y(); same = now === last ? same + 1 : 0; last = now; await wait(100); } return last; };
   await page.evaluate(() => scrollTo(0, 300));
   await drag(780, 380);
-  assert.ok(await y() > 500, 'a drag on the page scrolls it');
+  assert.ok(await still() > 500, 'a drag on the page scrolls it');
   // Dragging on past the end of a sheet's own scrolling, or on the dimmed page around it, leaves the trip where it
   // was, so closing the sheet goes back to the same place.
   await page.evaluate(() => scrollTo(0, 300));
+  await still();
   await page.locator('.needs-head .btn').evaluate(b => b.click());
   await until(() => sheetOpen(page), 'the conditions sheet');
   let at = await y();
   for (let i = 0; i < 4; i++) await drag(780, 380);
   assert.ok(await page.evaluate(() => document.getElementById('sheet').scrollTop) > 0, 'the sheet scrolls');
   await closeSheet(page);
-  assert.equal(await y(), at, 'the trip stays put behind the conditions sheet');
+  assert.equal(await still(), at, 'the trip stays put behind the conditions sheet');
   await page.evaluate(() => scrollTo(0, 1500));
+  await still();
   await page.locator('main li.row .more').nth(8).evaluate(b => b.click());
   await until(() => sheetOpen(page), 'a row’s sheet');
   at = await y();
@@ -1196,7 +1200,7 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await drag(150, 450);
   assert.ok(await sheetOpen(page), 'a drag on the dimmed page doesn’t close the sheet');
   await closeSheet(page);
-  assert.equal(await y(), at, 'the trip stays put behind a row’s sheet');
+  assert.equal(await still(), at, 'the trip stays put behind a row’s sheet');
   await ctx.close();
 }
 
