@@ -6,7 +6,7 @@ import * as M from '../js/model.js';
 import { plan, conditions, qtyOf, units, grown } from '../js/rules.js';
 import { summarize, stale, tripWeather, forecastEdge } from '../js/weather.js';
 import { plugsFor, plugText, localCountry } from '../js/plugs.js';
-import { parsePaste, encodeList, decodeList, guess } from '../js/share.js';
+import { parsePaste, encodeList, decodeList, guess, bagIcon, bagKind } from '../js/share.js';
 import { starterList } from '../js/starter.js';
 import { store } from '../js/store.js'; // in Node there's no localStorage, so it keeps the doc in memory only
 import { add, span, yearsBack, range, weekday, short, long } from '../js/days.js';
@@ -851,6 +851,89 @@ test('guesses', () => {
   assert.deepEqual(guess('Passport').when, ['abroad']);
   assert.deepEqual(guess('Rain jacket').when, ['rain']);
   assert.equal(guess('Underwear').per, 'day');
+});
+
+test('first guesses, name by name: nothing everyday left off a trip by a word inside another', () => {
+  // name | when (or "day" for one a day; nothing for always)
+  const table = `Toothbrush|
+    Skincare|
+    Skin care|
+    Skirt|
+    Hair tie|
+    Hair ties|
+    Tie|dressy
+    Suit|dressy
+    Dress shoes|dressy
+    Dress shirt|dressy
+    USB-C adapter|
+    USB adapter|
+    HDMI adapter|
+    Headphone adapter|
+    Lightning adapter|
+    Plug adapter|plug
+    Travel adapter|plug
+    Voltage converter|plug
+    Visa|abroad
+    Visa paperwork|abroad
+    Visa debit card|
+    Work Visa card|
+    Passport|abroad
+    Ski goggles|snow
+    Ski jacket|snow
+    Ski socks|snow
+    Skis|snow
+    Snow boots|snow
+    Swim goggles|swim hot
+    Goggles|swim hot
+    Swimsuit|swim hot
+    Wetsuit|swim
+    Snorkel|swim
+    Beach towel|swim
+    Slides|hot swim
+    Pool slides|hot swim
+    Presentation slides|
+    Sandals|hot swim
+    Sneakers|
+    Running shoes|gym
+    Gym clothes|gym
+    Trail mix|
+    Trail shoes|outdoors
+    Hiking boots|outdoors
+    Bug spray|outdoors
+    Mosquito repellent|outdoors
+    Rain boots|rain
+    Waterproof jacket|rain
+    Rain jacket|rain
+    Umbrella|rain
+    Sun hat|sun hot
+    Sunscreen|sun hot swim
+    Neck pillow|fly
+    Travel pillow|fly
+    Sweatshirt|cool cold
+    Jumper|cool cold
+    Sweater|cool cold
+    Long johns|cold
+    Gloves|cold
+    Laptop|
+    Socks|day
+    Underwear|day
+    T-shirts|day
+    Shirts|day
+    Tank tops|day
+    Badge|work`.split('\n').map(l => l.trim().split('|'));
+  for (const [name, want] of table) {
+    const g = guess(name);
+    assert.equal(g.per === 'day' ? 'day' : g.when.join(' '), want, name);
+  }
+});
+
+test('bags: which kind, and which icon', () => {
+  for (const n of ['Leaving the house', 'Before we go', 'Before leaving', 'To do before leaving', 'Before departure', 'Lock up']) assert.equal(bagKind(n), 'leave', n);
+  for (const n of ['Leaving the hotel', 'Check out of the hotel', 'Hotel checkout', 'Checkout', 'Check-out', 'Leaving the cabin', 'Leaving the vacation rental', 'Leaving the Airbnb', 'Before leaving the hotel']) assert.equal(bagKind(n), 'back', n);
+  for (const n of ['Checked bag', 'Toiletries', 'Day of travel']) assert.equal(bagKind(n), 'bag', n);
+  const icons = { 'Toiletries': '🪥', 'Toiletries bag': '🪥', 'Liquids': '🧴', 'Liquid toiletries': '🧴', 'Wash bag': '🧴', 'Workout bag': '🏋️', 'Gym bag': '🏋️', 'Work bag': '💼', 'Homework': '🧳', 'Footwear': '👟', 'Clothes': '👕', 'Meds': '💊', 'Camping gear': '🏕️', 'Golf': '⛳', 'Ski gear': '🎿', 'Skin care': '🧳', 'Certificates': '🧳', 'Communication': '🧳', 'Dog stuff': '🐶', 'Tech': '🔌', 'Docs': '🛂' };
+  for (const [n, icon] of Object.entries(icons)) assert.equal(bagIcon(n), icon, n);
+  assert.equal(bagIcon('Leaving the vacation rental', bagKind('Leaving the vacation rental')), '🏨');
 });
 
 test('a list survives a link', async () => {

@@ -42,20 +42,25 @@ export function cleanList(raw) {
 // ---------- guesses ----------
 // When a thing is probably needed, from its name. Only a first guess: every one can be changed.
 const GUESSES = [
+  // Snow before swimming, so ski goggles are for the snow.
+  [/\bski(s|ing)?\b|snow ?(boots?|pants|suit)/i, { when: ['snow'] }],
   [/\bswim|bathing suit|trunks|bikini|goggles/i, { when: ['swim', 'hot'] }],
+  [/wetsuit|snorkel|beach towel|rash guard/i, { when: ['swim'] }],
   [/sunscreen|sun ?block|\bspf\b|after.?sun|aloe/i, { when: ['sun', 'hot', 'swim'] }],
-  [/sandal|flip.?flop|slides\b/i, { when: ['hot', 'swim'] }],
-  [/workout|gym|running (shoes|clothes)|sneakers|sports bra|yoga/i, { when: ['gym'] }],
-  [/passport|visa\b(?! card)|currency|local cash|foreign cash/i, { when: ['abroad'] }],
-  [/adapter|converter/i, { when: ['plug'] }],
-  [/umbrella|rain ?(jacket|coat|shell)|poncho/i, { when: ['rain'] }],
-  [/snow boots?|ski|snow pants/i, { when: ['snow'] }],
-  [/winter coat|warm coat|parka|puffer|gloves|mittens|beanie|scarf|thermal|long underwear|hand warmers/i, { when: ['cold'] }],
-  [/light jacket|fleece|sweater|hoodie|cardigan/i, { when: ['cool', 'cold'] }],
-  [/\bsuit\b|\btie\b|dress shoes|blazer|heels|cufflinks|dressy|formal/i, { when: ['dressy'] }],
-  [/hiking|trail|bug spray|insect|headlamp|trekking/i, { when: ['outdoors'] }],
+  [/sun ?hat/i, { when: ['sun', 'hot'] }],
+  [/sandal|flip.?flop|^slides$|(pool|shower|beach) slides/i, { when: ['hot', 'swim'] }],
+  [/workout|\bgym\b|running (shoes|clothes)|sports bra|yoga/i, { when: ['gym'] }],
+  // A visa, but not a Visa card; a plug adapter, but not a USB-C or HDMI one.
+  [/passport|\bvisa\b(?! (debit |credit )?card)|currency|local cash|foreign cash/i, { when: ['abroad'] }],
+  [/(?<!(usb-?c?|hdmi|lightning|headphone|audio|display|sd|card) )adapter|converter/i, { when: ['plug'] }],
+  [/umbrella|rain ?(jacket|coat|shell|boots?)|poncho|waterproof (jacket|coat|shell)/i, { when: ['rain'] }],
+  [/winter coat|warm coat|parka|puffer|gloves|mittens|beanie|scarf|thermal|long underwear|long johns|hand warmers/i, { when: ['cold'] }],
+  [/light jacket|fleece|sweater|sweatshirt|hoodie|cardigan|\bjumpers?\b/i, { when: ['cool', 'cold'] }],
+  [/\bsuit\b|(?<!hair )\bties?\b|dress (shoes|shirts?)|blazer|heels|cufflinks|dressy|formal/i, { when: ['dressy'] }],
+  [/hiking|trail(?! mix)|bug spray|insect|mosquito|headlamp|trekking/i, { when: ['outdoors'] }],
+  [/(neck|travel) pillow/i, { when: ['fly'] }],
   [/\bbadge\b|security key|business cards|work laptop/i, { when: ['work'] }],
-  [/\bsocks?\b|underwear|boxers|briefs|undershirts?|panties|bras?\b/i, { per: 'day' }],
+  [/\bsocks?\b|underwear|boxers|briefs|undershirts?|panties|bras?\b|\bt[- ]?shirts?\b|\bshirts\b|\btops\b/i, { per: 'day' }],
 ];
 const BAG_GUESSES = [
   [/\bwork\b|office/i, { when: ['work'] }],
@@ -70,20 +75,25 @@ export function guess(name, forBag = false) {
 
 const ICONS = [
   [/non-?liquid|dry toiletr/i, '🪥'],
-  [/liquid|3-?1-?1|toiletr|bathroom|wash|shower/i, '🧴'],
-  [/tooth|dental|toiletries/i, '🪥'],
-  [/electr|tech|charger|cable|gadget/i, '🔌'],
-  [/document|passport|papers|travel doc|money|wallet/i, '🛂'],
+  [/liquid|3-?1-?1/i, '🧴'],
+  [/toiletr|tooth|dental/i, '🪥'],
+  [/bathroom|wash|shower/i, '🧴'],
+  [/electr|\btech\b|charger|cable|gadget/i, '🔌'],
+  [/document|passport|papers|travel doc|\bdocs\b|money|wallet/i, '🛂'],
   [/cross ?body|purse|handbag|clutch/i, '👜'],
   [/backpack|day ?bag|personal item/i, '🎒'],
+  [/shoe|boots|footwear|sneaker/i, '👟'],
+  [/\bgym\b|workout/i, '🏋️'],
   [/attire|cloth|outfit|wardrobe|wear/i, '👕'],
-  [/shoe|boots/i, '👟'],
-  [/work|office|laptop bag/i, '💼'],
-  [/medic|pill|first aid|pharm|health/i, '💊'],
-  [/baby|kid|child/i, '🧸'],
+  [/\bwork\b|office|laptop bag/i, '💼'],
+  [/medic|\bmeds\b|pill|first aid|pharm|health/i, '💊'],
+  [/baby|\bkids?\b|child/i, '🧸'],
   [/beach|pool|swim/i, '🏖️'],
+  [/\bski(s|ing)?\b|snow/i, '🎿'],
+  [/\bcamp(ing)?\b/i, '🏕️'],
+  [/\bgolf/i, '⛳'],
+  [/\b(dog|cat|pet)s?\b/i, '🐶'],
   [/snack|food/i, '🍫'],
-  [/dog|cat|pet/i, '🐶'],
   [/camera|photo/i, '📷'],
 ];
 export function bagIcon(name, kind = 'bag') {
@@ -93,8 +103,8 @@ export function bagIcon(name, kind = 'bag') {
   return '🧳';
 }
 export function bagKind(name) {
-  if (/leav(e|ing) (the )?(house|home|apartment|flat)|before (you|we|i) (go|leave)|lock ?up|house ?(check|jobs)/i.test(name)) return 'leave';
-  if (/(leav(e|ing)|check(ing)? ?out of) (the )?(hotel|room|airbnb|rental)|coming home|heading home|going home/i.test(name)) return 'back';
+  if (/(leav(e|ing)|check(ing)?[ -]?out of) (the )?(hotel|room|airbnb|(vacation )?rental|cabin|cottage|condo|villa)|\bcheck[ -]?out\b|coming home|heading home|going home/i.test(name)) return 'back';
+  if (/leav(e|ing) (the )?(house|home|apartment|flat)|before (you|we|i) (go|leave)|before (leaving|departure)|to do before|lock ?up|house ?(check|jobs)/i.test(name)) return 'leave';
   return 'bag';
 }
 

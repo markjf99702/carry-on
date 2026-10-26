@@ -17,7 +17,7 @@ const single = document.documentElement.hasAttribute('data-single');
 const doc = () => store.doc;
 const today = () => D.today();
 const plural = (n, one, many = one + 's') => `${n} ${n === 1 ? one : many}`;
-const BAG_ICONS = ['🧳', '🧴', '🪥', '💊', '🔌', '🛂', '👜', '🎒', '👕', '👟', '💼', '🧸', '🍼', '📷', '🎮', '⛳', '🏕️', '🎿', '🏖️', '🐶', '📚', '🍫', '🏠', '🏨'];
+const BAG_ICONS = ['🧳', '🧴', '🪥', '💊', '🔌', '🛂', '👜', '🎒', '👕', '👟', '💼', '🏋️', '🧸', '🍼', '📷', '🎮', '⛳', '🏕️', '🎿', '🏖️', '🐶', '📚', '🍫', '🏠', '🏨'];
 const TAG_ICONS = ['🏷️', '💼', '🏋️', '🏊', '👔', '🥾', '💍', '🎉', '⛳', '🎿', '🏕️', '👶', '🐶', '🎭', '🏖️', '🎸', '🚴', '🎣'];
 
 // ---------- drawing ----------
