@@ -113,11 +113,13 @@ export async function tripWeather(place, start, end, today, { signal } = {}) {
   return { at: Date.now(), days: list };
 }
 
-// Old enough to look up again: a forecast after three hours, typical weather once the forecast reaches it.
+// Old enough to look up again: a forecast after three hours. Typical weather doesn't change, so only once the
+// forecast reaches it (or after a week, in case a lookup came back short).
 export function stale(wx, start, end, today, now = Date.now()) {
   if (end < add(today, -1)) return false;
   if (!wx || !wx.days.length) return true;
-  if (now - wx.at > 3 * 3600e3) return true;
+  const forecast = wx.days.some(d => !d.typ);
+  if (now - wx.at > (forecast ? 3 * 3600e3 : 7 * 86400e3)) return true;
   return wx.days.some(d => d.typ && d.d <= add(today, AHEAD));
 }
 

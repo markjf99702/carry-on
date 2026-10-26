@@ -100,6 +100,9 @@ test('stale weather', () => {
   assert.equal(stale({ at: now - 3600e3, days: [day('2026-11-10', 10, 5)] }, '2026-11-10', '2026-11-10', '2026-11-02', now), false);
   assert.equal(stale({ at: now - 5 * 3600e3, days: [day('2026-11-10', 10, 5)] }, '2026-11-10', '2026-11-10', '2026-11-02', now), true);
   assert.equal(stale({ at: now, days: [{ d: '2026-11-10', typ: 1, hi: 1, lo: 1, mm: 0, wet: 0, sn: 0, rad: 0 }] }, '2026-11-10', '2026-11-10', '2026-11-02', now), true, 'the forecast now reaches it');
+  const typ = { at: now - 2 * 86400e3, days: [{ d: '2026-12-20', typ: 1, hi: 1, lo: 1, mm: 0, wet: 0, sn: 0, rad: 0 }] };
+  assert.equal(stale(typ, '2026-12-20', '2026-12-20', '2026-11-02', now), false, 'typical weather two days old is still good');
+  assert.equal(stale({ ...typ, at: now - 8 * 86400e3 }, '2026-12-20', '2026-12-20', '2026-11-02', now), true, 'but not after a week');
   assert.equal(stale(null, '2026-10-01', '2026-10-05', '2026-11-02', now), false, 'a past trip keeps what it had');
 });
 
