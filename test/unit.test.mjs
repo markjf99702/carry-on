@@ -340,6 +340,36 @@ test('a whole bag or list of jobs left off one trip', () => {
   assert.deepEqual(plan(doc, doc.trips.t1).tasks.map(g => g.bag.name), ['Leaving the house']);
 });
 
+test('a single job left off one trip, or one its conditions leave off, waits under Left off', () => {
+  let doc = M.setPref(starter(), 'home', 'US');
+  doc = M.putItem(doc, { id: 'cushions', name: 'Bring in the patio cushions', bag: 's-leave', when: ['rain'] });
+  doc = M.putItem(doc, { id: 'tip', name: 'Leave a tip', bag: 's-back', unless: ['drive'] });
+  doc = trip(doc, { travel: 'drive' });
+  doc = M.mark(doc, 't1', 'x:s-leave-take-out-the-trash', 'skip');
+  const jobs = p => p.tasks.flatMap(g => g.rows.map(r => r.name));
+  const leftJobs = p => p.left.filter(l => ['s-leave', 's-back'].includes(l.item.bag)).map(l => [l.item.name, l.skipped, l.why]);
+  let p = plan(doc, doc.trips.t1);
+  assert.ok(!jobs(p).includes('Take out the trash') && !jobs(p).includes('Bring in the patio cushions'));
+  assert.deepEqual(leftJobs(p), [['Take out the trash', true, 'You left it off this trip'], ['Bring in the patio cushions', false, 'Only for rain']]);
+  // Brought along anyway, and put back.
+  doc = M.mark(doc, 't1', 'x:cushions', 'add');
+  doc = M.mark(doc, 't1', 'x:s-leave-take-out-the-trash', 0);
+  p = plan(doc, doc.trips.t1);
+  assert.deepEqual(jobs(p), ['Take out the trash', 'Set the thermostat', 'Water the plants', 'Lock the windows and doors', 'Bring in the patio cushions']);
+  assert.ok(p.tasks[0].rows.find(r => r.name === 'Bring in the patio cushions').added);
+  assert.deepEqual(leftJobs(p), []);
+  // Coming home, a hotel job the conditions leave off waits there too; the things in bags don't show there.
+  const back = plan(doc, doc.trips.t1, 'back');
+  assert.ok(!jobs(back).includes('Leave a tip'));
+  assert.deepEqual(back.left.map(l => [l.item.name, l.skipped, l.why]), [['Leave a tip', false, 'Not when driving']]);
+  // A whole list left off covers its jobs with its own line.
+  doc = M.mark(doc, 't1', 'x:s-leave', 'skip');
+  doc = M.mark(doc, 't1', 'x:s-leave-water-the-plants', 'skip');
+  p = plan(doc, doc.trips.t1);
+  assert.deepEqual(leftJobs(p), []);
+  assert.deepEqual(p.leftBags.filter(l => l.skipped).map(l => l.bag.name), ['Leaving the house']);
+});
+
 test('days: the same words as toLocaleDateString, a year of days', () => {
   const was = (k, opts) => new Date(k + 'T12:00:00Z').toLocaleDateString('en-US', { timeZone: 'UTC', ...opts });
   for (const k of range('2026-02-25', '2027-03-05')) {

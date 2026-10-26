@@ -351,9 +351,13 @@ function leftOff(t, left, leftBags) {
           h('span', { class: 'name' }, `${l.bag.icon} ${l.bag.name}`),
           h('small', {}, `${plural(l.count, l.bag.kind === 'bag' ? 'thing' : 'job')} · ${l.why}`)),
         h('button', { type: 'button', class: 'btn small', 'data-key': 'x:' + l.bag.id, onclick: () => put(l.bag.id, l.skipped) }, l.skipped ? 'Put back' : 'Bring it'))),
-      left.map(l => h('li', { class: 'row left-row' },
-        h('div', { class: 'what' }, h('span', { class: 'name' }, l.item.name), h('small', {}, l.why)),
-        h('button', { type: 'button', class: 'btn small', 'data-key': 'x:' + l.item.id, onclick: () => put(l.item.id, l.skipped) }, l.skipped ? 'Put back' : 'Pack it')))) : null);
+      left.map(l => {
+        // A job shows its list's icon, and is brought rather than packed.
+        const list = doc().bags[l.item.bag], job = list && list.kind !== 'bag';
+        return h('li', { class: 'row left-row' },
+          h('div', { class: 'what' }, h('span', { class: 'name' }, job ? `${list.icon} ${l.item.name}` : l.item.name), h('small', {}, l.why)),
+          h('button', { type: 'button', class: 'btn small', 'data-key': 'x:' + l.item.id, onclick: () => put(l.item.id, l.skipped) }, l.skipped ? 'Put back' : job ? 'Bring it' : 'Pack it'));
+      })) : null);
 }
 
 // ---------- sheets for a trip ----------

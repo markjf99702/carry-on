@@ -96,7 +96,7 @@ export function whyNot(doc, rule, res) {
 //   ticked going, everything that was on the list) and the jobs before leaving the hotel.
 // A whole bag or list of jobs can be left off one trip ('x:BAGID' 'skip'), or brought along when its
 // conditions say no ('add'), the same way a single thing can.
-// Returns { groups: [{ bag, rows }], tasks: [{ bag, rows }], left: [{ item, why, skipped }],
+// Returns { groups: [{ bag, rows }], tasks: [{ bag, rows }], left: [{ item, why, skipped }] (things, then jobs),
 //   leftBags: [{ bag, why, skipped, count }], done, total, cond }
 // A row: { id, name, note, qty, hits: [condition keys], key: the mark key, done, extra?, gone? }
 export function plan(doc, trip, mode = 'go') {
@@ -147,11 +147,17 @@ export function plan(doc, trip, mode = 'go') {
     const bag = bagFor(mv(x.id)) || bagFor(x.bag) || fallback;
     groupOf(bag).rows.push({ id: x.id, name: x.name, note: '', qty: 1, hits: [], key: (mode === 'go' ? 'p:' : 'r:') + x.id, extra: true });
   }
-  const kind = mode === 'go' ? 'leave' : 'back';
+  // Jobs, for leaving the house or the hotel. One left off this trip, or that its conditions leave off, waits
+  // under Left off while its list is coming (a list that isn't has its own line).
+  const kind = mode === 'go' ? 'leave' : 'back', leftJobs = [];
   for (const b of allBags.filter(b => b.kind === kind)) {
     if (!coming(b)) continue;
-    const rows = M.items(doc, b.id).filter(it => passes(it, on).ok && pick(it.id) !== 'skip')
-      .map(it => ({ id: it.id, name: it.name, note: it.note, qty: 1, hits: passes(it, on).hits, key: (mode === 'go' ? 'p:' : 'r:') + it.id }));
+    const rows = [];
+    for (const it of M.items(doc, b.id)) {
+      const res = passes(it, on), p = pick(it.id);
+      if (p === 'add' || (p !== 'skip' && res.ok)) rows.push({ id: it.id, name: it.name, note: it.note, qty: 1, hits: res.hits, key: (mode === 'go' ? 'p:' : 'r:') + it.id, added: p === 'add' });
+      else leftJobs.push({ item: it, skipped: p === 'skip', why: p === 'skip' ? 'You left it off this trip' : whyNot(doc, it, res) });
+    }
     if (rows.length) tasks.push({ bag: b, rows });
   }
   const list = [...groups.values()].filter(g => g.rows.length).sort((a, b) => a.bag.order - b.bag.order);
@@ -159,7 +165,7 @@ export function plan(doc, trip, mode = 'go') {
   for (const r of all) r.done = (marks[r.key]?.v || 0) > 0;
   if (mode === 'back') for (const r of all) r.gone = marks[r.key]?.v === 2;
   return {
-    groups: list, tasks, left: mode === 'go' ? left : [], leftBags, cond,
+    groups: list, tasks, left: mode === 'go' ? [...left, ...leftJobs] : leftJobs, leftBags, cond,
     done: all.filter(r => r.done).length, total: all.length,
   };
 }

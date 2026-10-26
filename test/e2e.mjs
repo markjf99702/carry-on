@@ -181,6 +181,15 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   assert.match(await leave.innerText(), /4 jobs · You left it off this trip/);
   await leave.locator('button', { hasText: 'Put back' }).click();
   assert.equal(await page.locator('.bag h2', { hasText: 'Leaving the house' }).count(), 1);
+  // One job left off this trip waits there too, with its list's icon, and can be put back.
+  await more(page, 'Water the plants');
+  await page.click('text=Leave it off this trip');
+  assert.equal(await row(page, 'Water the plants').count(), 0);
+  const plants = page.locator('.left .row', { hasText: 'Water the plants' });
+  assert.match(await plants.innerText(), /^🏠 Water the plants\s+You left it off this trip/);
+  await plants.locator('button', { hasText: 'Put back' }).click();
+  assert.equal(await row(page, 'Water the plants').count(), 1);
+  assert.equal(await plants.count(), 0);
 
   // A bag that stays packed.
   await page.locator('.bag', { hasText: 'Liquids bag' }).locator('.bag-head .icon-btn').click();
