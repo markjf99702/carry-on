@@ -690,15 +690,47 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
 {
   const { ctx, page } = await phone();
   await page.click('text=Paste my own list');
-  await page.fill('.sheet textarea', 'Weekend list\n\n● Electronics\n  ○ Headphones\n  ○ Laptop charger\n● Attire\n  ○ Socks\n  ○ Swimsuit\n● Reading glasses\n● Leaving the house\n  ○ Close windows');
+  // Next with nothing pasted says so.
+  await page.click('.sheet .btn.primary');
+  assert.equal(await page.locator('.sheet .err').innerText(), 'Nothing to bring in yet: paste a list first.');
+  const text = 'Weekend list\n\n● Electronics\n  ○ Headphones\n  ○ Laptop charger\n● Attire\n  ○ Socks\n  ○ Swimsuit\n● Reading glasses\n● Leaving the house\n  ○ Close windows';
+  await page.fill('.sheet textarea', text);
+  assert.equal(await page.locator('.sheet .err').innerText(), '', 'and stops saying it once there is');
   await page.click('.sheet .btn.primary');
   await until(async () => /Your pasted list/i.test(await page.locator('.sheet').innerText()), 'the preview');
-  assert.match(await page.locator('.sheet').innerText(), /3 bags and 5 things/);
+  assert.match(await page.locator('.sheet').innerText(), /2 bags and 5 things, and 1 list of jobs/);
+  assert.match(await page.locator('.sheet').innerText(), /First guesses: Socks one a day · Swimsuit only for hot or swimming\. Change any of them in My list\./);
+  await fits(page, 'the pasted list’s preview');
+  // Back to the text, as it was pasted, and on again.
+  await page.click('.sheet button:text-is("Back")');
+  await until(async () => /Paste a list/i.test(await page.locator('#sheetTitle').innerText()), 'the paste sheet again');
+  assert.equal(await page.locator('.sheet textarea').inputValue(), text);
+  await page.click('.sheet .btn.primary');
+  await until(async () => /Your pasted list/i.test(await page.locator('.sheet').innerText()), 'the preview again');
   await page.click('text=Use this list');
   await page.waitForSelector('.bag.edit');
   assert.deepEqual(await page.locator('.bag.edit h2').allInnerTexts(), ['ELECTRONICS', 'ATTIRE', 'NOT IN A BAG', 'LEAVING THE HOUSE']);
   assert.match(await page.locator('.edit-row', { hasText: 'Socks' }).innerText(), /one a day/);
   assert.match(await page.locator('.edit-row', { hasText: 'Swimsuit' }).innerText(), /Only for 🌡️ hot or 🏊 swimming/);
+  await ctx.close();
+}
+
+// ================= A link on a new phone =================
+{
+  const { ctx, page } = await phone();
+  const code = await encodeList({
+    bags: [{ id: 'w1', name: 'Wash bag', icon: '🧴', kind: 'bag' }, { id: 'w2', name: 'Wedding things', icon: '💍', kind: 'bag', when: ['o-wed'] }, { id: 'w3', name: 'Before we go', icon: '🏠', kind: 'leave' }],
+    items: [{ id: 'v1', name: 'Toothbrush', bag: 'w1' }, { id: 'v2', name: 'Gift', bag: 'w2' }, { id: 'v3', name: 'Feed the cat', bag: 'w3' }],
+    tags: [{ id: 'o-wed', name: 'Wedding', icon: '💍' }],
+  });
+  // Closed without choosing, by Escape or a tap on the dimmed page: it says the list wasn't added.
+  for (const how of ['Escape', 'tap']) {
+    await page.goto(base + '#list=' + code);
+    await until(() => sheetOpen(page), 'the list offer');
+    if (how === 'Escape') await page.keyboard.press('Escape'); else await page.mouse.click(195, 8);
+    await until(async () => !(await sheetOpen(page)) && (await page.locator('#toast span').innerText()) === 'That list wasn’t added. Open the link again to see it.', `the not-added toast after ${how}`);
+    assert.ok(await page.locator('.welcome').count(), 'and the first screen is there');
+  }
   await ctx.close();
 }
 

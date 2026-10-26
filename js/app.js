@@ -148,7 +148,7 @@ function welcome() {
       h('li', {}, h('b', {}, 'Coming home too. '), 'A second pass makes sure nothing stays behind at the hotel.')),
     h('div', { class: 'choices' },
       h('button', { type: 'button', class: 'btn primary big', onclick: () => { store.apply(d => M.startWith(d, starterList())); toast('Starter list in. Change anything in My list.'); go('#/'); } }, 'Start with a starter list'),
-      h('button', { type: 'button', class: 'btn big', onclick: pasteSheet }, 'Paste my own list'),
+      h('button', { type: 'button', class: 'btn big', onclick: () => pasteSheet() }, 'Paste my own list'),
       drive.ready ? h('a', { class: 'btn big', href: '#/settings' }, 'Bring my list from Google Drive') : null),
     h('p', { class: 'small muted' }, 'Pasting works with a list copied from Google Keep, Notes or a document. Put each bag’s things under its name.'),
     yourTrips());
@@ -796,7 +796,7 @@ function listView() {
       h('h2', {}, 'Share or bring in a list'),
       h('div', { class: 'stack' },
         h('button', { type: 'button', class: 'btn', onclick: shareSheet }, 'Send my list as a link'),
-        h('button', { type: 'button', class: 'btn', onclick: pasteSheet }, 'Paste a list'))),
+        h('button', { type: 'button', class: 'btn', onclick: () => pasteSheet() }, 'Paste a list'))),
   ];
 }
 
@@ -971,9 +971,25 @@ function tagEditor(g) {
 
 // ---------- lists in and out ----------
 
+// "4 bags and 11 things, and 1 list of jobs"; "13 things, not in bags yet".
+const isLoose = b => b.name.toLowerCase() === 'not in a bag';
 function listSummary(list) {
-  const bags = list.bags.filter(b => b.kind === 'bag');
-  return `${plural(bags.length, 'bag')} and ${plural(list.items.filter(x => bags.some(b => b.id === x.bag)).length, 'thing')}: ${bags.slice(0, 4).map(b => b.name).join(', ')}${bags.length > 4 ? '…' : ''}`;
+  const packing = list.bags.filter(b => b.kind === 'bag'), bags = packing.filter(b => !isLoose(b));
+  const things = plural(list.items.filter(x => packing.some(b => b.id === x.bag)).length, 'thing');
+  const jobs = list.bags.length - packing.length;
+  return (bags.length ? `${plural(bags.length, 'bag')} and ${things}` : `${things}, not in bags yet`) + (jobs ? `, and ${plural(jobs, 'list of jobs', 'lists of jobs')}` : '');
+}
+
+// The first guesses on a pasted list, as one line: "Passport only abroad · Swimsuit only for hot or swimming".
+function guessLine(list) {
+  const parts = list.items.filter(x => x.per === 'day' || x.when.length).map(x => {
+    if (x.per === 'day') return `${x.name} one a day`;
+    const names = [...x.when].sort().map(k => R.condInfo(doc(), k)?.name.toLowerCase()).filter(Boolean); // in My list's order
+    return names.length ? `${x.name} only ${names.join() === 'abroad' ? 'abroad' : `for ${names.join(' or ')}`}` : '';
+  }).filter(Boolean);
+  if (!parts.length) return null;
+  const more = parts.length - 6;
+  return h('p', { class: 'muted small' }, `First guesses: ${parts.slice(0, 6).join(' · ')}${more > 0 ? ` · ${more} more` : ''}. Change any of them in My list.`);
 }
 
 // What adding a list brought in: "Added 3 things: Retainer, Camera, Feed the cat.", "Added 1 bag and 4 things."
@@ -992,33 +1008,37 @@ function added(was, now) {
 }
 
 // Use a list that came in: add it to this one, or put it in this one's place (which Undo takes back).
-function offerList(list, from, after) {
+// back: from a paste, a way back to the pasted text. link: closing without choosing says the list wasn't added.
+function offerList(list, title, { back = null, link = false } = {}) {
   const has = M.hasList(doc());
+  let chose = false;
   const replace = close => {
+    chose = true;
     close();
     let before = null;
     const done = store.apply(d => M.replaceList(before = d, list));
-    after?.();
     toast('Your list is in.', has ? { label: 'Undo', run: () => apply(d => M.undoReplace(d, before, done)) } : undefined);
     go('#/list');
   };
   const add = close => {
+    chose = true;
     close();
     let was = null;
     const now = store.apply(d => M.addList(was = d, list));
-    after?.();
     toast(added(was, now));
     go('#/list');
   };
-  sheet(from, close => [
+  sheet(title, close => [
     h('p', {}, listSummary(list)),
     list.bags.length ? h('ul', { class: 'preview' }, list.bags.map(b => h('li', {}, h('span', { 'aria-hidden': 'true' }, b.icon), ' ', h('b', {}, b.name), ' ',
       h('span', { class: 'muted' }, list.items.filter(x => x.bag === b.id).map(x => x.name).slice(0, 6).join(', ') + (list.items.filter(x => x.bag === b.id).length > 6 ? '…' : ''))))) : null,
+    back ? guessLine(list) : null,
     h('div', { class: 'stack' },
       has ? h('button', { type: 'button', class: 'btn primary', onclick: () => add(close) }, 'Add it to my list') : null,
       h('button', { type: 'button', class: has ? 'btn' : 'btn primary', onclick: () => replace(close) }, has ? 'Use it instead of my list' : 'Use this list'),
-      has ? h('p', { class: 'muted small' }, 'Using it instead keeps your trips. Their ticks still count for things on both lists.') : null),
-  ], { wide: true });
+      has ? h('p', { class: 'muted small' }, 'Using it instead keeps your trips. Their ticks still count for things on both lists.') : null,
+      back ? h('button', { type: 'button', class: 'btn quiet', onclick: () => { chose = true; close(); back(); } }, 'Back') : null),
+  ], { wide: true, done: link ? () => { if (!chose) toast('That list wasn’t added. Open the link again to see it.'); } : undefined });
 }
 
 async function takeLink(code) {
@@ -1026,23 +1046,24 @@ async function takeLink(code) {
   render();
   try {
     const list = await decodeList(code);
-    offerList(list, 'A packing list');
+    offerList(list, 'A packing list', { link: true });
   } catch (e) { toast(e.message); }
 }
 
-function pasteSheet() {
-  let area;
+function pasteSheet(text = '') {
+  let area, err;
   sheet('Paste a list', close => {
-    const go2 = () => {
-      const list = parsePaste(area.value);
-      if (!list.items.length) { area.focus(); return; }
+    const next = () => {
+      const typed = area.value, list = parsePaste(typed);
+      if (!list.items.length) { err.textContent = 'Nothing to bring in yet: paste a list first.'; area.focus(); return; }
       close();
-      offerList(list, 'Your pasted list');
+      offerList(list, 'Your pasted list', { back: () => pasteSheet(typed) });
     };
     return [
       h('p', { class: 'muted small' }, 'Copy your list from Google Keep, Notes or a document and paste it here. Put each bag’s things under its name: indented, with a dash, or after a line ending in a colon or a # Heading. Anything on its own goes in “Not in a bag”. A first guess at when each thing is needed goes in too.'),
-      area = h('textarea', { rows: 10, autofocus: true, placeholder: 'Electronics:\n- Phone charger\n- Headphones\nToiletries:\n- Toothbrush\n- Floss\nPassport' }),
-      h('div', { class: 'sheet-actions' }, h('button', { type: 'button', class: 'btn primary', onclick: go2 }, 'Next')),
+      area = h('textarea', { rows: 10, autofocus: true, value: text, 'aria-label': 'Your list', oninput: () => { err.textContent = ''; }, placeholder: 'Electronics:\n- Phone charger\n- Headphones\nToiletries:\n- Toothbrush\n- Floss\nPassport' }),
+      err = h('p', { class: 'err', role: 'alert' }),
+      h('div', { class: 'sheet-actions' }, h('button', { type: 'button', class: 'btn primary', onclick: next }, 'Next')),
     ];
   }, { wide: true });
 }
