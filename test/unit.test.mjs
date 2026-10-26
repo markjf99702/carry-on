@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as M from '../js/model.js';
 import { plan, conditions, qtyOf, units, grown, whyNot, passes, whenWords } from '../js/rules.js';
-import { summarize, stale, tripWeather, forecastEdge } from '../js/weather.js';
+import { summarize, stale, tripWeather, forecastEdge, dayIcon, dayWords } from '../js/weather.js';
 import { plugsFor, plugText, localCountry } from '../js/plugs.js';
 import { parsePaste, encodeList, decodeList, guess, bagIcon, bagKind } from '../js/share.js';
 import { starterList } from '../js/starter.js';
@@ -128,9 +128,10 @@ test('the reasons say what the rules saw', () => {
   assert.equal(why([day('2026-11-02', 15, 8, { pop: 70, mm: 4 }), day('2026-11-03', 15, 8, { pop: 20, mm: 5 })]).rain, 'Rain forecast Mon and Tue');
   assert.equal(why([day('2026-11-02', 15, 8, { pop: 70, mm: 4 }), day('2026-11-03', 15, 8, { pop: 60 })]).rain, 'Rain likely Mon and Tue');
   // Typical weather that's wet or snowy nearly every day.
-  assert.equal(why([typ('2027-01-10', -2, -8, { wet: 0.9, sn: 0.95 })]).rain, 'Rains most days then');
-  assert.equal(why([typ('2027-01-10', -2, -8, { wet: 0.9, sn: 0.95 })]).snow, 'Snows most days then');
-  assert.equal(why([typ('2027-01-10', -2, -8, { wet: 0.4, sn: 0.2 })]).rain, 'Rains about 4 days in 10 then');
+  assert.equal(why([typ('2027-01-10', -2, -8, { wet: 0.9, sn: 0.95 })]).rain, 'Rain most days this time of year');
+  assert.equal(why([typ('2027-01-10', -2, -8, { wet: 0.9, sn: 0.95 })]).snow, 'Snow most days this time of year');
+  assert.equal(why([typ('2027-01-10', -2, -8, { wet: 0.4, sn: 0.2 })]).rain, 'Rain on about 4 days in 10 this time of year');
+  assert.equal(why([typ('2027-01-10', -2, -8, { wet: 0.4, sn: 0.2 })]).snow, 'Snow on about 2 days in 10 this time of year');
   // The plug: one line, no brackets.
   assert.equal(why([day('2026-11-02', 15, 8)], { name: 'Lisbon', cc: 'PT', country: 'Portugal' }).plug, 'Type C/F, 230 V · check anything that heats up');
 });
@@ -147,6 +148,14 @@ test('why something isn’t coming, in words: conditions by their phrase, occasi
   assert.equal(why([], ['drive'], { drive: true }), 'Not when you’re driving');
   assert.equal(why([], [work], { [work]: true }), 'Not for work');
   assert.equal(whenWords(doc, ['plug']), 'when the plugs are different');
+});
+
+test('each day’s picture has words for a screen reader', () => {
+  const words = [0, 2, 3, 45, 53, 63, 73, 81, 85, 95].map(code => [dayIcon({ code }), dayWords({ code })]);
+  assert.deepEqual(words, [['☀️', 'sunny'], ['🌤️', 'partly cloudy'], ['☁️', 'cloudy'], ['🌫️', 'fog'], ['🌦️', 'drizzle'], ['🌧️', 'rain'], ['🌨️', 'snow'], ['🌦️', 'showers'], ['🌨️', 'snow showers'], ['⛈️', 'thunderstorms']]);
+  const typ = extra => ({ typ: 1, wet: 0, sn: 0, rad: 10, ...extra });
+  assert.deepEqual([typ({ sn: 0.5 }), typ({ wet: 0.67 }), typ({ wet: 0.33 }), typ({ rad: 20 }), typ({})].map(dayWords), ['snowy', 'often wet', 'sometimes wet', 'usually sunny', 'usually dry']);
+  assert.equal(dayWords({}), '');
 });
 
 test('the conditions sheet says why the place or weather says no', () => {

@@ -253,7 +253,9 @@ ul.chips .chip small { font-weight: 500; color: var(--muted); font-size: 13px; }
 .pass-row dd { margin: 0; font-weight: 650; font-size: 15px; }
 
 .wx { margin-bottom: 14px; }
-.wx-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+/* On a narrow screen, when it was updated drops under the heading, with its button, rather than squeezing it. */
+.wx-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0 8px; margin-bottom: 6px; }
+.wx-at { display: flex; align-items: center; gap: 8px; margin-left: auto; white-space: nowrap; }
 .wx-head h2 { font-size: 18px; margin-right: auto; }
 .wx-days { display: flex; gap: 6px; margin: 0 -16px 6px; padding: 0 16px 4px; list-style: none; overflow-x: auto; scrollbar-width: thin; }
 .wx-days li { flex: 0 0 auto; display: grid; justify-items: center; gap: 1px; min-width: 54px; padding: 8px 4px; border-radius: 12px; background: var(--paper); border: 1px solid var(--line); }

@@ -284,26 +284,38 @@ function weatherStrip(t, c) {
   }
   const days = W.tripDays(t.wx, t.start, t.end);
   const fc = days.some(d => !d.typ), ty = days.some(d => d.typ);
-  const label = !days.length ? 'Weather' : fc && ty ? 'Forecast, then typical weather' : fc ? 'Forecast' : 'Typical weather for these days';
+  const label = !days.length ? 'Weather' : fc && ty ? 'Forecast, then typical' : fc ? 'Forecast' : 'Typical weather';
   const u = c.units;
+  // Each day as a sentence for a screen reader, in place of the short words and numbers shown: "Friday: rain, high
+  // 81°, low 63°, 70% chance of rain"; "Saturday, typical for these dates: often wet, high 64°, low 52°".
+  const said = d => {
+    const words = W.dayWords(d), wet = d.typ ? (d.wet >= 0.3 ? `rain in ${Math.round(d.wet * 100)}% of recent years` : '') : d.pop >= 30 ? `${d.pop}% chance of rain` : '';
+    return `${D.weekdayLong(d.d)}${d.typ ? ', typical for these dates' : ''}: ${[words, `high ${W.temp(d.hi, u)}`, `low ${W.temp(d.lo, u)}`, wet].filter(Boolean).join(', ')}`;
+  };
+  // What the blue % means, which is different on typical days.
+  const pctFc = days.some(d => !d.typ && d.pop >= 30), pctTy = days.some(d => d.typ && d.wet >= 0.3);
+  const pct = pctFc && pctTy ? 'Blue % is the chance of rain, or on the dashed days, how many recent years had rain that day.' : pctFc ? 'Blue % is the chance of rain.' : pctTy ? 'Blue % is how many recent years had rain that day.' : '';
+  // Unless typical weather is standing in for a forecast that didn't come back, why there's typical weather at all.
+  const typNote = ty && !days.some(d => d.typ && d.d <= W.forecastEdge(today())) ? (fc ? 'Past the forecast, the days show what the same dates were like in recent years.' : 'Too far off for a forecast, so these are the same dates in recent years. It switches to the forecast about two weeks out.') : '';
   return h('section', { class: 'wx' },
     h('div', { class: 'wx-head' },
-      h('h2', {}, label),
-      h('span', { class: 'muted small' }, busy ? 'Looking it up…' : days.length ? 'Updated ' + ago(t.wx.at) : ''),
-      // Not disabled while it looks: a disabled button can't keep the focus.
-      h('button', { type: 'button', class: 'icon-btn small' + (busy ? ' spin' : ''), 'data-key': 'wx', 'aria-label': 'Look up the weather again', title: 'Look up the weather again', html: ICONS.refresh, 'aria-disabled': busy ? 'true' : null, onclick: () => { if (wxBusy[t.id]) return; maybeWeather(t, true); render(); } })),
+      h('h2', { id: 'wxHead' }, label),
+      h('div', { class: 'wx-at' },
+        h('span', { class: 'muted small' }, busy ? 'Looking it up…' : days.length ? 'Updated ' + ago(t.wx.at) : ''),
+        // Not disabled while it looks: a disabled button can't keep the focus.
+        h('button', { type: 'button', class: 'icon-btn small' + (busy ? ' spin' : ''), 'data-key': 'wx', 'aria-label': 'Look up the weather again', title: 'Look up the weather again', html: ICONS.refresh, 'aria-disabled': busy ? 'true' : null, onclick: () => { if (wxBusy[t.id]) return; maybeWeather(t, true); render(); } }))),
     err ? h('p', { class: 'err small' }, err, ' ', days.length ? 'Showing the last lookup.' : 'You can set the weather by hand under Change.') : null,
     // While the first lookup is on its way, the days' room is kept, so they don't push everything down when they come.
     !days.length && busy ? h('ol', { class: 'wx-days wait', 'aria-hidden': 'true' }) : null,
-    days.length ? h('ol', { class: 'wx-days' }, days.map(d => h('li', { class: d.typ ? 'typ' : '' },
-      h('span', { class: 'wd' }, D.weekday(d.d)),
+    days.length ? h('ol', { class: 'wx-days', 'aria-labelledby': 'wxHead' }, days.map(d => h('li', { class: d.typ ? 'typ' : '' },
+      h('span', { class: 'sr-only' }, said(d)),
+      h('span', { class: 'wd', 'aria-hidden': 'true' }, D.weekday(d.d)),
       h('span', { class: 'wi', 'aria-hidden': 'true' }, W.dayIcon(d)),
-      h('span', { class: 'hi' }, W.temp(d.hi, u)),
-      h('span', { class: 'lo' }, W.temp(d.lo, u)),
-      h('span', { class: 'rp' }, d.typ ? (d.wet >= 0.3 ? `${Math.round(d.wet * 100)}%` : '') : (d.pop >= 30 ? `${d.pop}%` : ''))))) : null,
+      h('span', { class: 'hi', 'aria-hidden': 'true' }, W.temp(d.hi, u)),
+      h('span', { class: 'lo', 'aria-hidden': 'true' }, W.temp(d.lo, u)),
+      h('span', { class: 'rp', 'aria-hidden': 'true' }, d.typ ? (d.wet >= 0.3 ? `${Math.round(d.wet * 100)}%` : '') : (d.pop >= 30 ? `${d.pop}%` : ''))))) : null,
     t.wx?.err ? h('p', { class: 'muted small' }, t.wx.err) : null,
-    // Unless typical weather is standing in for a forecast that didn't come back, why there's typical weather at all.
-    ty && !days.some(d => d.typ && d.d <= W.forecastEdge(today())) ? h('p', { class: 'muted small' }, fc ? 'Past the forecast, the days show what the same dates were like in recent years.' : 'Too far off for a forecast, so these are the same dates in recent years. It switches to the forecast about two weeks out.') : null);
+    typNote || pct ? h('p', { class: 'muted small' }, [typNote, pct].filter(Boolean).join(' ')) : null);
 }
 
 // ---------- one trip ----------

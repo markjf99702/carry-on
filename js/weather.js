@@ -224,6 +224,23 @@ export function dayIcon(d) {
   return '⛈️';
 }
 
+// The same, in words, for a screen reader: the picture is hidden from it.
+export function dayWords(d) {
+  if (d.typ) return d.sn >= 0.3 ? 'snowy' : d.wet >= 0.5 ? 'often wet' : d.wet >= 0.3 ? 'sometimes wet' : d.rad >= 18 ? 'usually sunny' : 'usually dry';
+  const c = d.code;
+  if (c === undefined) return '';
+  if (c === 0) return 'sunny';
+  if (c <= 2) return 'partly cloudy';
+  if (c === 3) return 'cloudy';
+  if (c <= 48) return 'fog';
+  if (c <= 57) return 'drizzle';
+  if (c <= 67) return 'rain';
+  if (c <= 77) return 'snow';
+  if (c <= 82) return 'showers';
+  if (c <= 86) return 'snow showers';
+  return 'thunderstorms';
+}
+
 export const toF = c => c * 9 / 5 + 32;
 export const temp = (c, units) => `${Math.round(units === 'C' ? c : toF(c))}°`;
 

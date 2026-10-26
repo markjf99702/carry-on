@@ -101,6 +101,11 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await page.waitForSelector('.wx-days li');
   assert.equal(await page.locator('.wx-days li').count(), 5, 'five days of forecast');
   assert.equal(await page.locator('.wx-head h2').innerText(), 'FORECAST');
+  // A screen reader hears each day as a sentence, and the short words and numbers shown are hidden from it.
+  const wet = page.locator('.wx-days li').nth(1);
+  assert.match(await wet.locator('.sr-only').textContent(), /^[A-Z][a-z]+day: rain, high \d+°, low \d+°, 70% chance of rain$/);
+  assert.equal(await wet.locator('[aria-hidden="true"]').count(), 5);
+  assert.match(await page.locator('.wx').innerText(), /Blue % is the chance of rain\./);
   let names = await rowsText(page);
   for (const n of ['Passport', 'Plug adapter', 'Umbrella', 'Rain jacket', 'Swimsuit', 'Sunscreen', 'Badge', 'Toothbrush', 'Eye mask and earplugs']) assert.ok(names.includes(n), `${n} is on the list`);
   for (const n of ['Warm coat', 'Snow boots', 'Hiking boots', 'Workout clothes']) assert.ok(!names.includes(n), `${n} is not on the list`);
@@ -247,7 +252,9 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   // ---------- a trip too far off for a forecast: typical weather ----------
   await planTrip(page, { where: 'Reyk', from: 40, to: 43, by: 'Flying' });
   await page.waitForSelector('.wx-days li.typ');
-  assert.equal(await page.locator('.wx-head h2').innerText(), 'TYPICAL WEATHER FOR THESE DAYS');
+  assert.equal(await page.locator('.wx-head h2').innerText(), 'TYPICAL WEATHER');
+  assert.match(await page.locator('.wx-days li .sr-only').first().textContent(), /^[A-Z][a-z]+day, typical for these dates: snowy, high \d+°, low -?\d+°/);
+  assert.match(await page.locator('.wx').innerText(), /Blue % is how many recent years had rain that day\./);
   assert.equal(calls.filter(c => c.startsWith('archive')).length, 3, 'three past years');
   names = await rowsText(page);
   for (const n of ['Warm coat', 'Gloves and hat', 'Snow boots', 'Passport']) assert.ok(names.includes(n), `${n} for Iceland`);

@@ -84,12 +84,12 @@ export function conditions(doc, trip) {
   if (w) {
     for (const k of ['hot', 'cool', 'cold', 'rain', 'snow', 'sun']) auto[k] = w[k];
     // Each in the words of the rule that brought it (weather.js summarize).
-    const often = (share, verb) => (share >= 0.85 ? `${verb} most days then` : `${verb} about ${Math.max(1, Math.round(share * 10))} days in 10 then`);
+    const often = (share, what) => `${what} ${share >= 0.85 ? 'most days' : `on ${inTen(share) || 'about 1 day in 10'}`} this time of year`;
     why.hot = `Highs up to ${temp(w.maxHi, u)}`;
     why.cool = `Lows down to ${temp(w.minLo, u)}`;
     why.cold = w.minLo <= LIMITS.cold ? why.cool : `Highs around ${temp(w.meanHi, u)}`;
-    why.rain = w.rainDays.length ? `Rain ${w.rainLikely ? 'likely' : 'forecast'} ${dayList(w.rainDays)}` : often(w.wet, 'Rains');
-    why.snow = w.snowDays.length ? `Snow likely ${dayList(w.snowDays)}` : often(w.sn, 'Snows');
+    why.rain = w.rainDays.length ? `Rain ${w.rainLikely ? 'likely' : 'forecast'} ${dayList(w.rainDays)}` : often(w.wet, 'Rain');
+    why.snow = w.snowDays.length ? `Snow likely ${dayList(w.snowDays)}` : often(w.sn, 'Snow');
     why.sun = w.forecast && w.uv >= 6 ? `UV up to ${Math.round(w.uv)}` : 'Strong sun then';
     no.hot = `Highs up to ${temp(w.maxHi, u)}`;
     no.cool = w.cold ? 'Cold instead' : `Lows ${temp(w.minLo, u)} and up`;

@@ -32,6 +32,7 @@ function fmt(k, opts) {
   return formats.get(id).format(new Date(k + 'T12:00:00Z'));
 }
 export const weekday = k => fmt(k, { weekday: 'short' });
+export const weekdayLong = k => fmt(k, { weekday: 'long' });
 export const short = k => fmt(k, { month: 'short', day: 'numeric' });
 export const long = k => fmt(k, { weekday: 'short', month: 'short', day: 'numeric' });
 
