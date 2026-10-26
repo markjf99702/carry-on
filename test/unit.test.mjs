@@ -748,29 +748,31 @@ test('cleaning keeps junk out', () => {
 
 // ---------- lists coming in ----------
 
-const KEEP = `Travel list [updated]
+const KEEP = `Weekend list [updated]
 
-  ●​   3ml liquids bag
-          ○​    Moisturizer
+  ●​   Day pack
+          ○​    Rain shell
           ○​    Sunscreen
   ●​   Electronics
           ○​    Headphones
   ●​   Attire
           ○​    Socks
           ○​    Swimsuit
-  ●​   Plastic clothes bag
-  ●​   Work stuff
+  ●​   Beach towel
+  ●​   Office bag
           ○​    Badge
-  ●​   Wegovy
+  ●​   Reading glasses
   ●​   Leaving the house
           ○​    Close windows`;
 
 test('a pasted list from Google Docs: bags, loose things, jobs, and guesses', () => {
   const l = parsePaste(KEEP);
-  assert.deepEqual(l.bags.map(b => b.name), ['3ml liquids bag', 'Electronics', 'Attire', 'Work stuff', 'Not in a bag', 'Leaving the house']);
+  assert.deepEqual(l.bags.map(b => b.name), ['Day pack', 'Electronics', 'Attire', 'Office bag', 'Not in a bag', 'Leaving the house']);
   const by = n => l.items.find(x => x.name === n);
-  assert.deepEqual(l.items.filter(x => x.bag === l.bags[4].id).map(x => x.name), ['Plastic clothes bag', 'Wegovy']);
+  assert.deepEqual(l.items.filter(x => x.bag === l.bags[4].id).map(x => x.name), ['Beach towel', 'Reading glasses']);
   assert.deepEqual(by('Sunscreen').when, ['sun', 'hot', 'swim']);
+  assert.deepEqual(by('Rain shell').when, ['rain']);
+  assert.deepEqual(by('Badge').when, [], 'the office bag already says work');
   assert.equal(by('Socks').per, 'day');
   assert.deepEqual(l.bags[3].when, ['work']);
   assert.equal(l.bags[5].kind, 'leave');

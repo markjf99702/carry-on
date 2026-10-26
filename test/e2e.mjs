@@ -363,7 +363,7 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
 {
   const { ctx, page } = await phone();
   await page.click('text=Paste my own list');
-  await page.fill('.sheet textarea', 'Travel list\n\n● Electronics\n  ○ Headphones\n  ○ Laptop charger\n● Attire\n  ○ Socks\n  ○ Swimsuit\n● Wegovy\n● Leaving the house\n  ○ Close windows');
+  await page.fill('.sheet textarea', 'Weekend list\n\n● Electronics\n  ○ Headphones\n  ○ Laptop charger\n● Attire\n  ○ Socks\n  ○ Swimsuit\n● Reading glasses\n● Leaving the house\n  ○ Close windows');
   await page.click('.sheet .btn.primary');
   await until(async () => /Your pasted list/i.test(await page.locator('.sheet').innerText()), 'the preview');
   assert.match(await page.locator('.sheet').innerText(), /3 bags and 5 things/);
