@@ -374,6 +374,46 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   assert.equal(await page.locator('[role=status]', { hasText: /^2 places$/ }).count(), 1, 'and what it found is said under the box');
   await page.fill('#where', 'Lisbonx');
   await until(async () => (await page.locator('.where-status').innerText()) === 'No places by that name.', 'no places');
+
+  // Typed but not picked: Make my list asks to pick one or use what was typed, both are there to tap, and picking
+  // one clears the question.
+  const alert = () => page.locator('[role=alert]').textContent();
+  await page.fill('#where', 'Lis');
+  await page.waitForSelector('.where-status:text-is("2 places")');
+  await page.click('text=Make my list');
+  assert.equal(await alert(), 'Pick a place from the list, or use what you typed.');
+  assert.deepEqual(await page.locator('.results button').allInnerTexts(), ['Lisbon Lisbon District, Portugal', 'Lisbon Ohio, United States', 'Use “Lis” without looking it up']);
+  await page.locator('.results button').first().click();
+  assert.equal(await alert(), '', 'picking a place clears it');
+  // Enter picks the first place: one already found, or one still being looked up.
+  await page.click('[aria-label="Pick another place"]');
+  await page.fill('#where', 'Tok');
+  await page.waitForSelector('.where-status:text-is("1 place")');
+  await page.press('#where', 'Enter');
+  assert.equal(await page.locator('.picked b').innerText(), 'Tokyo');
+  await page.click('[aria-label="Pick another place"]');
+  await page.fill('#where', 'Reyk');
+  await page.press('#where', 'Enter');
+  await page.waitForSelector('.picked b');
+  assert.equal(await page.locator('.picked b').innerText(), 'Reykjavík');
+  // No place at all: the first tap asks, the second goes without one.
+  await page.click('[aria-label="Pick another place"]');
+  await page.fill('#where', '');
+  await page.fill('#start', await day(page, 3));
+  await page.fill('#end', await day(page, 4));
+  await page.click('text=Make my list');
+  assert.equal(await alert(), 'Where to? Without a place there’s no forecast and no passport check. Tap Make my list again to go without one.');
+  assert.equal(await page.evaluate(() => location.hash), '#/new', 'still planning');
+  await page.click('button:text-is("Make my list")');
+  await page.waitForSelector('.pass h1');
+  assert.equal(await page.locator('.wx.none').innerText(), 'No place for this trip, so no forecast. Add one in Edit, or set the weather by hand under Change.');
+  // On Trips, a trip at home with no name says the state it's in, and one with no place has no empty line.
+  await page.click('.crumb');
+  await planTrip(page, { where: 'Chic', from: 5, to: 6, by: 'Driving' });
+  await page.click('.crumb');
+  await page.waitForSelector('.tag-card');
+  assert.deepEqual(await page.locator('.tag-card h2').allInnerTexts(), ['TRIP', 'CHICAGO']);
+  assert.deepEqual(await page.locator('.tag-card .where').allInnerTexts(), ['Illinois']);
   await ctx.close();
 }
 
@@ -487,7 +527,7 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await page.waitForSelector('.results button');
   await redraws();
   assert.equal(await page.inputValue('#where'), 'Lisb', 'the place typed so far');
-  assert.equal(await page.locator('.results button').count(), 2, 'and the places it found');
+  assert.equal(await page.locator('.results button', { hasText: /^Lisbon/ }).count(), 2, 'and the places it found');
   await page.locator('.results button').first().click();
   await page.fill('#start', await day(page, 30));
   await page.fill('#end', await day(page, 33));

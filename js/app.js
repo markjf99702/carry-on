@@ -167,12 +167,16 @@ function tagCard(t) {
   const p = R.progress(doc(), t), c = R.conditions(doc(), t);
   const now = t.start <= t0;
   const when = now ? `Now · back ${D.weekday(t.end)}` : t.start === D.add(t0, 1) ? 'Tomorrow' : `In ${plural(D.num(t.start) - D.num(t0), 'day')}`;
-  const w = c.weather;
+  const w = c.weather, pl = t.place;
+  // Under the name: the place and, abroad, its country. A trip named after its place has just the country, or at
+  // home the state or region, as the pass has.
+  const country = pl?.cc && pl.cc !== R.home(doc()) ? pl.country || countryName(pl.cc) : '';
+  const where = (t.name ? [pl?.name, country] : [country || (pl?.admin !== pl?.name ? pl?.admin : '')]).filter(Boolean).join(', ');
   return h('a', { class: 'tag-card' + (now ? ' now' : ''), href: `#/trip/${t.id}` },
     h('span', { class: 'hole', 'aria-hidden': 'true' }),
     h('span', { class: 'when' }, when),
     h('h2', {}, title(t)),
-    h('span', { class: 'where' }, [t.name && t.place ? t.place.name : '', t.place?.cc && t.place.cc !== R.home(doc()) ? (t.place.country || countryName(t.place.cc)) : ''].filter(Boolean).join(', ') || ' '),
+    where ? h('span', { class: 'where' }, where) : null,
     h('span', { class: 'dates' }, `${D.span(t.start, t.end, t0.slice(0, 4))} · ${n ? plural(n, 'night') : 'day trip'} · ${R.CONDITIONS.find(x => x.k === t.travel).icon}`),
     w ? h('span', { class: 'glance' }, `${W.dayIcon(W.tripDays(t.wx, t.start, t.end)[0])} ${W.temp(w.minLo, c.units)}–${W.temp(w.maxHi, c.units)}${w.rain ? ' · rain' + (w.rainDays.length ? ' likely' : ' some days') : ''}${w.snow ? ' · snow' : ''}`) : null,
     h('span', { class: 'meter', 'aria-hidden': 'true' }, h('i', { style: { width: (p.total ? (100 * p.done / p.total) : 0) + '%' } })),
@@ -205,7 +209,10 @@ const ago = t => {
 
 function weatherStrip(t, c) {
   const busy = !!wxBusy[t.id], err = wxErr[t.id];
-  if (!t.place || t.place.lat === undefined) {
+  if (!t.place) {
+    return h('section', { class: 'wx none' }, h('p', { class: 'muted small' }, 'No place for this trip, so no forecast. Add one in ', h('a', { href: `#/edit/${t.id}` }, 'Edit'), ', or set the weather by hand under ', h('b', {}, 'Change'), '.'));
+  }
+  if (t.place.lat === undefined) {
     return h('section', { class: 'wx none' }, h('p', { class: 'muted small' }, 'No weather for this trip: its place wasn’t looked up. Set the weather by hand under ', h('b', {}, 'Change'), ', or pick the place again in ', h('a', { href: `#/edit/${t.id}` }, 'Edit'), '.'));
   }
   const days = W.tripDays(t.wx, t.start, t.end);
@@ -538,7 +545,10 @@ function tripForm(t, again = false) {
     tags: new Set(Object.entries(t?.set || {}).filter(([k, m]) => m.v === true && doc().tags[k]).map(([k]) => k)),
   };
   for (const k of Object.keys(st)) if (k in dr) st[k] = dr[k];
-  const set = (k, v) => { st[k] = dr[k] = v; };
+  const errBox = h('p', { class: 'err', role: 'alert' }, dr.err);
+  const err = msg => { errBox.textContent = dr.err = msg; };
+  // Any change to the form answers what the last tap on Make my list asked.
+  const set = (k, v) => { st[k] = dr[k] = v; if (dr.err) err(''); };
   const where = h('div', { class: 'where-field' });
   const input = h('input', { type: 'search', id: 'where', value: dr.typed, placeholder: 'A city or town', autocomplete: 'off', enterkeyhint: 'search', 'aria-describedby': 'whereHelp' });
   // A plain list of buttons, and a line under the box that says what the search found, which a screen reader reads out.
@@ -551,39 +561,61 @@ function tripForm(t, again = false) {
         h('button', { type: 'button', class: 'icon-btn small', 'aria-label': 'Pick another place', html: ICONS.close, onclick: () => { set('place', null); drawWhere(); input.focus(); } })));
       return;
     }
-    list.replaceChildren(...dr.results.map(r => h('li', {}, h('button', { type: 'button', onclick: () => { set('place', r); dr.results = []; drawWhere(); } },
+    list.replaceChildren(...dr.results.map(r => h('li', {}, h('button', { type: 'button', onclick: () => choose(r) },
       h('b', {}, r.name), ' ', h('span', { class: 'muted' }, [r.admin, r.country].filter(Boolean).join(', '))))));
     const typed = input.value.trim();
     const failed = dr.searchErr && typed && dr.searchErr !== NO_PLACES;
     status.className = 'where-status small ' + (failed ? 'err' : 'muted');
     status.textContent = !typed ? '' : failed && single ? 'This copy can’t reach the weather service. Use what you typed and set the weather by hand, or open carry-on.junkdrawer.works for the forecast.'
       : dr.searchErr || (dr.results.length ? plural(dr.results.length, 'place') : '');
-    if (dr.searchErr && typed) list.append(h('li', {}, h('button', { type: 'button', onclick: () => { set('place', { name: typed, admin: '', country: '', cc: '' }); drawWhere(); } }, `Use “${typed}” without looking it up`)));
+    // Last, once the search has answered for what's typed, the way through without a lookup: offline, or for a place
+    // the search doesn't know. (Not before, so it isn't where the first place lands when the places come.)
+    if (typed && ((typed.length > 1 && dr.q === input.value) || dr.err)) list.append(h('li', {}, h('button', { type: 'button', onclick: () => choose({ name: input.value.trim(), admin: '', country: '', cc: '' }) }, `Use “${typed}” without looking it up`)));
     // Put back only when coming back from a picked place: taking the box out of the page, even to put it straight
     // back, takes the cursor out of it.
     if (input.parentNode !== where) where.replaceChildren(input, status, list);
   };
+  const choose = r => { set('place', r); dr.results = []; drawWhere(); };
   // A search that answers after a redraw shows on the form that's there now.
   dr.drawWhere = drawWhere;
+  dr.choose = choose;
+  // dr.q is what the search last answered for. Enter while that's something else waits for the new places.
+  const search = q => {
+    clearTimeout(dr.timer);
+    if (dr.ctl) dr.ctl.abort();
+    const ctl = dr.ctl = new AbortController();
+    W.searchPlaces(q, { signal: ctl.signal }).then(r => {
+      dr.results = r; dr.q = q; dr.searchErr = q.trim().length > 1 && !r.length ? NO_PLACES : '';
+      if (dr.enter && r.length) dr.choose(r[0]); else dr.drawWhere();
+      dr.enter = false;
+    }, e => { if (e.name !== 'AbortError') { dr.enter = false; dr.results = []; dr.q = q; dr.searchErr = e.message; dr.drawWhere(); } });
+  };
   input.addEventListener('input', () => {
     dr.typed = input.value;
+    dr.enter = false;
     clearTimeout(dr.timer);
     if (dr.ctl) dr.ctl.abort();
     const q = input.value;
-    dr.timer = setTimeout(() => {
-      const ctl = dr.ctl = new AbortController();
-      W.searchPlaces(q, { signal: ctl.signal }).then(r => { dr.results = r; dr.searchErr = q.trim().length > 1 && !r.length ? NO_PLACES : ''; dr.drawWhere(); }, e => { if (e.name !== 'AbortError') { dr.results = []; dr.searchErr = e.message; dr.drawWhere(); } });
-    }, 300);
+    // Too short to look up: nothing to show.
+    if (q.trim().length < 2) Object.assign(dr, { results: [], searchErr: '', q });
+    else dr.timer = setTimeout(() => search(q), 300);
+    drawWhere();
+  });
+  // Enter picks the first place.
+  input.addEventListener('keydown', e => {
+    if (e.key !== 'Enter' || e.isComposing) return;
+    e.preventDefault();
+    if (dr.q === input.value) { if (dr.results.length) choose(dr.results[0]); } else if (input.value.trim().length > 1) { dr.enter = true; search(input.value); }
   });
   drawWhere();
-  const errBox = h('p', { class: 'err', role: 'alert' }, dr.err);
-  const err = msg => { errBox.textContent = dr.err = msg; };
   const startIn = h('input', { type: 'date', id: 'start', value: st.start, min: editing ? null : D.add(today(), -30), required: true, oninput: e => set('start', e.target.value), onchange: e => { set('start', e.target.value); if (!st.end || st.end < st.start) { set('end', st.start); endIn.value = st.end; } } });
   const endIn = h('input', { type: 'date', id: 'end', value: st.end, required: true, oninput: e => set('end', e.target.value), onchange: e => set('end', e.target.value) });
   const nameIn = h('input', { type: 'text', id: 'name', value: st.name, maxlength: 60, placeholder: 'Sam’s wedding', autocomplete: 'off', oninput: e => set('name', e.target.value) });
   const save = () => {
     st.start = startIn.value; st.end = endIn.value;
-    if (!st.place && input.value.trim()) { err('Pick a place from the list, or use what you typed.'); return; }
+    if (!st.place && input.value.trim()) { err('Pick a place from the list, or use what you typed.'); drawWhere(); return; }
+    // No place at all is allowed, once it's been said what that leaves out.
+    if (!st.place && !dr.placeless && !(editing && !t.place)) { dr.placeless = true; err(`Where to? Without a place there’s no forecast and no passport check. Tap ${editing ? 'Save' : 'Make my list'} again to go without one.`); return; }
     if (!st.start || !st.end) { err('When do you leave, and when are you back?'); return; }
     if (st.end < st.start) { err('You’re back before you leave. Check the dates.'); return; }
     if (D.nights(st.start, st.end) > 90) { err('That’s more than 90 nights. Check the dates.'); return; }
