@@ -125,6 +125,11 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   assert.match(await page.evaluate(() => document.activeElement.closest('li')?.textContent), /^☔ Rain/, 'with the focus on it');
   await closeSheet(page);
   await fits(page, 'the trip');
+  // A screen reader hears a tick by its name and how many, the reasons after it, and a bag's count in words.
+  assert.equal(await page.getByRole('checkbox', { name: 'Umbrella', exact: true }).count(), 1);
+  assert.equal(await page.getByRole('checkbox', { name: 'Socks, 5', exact: true }).count(), 1);
+  assert.match(await page.evaluate(() => { const t = [...document.querySelectorAll('.tick')].find(x => x.textContent.startsWith('Umbrella')); return t.getAttribute('aria-describedby').split(' ').map(id => document.getElementById(id).textContent).join(' '); }), /^☔ Rain likely \w{3}$/);
+  assert.equal(await page.locator('.bag', { hasText: 'Liquids bag' }).locator('.count .sr-only').textContent(), '0 of 7 packed');
 
   // Ticking, and it keeps.
   const total = +(await page.locator('.progress p').innerText()).match(/of (\d+)/)[1];
@@ -142,6 +147,8 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await page.click('text=Leave it off this trip');
   assert.ok(!(await rowsText(page)).includes('Snacks'));
   await page.click('.left-head');
+  assert.equal(await page.getByRole('heading', { name: /^Left off this trip/ }).locator('button[aria-expanded="true"]').count(), 1, 'Left off is a heading with its button');
+  assert.equal(await page.getByRole('button', { name: 'Pack it, Warm coat', exact: true }).count(), 1, 'each button names its thing');
   const left = page.locator('.left .row', { hasText: 'Snacks' });
   assert.match(await left.innerText(), /You left it off this trip/);
   assert.match(await page.locator('.left .row', { hasText: 'Warm coat' }).innerText(), /Only when it’s cold/);

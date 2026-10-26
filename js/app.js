@@ -418,7 +418,8 @@ function bagCard(t, g, mode, hide, why, jobs = false) {
     h('span', { class: 'bag-icon', 'aria-hidden': 'true' }, b.icon),
     h('h2', {}, b.name),
     b.when?.length ? h('span', { class: 'bag-cond' }, b.when.map(k => R.condInfo(doc(), k)?.icon).join('')) : null,
-    h('span', { class: 'count' + (all ? ' all' : '') }, all ? h('span', { html: ICONS.check }) : null, `${done}/${g.rows.length}`),
+    h('span', { class: 'count' + (all ? ' all' : '') }, all ? h('span', { html: ICONS.check }) : null,
+      h('span', { 'aria-hidden': 'true' }, `${done}/${g.rows.length}`), h('span', { class: 'sr-only' }, `${done} of ${g.rows.length} ${jobs ? 'done' : mode === 'go' ? 'packed' : 'back in'}`)),
     b.id !== '_loose' ? h('button', { type: 'button', class: 'icon-btn small', 'data-key': 'bagmore:' + b.id, 'aria-label': `More for ${b.name}`, html: ICONS.more, onclick: () => bagSheet(t, g, mode) }) : null);
   return h('section', { class: 'bag' + (all ? ' all' : '') + (jobs ? ' jobs' : ''), 'data-bag': b.id },
     head,
@@ -443,20 +444,27 @@ function itemRow(t, g, r, mode, whyMap, jobs, hide) {
     lingerAt = r.key;
     render();
   };
-  const why = r.hits.map(k => { const info = R.condInfo(doc(), k); return info ? `${info.icon} ${whyMap[k] || info.name}` : ''; }).filter(Boolean);
+  // A screen reader hears the tick by its name and how many ("Socks, 5"), then the lines under it, without the
+  // conditions' pictures.
+  const id = 'r_' + r.key.replace(/[^\w-]/g, '_'), lines = [];
+  const line = (cls, ...text) => { const n = `${id}_${lines.length}`; lines.push(n); return h('small', { id: n, class: cls }, ...text); };
+  const why = r.hits.map(k => { const info = R.condInfo(doc(), k); return info ? [h('span', { 'aria-hidden': 'true' }, info.icon), ' ', whyMap[k] || info.name] : null; }).filter(Boolean);
+  const under = [
+    r.gone ? line(null, 'Not coming back') : null,
+    r.note ? line(null, r.note) : null,
+    why.length ? line('why', why.flatMap((w, i) => (i ? [' · ', ...w] : w))) : null,
+    r.capped ? line('why', `One a day, up to ${R.laundry(doc())}: laundry after that`) : null,
+    r.packedOnly ? line('why', 'Packed, though the trip no longer calls for it') : null,
+    r.added ? line('why', 'Added for this trip') : null,
+    r.moved ? line('why', 'In this bag for this trip') : null,
+    r.extra ? line('why', 'Just for this trip') : null,
+  ];
   return h('li', { class: 'row' + (r.done ? ' done' : '') + (r.gone ? ' gone' : '') },
-    h('button', { type: 'button', class: 'tick', role: 'checkbox', 'aria-checked': String(r.done), 'data-key': r.key, onclick: toggle },
+    h('button', { type: 'button', class: 'tick', role: 'checkbox', 'aria-checked': String(r.done), 'data-key': r.key, 'aria-label': r.qty > 1 ? `${r.name}, ${r.qty}` : r.name, 'aria-describedby': lines.join(' ') || null, onclick: toggle },
       h('span', { class: 'box', html: ICONS.check }),
       h('span', { class: 'what' },
         h('span', { class: 'name' }, r.name, r.qty > 1 ? h('span', { class: 'qty' }, ' ×' + r.qty) : null),
-        r.gone ? h('small', {}, 'Not coming back') : null,
-        r.note ? h('small', {}, r.note) : null,
-        why.length ? h('small', { class: 'why' }, why.join(' · ')) : null,
-        r.capped ? h('small', { class: 'why' }, `One a day, up to ${R.laundry(doc())}: laundry after that`) : null,
-        r.packedOnly ? h('small', { class: 'why' }, 'Packed, though the trip no longer calls for it') : null,
-        r.added ? h('small', { class: 'why' }, 'Added for this trip') : null,
-        r.moved ? h('small', { class: 'why' }, 'In this bag for this trip') : null,
-        r.extra ? h('small', { class: 'why' }, 'Just for this trip') : null)),
+        under)),
     jobs && mode === 'back' ? null : h('button', { type: 'button', class: 'icon-btn more', 'data-key': 'more:' + r.key, 'aria-label': `More for ${r.name}`, html: ICONS.more, onclick: () => itemSheet(t, r, mode, jobs) }));
 }
 
@@ -473,21 +481,23 @@ function leftOff(t, left, leftBags, mode) {
       { label: 'Undo', run: () => apply(d => M.mark(d, t.id, 'x:' + id, was || 0)) });
   };
   return h('section', { class: 'left' },
-    h('button', { type: 'button', class: 'left-head', 'data-key': 'left', 'aria-expanded': String(open), onclick: () => { store.setOpen(t.id + ':left', !open); render(); } },
-      h('h2', {}, `Left off this trip (${left.length + leftBags.length})`),
-      h('span', { class: 'muted small' }, open ? 'Hide' : 'Show')),
+    // The heading holds the button, so it's found among the headings.
+    h('h2', { class: 'left-title' }, h('button', { type: 'button', class: 'left-head', 'data-key': 'left', 'aria-expanded': String(open), onclick: () => { store.setOpen(t.id + ':left', !open); render(); } },
+      `Left off this trip (${left.length + leftBags.length})`,
+      h('span', { class: 'muted small', 'aria-hidden': 'true' }, open ? 'Hide' : 'Show'))),
     open ? h('ul', { class: 'rows' },
       leftBags.map(l => h('li', { class: 'row left-row' },
         h('div', { class: 'what' },
           h('span', { class: 'name' }, `${l.bag.icon} ${l.bag.name}`),
           h('small', {}, `${plural(l.count, l.bag.kind === 'bag' ? 'thing' : 'job')} · ${l.why}`)),
-        h('button', { type: 'button', class: 'btn small', 'data-key': 'x:' + l.bag.id, onclick: () => put(l.bag.id, l.skipped, l.bag.name) }, l.skipped ? 'Put back' : 'Bring it'))),
+        // Each button says what it's for: "Bring it, the Work bag".
+        h('button', { type: 'button', class: 'btn small', 'data-key': 'x:' + l.bag.id, 'aria-label': `${l.skipped ? 'Put back' : 'Bring it'}, ${theBag(l.bag)}`, onclick: () => put(l.bag.id, l.skipped, l.bag.name) }, l.skipped ? 'Put back' : 'Bring it'))),
       left.map(l => {
         // A job shows its list's icon, and is brought rather than packed.
-        const list = doc().bags[l.item.bag], job = list && list.kind !== 'bag';
+        const list = doc().bags[l.item.bag], job = list && list.kind !== 'bag', label = l.skipped ? 'Put back' : job ? 'Bring it' : 'Pack it';
         return h('li', { class: 'row left-row' },
           h('div', { class: 'what' }, h('span', { class: 'name' }, job ? `${list.icon} ${l.item.name}` : l.item.name), h('small', {}, l.why)),
-          h('button', { type: 'button', class: 'btn small', 'data-key': 'x:' + l.item.id, onclick: () => put(l.item.id, l.skipped, l.item.name) }, l.skipped ? 'Put back' : job ? 'Bring it' : 'Pack it'));
+          h('button', { type: 'button', class: 'btn small', 'data-key': 'x:' + l.item.id, 'aria-label': `${label}, ${l.item.name}`, onclick: () => put(l.item.id, l.skipped, l.item.name) }, label));
       })) : null);
 }
 
@@ -665,8 +675,8 @@ function condSheet(id, at = '') {
         const pickState = s => { store.apply(d => M.setCond(d, id, k, s === 'auto' ? null : s === 'on')); draw(); render(); };
         return h('li', { 'data-k': k },
           h('span', { class: 'auto-name' }, h('span', { 'aria-hidden': 'true' }, info.icon), ' ', h('b', {}, info.name),
-            h('small', {}, `Automatic: ${autoText}${c.auto[k] && c.why[k] ? ` · ${c.why[k]}` : c.auto[k] === false && c.no[k] ? ` · ${c.no[k]}` : ''}`)),
-          h('div', { class: 'seg tiny', role: 'group', 'aria-label': info.name },
+            h('small', { id: 'auto-' + k }, `Automatic: ${autoText}${c.auto[k] && c.why[k] ? ` · ${c.why[k]}` : c.auto[k] === false && c.no[k] ? ` · ${c.no[k]}` : ''}`)),
+          h('div', { class: 'seg tiny', role: 'group', 'aria-label': info.name, 'aria-describedby': 'auto-' + k },
             ['auto', 'on', 'off'].map(s => h('button', { type: 'button', 'data-key': `cond:${k}:${s}`, 'aria-pressed': String(state === s), onclick: () => pickState(s) }, s === 'auto' ? 'Auto' : s === 'on' ? 'Yes' : 'No'))));
       })),
       h('p', { class: 'small' }, h('a', { href: '#/list', onclick: closeSheet }, 'Change the occasions in My list')),

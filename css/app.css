@@ -326,8 +326,9 @@ ul.chips .chip small { font-weight: 500; color: var(--muted); font-size: 13px; }
 
 .add-extra { width: 100%; margin: 2px 0 14px; border-style: dashed; background: none; }
 .left { margin-top: 18px; border-top: 1px solid var(--line); }
-.left-head { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 14px 2px; border: 0; background: none; cursor: pointer; }
-.left-head h2 { font-size: 18px; color: var(--muted); }
+.left-title { font-size: 18px; color: var(--muted); }
+.left-head { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 14px 2px; border: 0; background: none; text-align: left; text-transform: inherit; letter-spacing: inherit; cursor: pointer; }
+.left-head .small { font: 14px/1.45 var(--body); text-transform: none; letter-spacing: normal; }
 .left .rows { background: var(--paper); border: 1px solid var(--line); border-radius: 14px; }
 
 /* ---------- my list ---------- */
