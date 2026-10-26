@@ -545,6 +545,31 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await b.page.click('#cloud');
   await until(async () => (await row(b.page, 'Wallet').locator('.tick').getAttribute('aria-checked')) === 'true', 'the first phone’s tick on the second');
   assert.equal(g.files().filter(f => f.appProperties?.carryon === 'sync').length, 1, 'one file');
+
+  // One phone deletes Leaving the house. The other, before it has synced, moves Leaving the hotel up. It stays deleted.
+  const inDrive = () => JSON.parse(g.files().find(f => f.appProperties?.carryon === 'sync').body);
+  const synced = p => until(() => p.evaluate(() => document.getElementById('cloud').dataset.s === 'ok'), 'the sync');
+  const headings = p => p.locator('.bag.edit h2').allInnerTexts();
+  await a.page.goto(base + '#/list');
+  await a.page.click('[aria-label="Change Leaving the house"]');
+  await a.page.click('.sheet .btn.danger-quiet');
+  assert.equal(await a.page.locator('.sheet .btn.danger-quiet').innerText(), 'Delete it and its 4 jobs?');
+  await a.page.click('.sheet .btn.danger-quiet');
+  await until(() => inDrive().bags['s-leave'].del, 'the deletion in Drive');
+  await b.page.goto(base + '#/list');
+  await b.page.click('[aria-label="Change Leaving the hotel"]');
+  await b.page.click('.sheet [aria-label="Move up"]');
+  await closeSheet(b.page);
+  await wait(1500);
+  await b.page.click('#cloud');
+  await synced(b.page);
+  await a.page.click('#cloud');
+  await synced(a.page);
+  for (const p of [a.page, b.page]) {
+    await p.evaluate(() => window.carryOn.render());
+    assert.ok(!(await headings(p)).includes('LEAVING THE HOUSE'), 'Leaving the house stays deleted');
+    assert.ok((await headings(p)).includes('LEAVING THE HOTEL'));
+  }
   await a.ctx.close(); await b.ctx.close();
 }
 

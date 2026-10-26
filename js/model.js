@@ -331,16 +331,26 @@ export function putItem(doc, fields) {
 export const removeItem = (doc, id) => remove(doc, 'items', id);
 export const restoreItem = (doc, id) => restore(doc, 'items', id);
 
-// Moves a bag or a thing one place up or down among its neighbours.
+// Moves a bag or a thing one place up or down among its neighbours: a bag among the bags of its kind, as My list
+// shows them under their headings, a thing among the things in its bag. Only the one that moves changes, taking
+// an order between its new neighbours, because a change brings a record back from a deletion on another device:
+// renumbering the neighbours too would bring back one deleted there meanwhile. Orders that tie can need the two
+// to swap orders instead, and in a run of three or more ties, renumbering.
 export function nudge(doc, coll, id, dir) {
   const x = doc[coll][id];
-  const list = coll === 'bags' ? bags(doc).filter(b => (b.kind === 'bag') === (x.kind === 'bag')) : items(doc, x.bag);
+  if (!x || gone(x)) return doc;
+  const list = coll === 'bags' ? bags(doc).filter(b => b.kind === x.kind) : items(doc, x.bag);
   const i = list.findIndex(y => y.id === id), j = i + dir;
   if (i < 0 || j < 0 || j >= list.length) return doc;
-  const order = list.map((y, k) => (k === i ? list[j].id : k === j ? id : y.id));
-  let next = doc;
-  order.forEach((yid, k) => { if (next[coll][yid].order !== k) next = put(next, coll, coll === 'bags' ? cleanBag : cleanItem, { ...next[coll][yid], order: k }); });
-  return next;
+  const want = list.map(y => y.id);
+  [want[i], want[j]] = [want[j], want[i]];
+  const prev = doc[coll][want[j - 1]], next = doc[coll][want[j + 1]];
+  const between = prev && next ? (prev.order + next.order) / 2 : prev ? prev.order + 1 : next.order - 1;
+  const fits = orders => list.map(y => (y.id in orders ? { ...y, order: orders[y.id] } : y)).sort(byOrder).every((y, k) => y.id === want[k]);
+  const orders = [{ [id]: between }, { [id]: list[j].order, [list[j].id]: x.order }, Object.fromEntries(want.map((yid, k) => [yid, k]))].find(fits);
+  let out = doc;
+  for (const [yid, order] of Object.entries(orders)) if (out[coll][yid].order !== order) out = put(out, coll, coll === 'bags' ? cleanBag : cleanItem, { id: yid, order });
+  return out;
 }
 
 export function putTag(doc, fields) {

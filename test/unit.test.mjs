@@ -262,6 +262,51 @@ test('the same thing made on two devices becomes one on a first merge', () => {
   assert.deepEqual(M.items(m).map(x => x.name.toLowerCase()).sort(), ['lock', 'towel']);
 });
 
+// Waits for the clock to move on, so a change made next is newer than the one before.
+const later = () => { const t = Date.now(); while (Date.now() <= t); };
+const changedIds = (was, now) => ['bags', 'items'].flatMap(c => Object.keys(now[c]).filter(id => M.canon(was[c][id]) !== M.canon(now[c][id])));
+
+test('moving a list or a thing up or down changes only what moved, so it can’t bring back a deletion', () => {
+  const base = starter();
+  // One phone deletes Leaving the house; another, not synced yet, taps Move up on Leaving the hotel.
+  const a = M.removeBag(base, 's-leave');
+  later();
+  const b = M.nudge(base, 'bags', 's-back', -1);
+  assert.equal(b, base, 'the only hotel list has nowhere to go');
+  assert.ok(M.gone(M.mergeDocs(a, b).bags['s-leave']), 'Leaving the house stays deleted');
+  // Moving a bag past one deleted elsewhere doesn't bring that one back either.
+  const c = M.removeBag(base, 's-toiletries');
+  later();
+  const d = M.nudge(base, 'bags', 's-electronics', -1);
+  assert.deepEqual(changedIds(base, d), ['s-electronics']);
+  assert.deepEqual(M.bags(d).slice(0, 3).map(x => x.id), ['s-liquids', 's-electronics', 's-toiletries']);
+  const m = M.mergeDocs(c, d);
+  assert.ok(M.gone(m.bags['s-toiletries']));
+  assert.deepEqual(M.bags(m).slice(0, 2).map(x => x.id), ['s-liquids', 's-electronics']);
+  // Inside a bag: one thing changes, and it lands one place up.
+  const e = M.nudge(base, 'items', 's-toiletries-razor', -1);
+  assert.deepEqual(changedIds(base, e), ['s-toiletries-razor']);
+  assert.deepEqual(M.items(e, 's-toiletries').slice(0, 4).map(x => x.name), ['Toothbrush', 'Razor', 'Floss', 'Hairbrush or comb']);
+  // To the top and back down.
+  let f = M.nudge(M.nudge(e, 'items', 's-toiletries-razor', -1), 'items', 's-toiletries-razor', 1);
+  assert.deepEqual(M.items(f, 's-toiletries').slice(0, 3).map(x => x.name), ['Toothbrush', 'Razor', 'Floss']);
+  assert.equal(M.nudge(f, 'items', 's-toiletries-pain-reliever', 1), f, 'the last one stays last');
+});
+
+test('moving things whose places tie', () => {
+  // Two phones each added something to the end of a bag at once: both have the same place.
+  let doc = M.putBag(M.blankDoc(), { id: 'b1', name: 'Day bag' });
+  for (const [id, name, order] of [['i1', 'Water', 0], ['i2', 'Snacks', 1], ['i3', 'Kindle', 1], ['i4', 'Hat', 1], ['i5', 'Map', 2]]) doc = M.putItem(doc, { id, name, bag: 'b1', order });
+  const ids = d => M.items(d, 'b1').map(x => x.id);
+  assert.deepEqual(ids(doc), ['i1', 'i4', 'i3', 'i2', 'i5'], 'tied places sort by name');
+  for (const [id, dir] of [['i3', -1], ['i3', 1], ['i4', -1], ['i2', 1], ['i4', 1], ['i5', -1]]) {
+    const want = ids(doc), i = want.indexOf(id);
+    [want[i], want[i + dir]] = [want[i + dir], want[i]];
+    doc = M.nudge(doc, 'items', id, dir);
+    assert.deepEqual(ids(doc), want, `${id} ${dir < 0 ? 'up' : 'down'}`);
+  }
+});
+
 test('replacing and adding lists', () => {
   const doc = starter();
   const mine = parsePaste('Bags:\n- Camera\nToiletries bag:\n- Toothbrush\n- Retainer');

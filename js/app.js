@@ -687,6 +687,14 @@ function itemEditor(x, bagId) {
   }, { wide: true });
 }
 
+// What the Delete button asks on its first tap: a bag goes with the things in it, a list of jobs with its jobs.
+function deleteAsk(b) {
+  const n = M.items(doc(), b.id).length;
+  if (!n) return 'Tap again to delete';
+  if (b.kind === 'bag') return `Delete it and ${plural(n, 'thing')} in it?`;
+  return n === 1 ? 'Delete it and its job?' : `Delete it and its ${n} jobs?`;
+}
+
 function bagEditor(b) {
   const isNew = !b;
   const when = new Set(b?.when || []), unless = new Set(b?.unless || []);
@@ -719,7 +727,7 @@ function bagEditor(b) {
         isNew ? null : h('div', { class: 'nudge' },
           h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Move up', html: ICONS.up, onclick: () => { store.apply(d => M.nudge(d, 'bags', b.id, -1)); render(); } }),
           h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Move down', html: ICONS.down, onclick: () => { store.apply(d => M.nudge(d, 'bags', b.id, 1)); render(); } })),
-        isNew ? null : confirmBtn('Delete', M.items(doc(), b.id).length ? `Delete it and ${plural(M.items(doc(), b.id).length, 'thing')} in it?` : 'Tap again to delete', () => {
+        isNew ? null : confirmBtn('Delete', deleteAsk(b), () => {
           const ids = M.items(doc(), b.id).map(x => x.id);
           close();
           apply(d => M.removeBag(d, b.id));
