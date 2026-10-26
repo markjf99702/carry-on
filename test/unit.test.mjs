@@ -882,6 +882,32 @@ test('a first merge that makes two of a thing into one keeps its ticks, skips, m
   assert.equal(M.mergeDocs(both, drive, { first: true }).trips.t1.marks['p:kindleB'].v, 1);
 });
 
+const norm = s => s.trim().toLowerCase();
+test('an occasion made on both phones is one after a first merge, and what comes for it follows', () => {
+  let a = M.putTag(starter(), { id: 'oA', name: 'Wedding', icon: '💍' });
+  a = M.putItem(a, { id: 'i-suit', name: 'Suit', bag: 's-clothes', when: ['oA', 'dressy'] });
+  a = M.putItem(a, { id: 'i-jeans', name: 'Jeans', bag: 's-clothes', unless: ['oA'] });
+  a = M.putBag(a, { id: 'b-gift', name: 'Gift bag', when: ['oA'] });
+  a = M.putItem(a, { id: 'i-card', name: 'Card', bag: 'b-gift' });
+  a = trip(a, {});
+  a = M.setCond(a, 't1', 'oA', true);
+  let b = M.putTag(starter(), { id: 'oB', name: 'wedding ', icon: '💒' });
+  b = M.putItem(b, { id: 'i-dress', name: 'Dress', bag: 's-clothes', when: ['oB'] });
+  for (const [local, remote, id] of [[a, b, 'oB'], [b, a, 'oA']]) {
+    const m = M.mergeDocs(local, remote, { first: true });
+    assert.deepEqual(M.tags(m).filter(g => norm(g.name) === 'wedding').map(g => g.id), [id], 'one Wedding, with the other side’s id');
+    assert.deepEqual(m.items['i-suit'].when, [id, 'dressy'].sort());
+    assert.deepEqual(m.items['i-jeans'].unless, [id]);
+    assert.deepEqual(m.items['i-dress'].when, [id]);
+    assert.deepEqual(m.bags['b-gift'].when, [id]);
+    assert.equal(m.trips.t1.set[id].v, true, 'the trip still has it picked');
+    const p = plan(m, m.trips.t1);
+    for (const n of ['Suit', 'Dress', 'Card']) assert.ok(allNames(p).includes(n), n);
+    assert.ok(!allNames(p).includes('Jeans'));
+    assert.equal(M.canon(M.mergeDocs(m, remote)), M.canon(m), 'the next sync changes nothing');
+  }
+});
+
 test('two Drive files made at once fold into one, keeping the ids other devices hold', () => {
   // Each phone made its own file. The first file's phone has a Kindle; the second's has one too, ticked on a trip.
   const main = M.putItem(starter(), { id: 'kindleA', name: 'Kindle', bag: 's-daybag' });

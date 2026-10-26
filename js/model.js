@@ -250,10 +250,18 @@ function mergeRec(x, y) {
   return out;
 }
 
-// A trip on the side whose bags and things took the other side's ids in a first merge: its ticks, skips and moves,
-// and the bags of its one-trip things, go to the new ids. Where two marks land on one key, the newer stays.
-function followRenames(trip, bagMap, itemMap) {
+// A trip on the side whose bags, things and occasions took the other side's ids in a first merge: its ticks, skips
+// and moves, the bags of its one-trip things, and the occasions picked for it go to the new ids. Where two land on
+// one key, the newer stays.
+function followRenames(trip, bagMap, itemMap, tagMap) {
   const out = { ...trip };
+  if (trip.set) {
+    out.set = {};
+    for (const [k, m] of Object.entries(trip.set)) {
+      const key = tagMap[k] || k;
+      if (!out.set[key] || newer(m, out.set[key])) out.set[key] = m;
+    }
+  }
   if (trip.marks) {
     out.marks = {};
     for (const [k, m] of Object.entries(trip.marks)) {
@@ -274,8 +282,9 @@ const untouched = x => x.t === 0;
 // ends up with the same list and trips.
 // first: this device's first merge with that copy (turning Drive on, restoring a backup, adding a shared list).
 //   - Nothing counts as removed: something one side deleted but the other still has stays.
-//   - A bag or thing made separately on both sides (same name, and for a thing the same bag) becomes one, with
-//     the remote side's id; this side's trips follow, so their ticks stay.
+//   - A bag, thing or occasion made separately on both sides (same name, for a bag the same kind, and for a thing
+//     the same bag) becomes one, with the remote side's id; this side's trips follow, so their ticks and occasions
+//     stay, and so do its bags and things that come only for an occasion (or not for it).
 //   - Untouched starter records (t = 0) are the exception. A second phone that started from the starter list
 //     and then joins Drive shouldn't bring back starter things deleted elsewhere, or add them to a list that
 //     never had them: when the other side has a list of its own (a bag or a thing that isn't untouched),
@@ -283,17 +292,21 @@ const untouched = x => x.t === 0;
 //     there too). A starter bag holding a thing of the person's own stays, though, so that thing still shows.
 export function mergeDocs(local, remote, { first = false } = {}) {
   const out = { app: APP, v: 1 };
-  const bagMap = Object.create(null), itemMap = Object.create(null);
+  const bagMap = Object.create(null), itemMap = Object.create(null), tagMap = Object.create(null);
+  const tagKeys = ks => [...new Set(ks.map(k => tagMap[k] || k))].sort();
   // Whether a side has a list of its own, from its bags and things together, so starter bags and their things go
   // or stay together.
   const ownList = doc => ['bags', 'items'].some(n => Object.values(doc[n] || {}).some(x => !gone(x) && !untouched(x)));
   const aHas = ownList(local), bHas = ownList(remote);
-  for (const name of ['bags', 'items', 'tags', 'trips']) {
+  // Occasions first, so the bags and things that come for them can follow.
+  for (const name of ['tags', 'bags', 'items', 'trips']) {
     let a = { ...local[name] };
     const b = remote[name];
-    if (first && (name === 'bags' || name === 'items')) {
+    if (first && name !== 'trips') {
       if (name === 'items') for (const [id, x] of Object.entries(a)) if (bagMap[x.bag]) a[id] = { ...x, bag: bagMap[x.bag] };
-      const same = name === 'bags' ? (x, y) => norm(x.name) === norm(y.name) && x.kind === y.kind : (x, y) => norm(x.name) === norm(y.name) && x.bag === y.bag;
+      if (name !== 'tags') for (const [id, x] of Object.entries(a)) if ([...x.when, ...x.unless].some(k => tagMap[k])) a[id] = { ...x, when: tagKeys(x.when), unless: tagKeys(x.unless) };
+      const same = name === 'tags' ? (x, y) => norm(x.name) === norm(y.name)
+        : name === 'bags' ? (x, y) => norm(x.name) === norm(y.name) && x.kind === y.kind : (x, y) => norm(x.name) === norm(y.name) && x.bag === y.bag;
       const taken = new Set();
       for (const [id, x] of Object.entries(a)) {
         if (gone(x) || own(b, id)) continue;
@@ -302,10 +315,11 @@ export function mergeDocs(local, remote, { first = false } = {}) {
         taken.add(match.id);
         delete a[id];
         a[match.id] = { ...x, id: match.id };
-        if (name === 'bags') bagMap[id] = match.id; else itemMap[id] = match.id;
+        const map = name === 'tags' ? tagMap : name === 'bags' ? bagMap : itemMap;
+        map[id] = match.id;
       }
     }
-    if (first && name === 'trips') for (const [id, t] of Object.entries(a)) a[id] = followRenames(t, bagMap, itemMap);
+    if (first && name === 'trips') for (const [id, t] of Object.entries(a)) a[id] = followRenames(t, bagMap, itemMap, tagMap);
     // A starter bag that someone put a thing of their own in is in use: it stays, with that thing.
     const inUse = new Set();
     if (first && name === 'bags') {
