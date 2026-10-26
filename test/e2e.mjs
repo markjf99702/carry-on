@@ -238,6 +238,15 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await page.fill('.sheet input', 'Wedding');
   await page.click('.sheet .btn.primary');
   assert.ok(await page.locator('.chip', { hasText: 'Wedding' }).count());
+  // A long sheet keeps its title and its Save on screen while it scrolls.
+  const inReach = sel => page.evaluate(sel => { const b = document.querySelector(sel), r = b.getBoundingClientRect(); return b.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); }, sel);
+  await page.locator('.edit-row', { hasText: 'Sunscreen' }).click();
+  await page.click('.sheet summary');
+  assert.ok(await page.evaluate(() => { const s = document.getElementById('sheet'); return s.scrollHeight > s.clientHeight; }), 'a sheet taller than the screen');
+  assert.ok(await inReach('.sheet .btn.primary'), 'Save in reach');
+  await page.evaluate(() => { document.getElementById('sheet').scrollTop = 400; });
+  assert.ok(await inReach('.sheet .sheet-top .icon-btn'), 'and the close button, scrolled down');
+  await closeSheet(page);
   await fits(page, 'my list');
 
   // ---------- the list as a link ----------

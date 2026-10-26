@@ -358,18 +358,27 @@ ul.chips .chip small { font-weight: 500; color: var(--muted); font-size: 13px; }
 /* Over a sheet, at the top of the screen, clear of the sheet's buttons. */
 .sheet .toast { top: calc(12px + env(safe-area-inset-top)); bottom: auto; }
 .sheet {
-  width: 100%; max-width: 520px; max-height: 92vh; margin: auto auto 0; padding: 0;
+  width: 100%; max-width: 520px; max-height: 92vh; max-height: 92dvh; margin: auto auto 0; padding: 0;
   border: 0; border-radius: 18px 18px 0 0;
   background: var(--paper); color: var(--ink);
   box-shadow: 0 -8px 30px rgba(0, 0, 0, .25);
 }
 .sheet.wide { max-width: 600px; }
 .sheet::backdrop { background: rgba(14, 18, 26, .5); }
-.sheet-body { padding: 14px 18px calc(18px + env(safe-area-inset-bottom)); }
-.sheet-top { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 12px; }
+.sheet-body { padding: 0 18px calc(18px + env(safe-area-inset-bottom)); }
+.sheet-body:has(> .sheet-actions:last-child) { padding-bottom: 0; }
+/* The title and the buttons stay in view while a long sheet scrolls between them. */
+.sheet-top {
+  position: sticky; top: 0; z-index: 1; display: flex; align-items: flex-start; gap: 8px;
+  margin: 0 -18px 4px; padding: 14px 18px 8px; background: var(--paper);
+}
 .sheet-top h2 { flex: 1; padding-top: 8px; font-size: 24px; overflow-wrap: anywhere; }
 .sheet-top .icon-btn { margin-right: -8px; }
-.sheet-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.sheet-actions {
+  position: sticky; bottom: 0; z-index: 1; display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap;
+  margin: 12px -18px 0; padding: 12px 18px calc(12px + env(safe-area-inset-bottom));
+  background: var(--paper); border-top: 1px solid var(--line);
+}
 .sheet-actions .nudge { display: flex; margin-right: auto; }
 .sheet-actions .btn.primary { min-width: 120px; }
 .sheet h3:first-of-type { margin-top: 0; }
