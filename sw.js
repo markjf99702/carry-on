@@ -2,7 +2,7 @@
 // The list, the trips and their last weather lookup are in localStorage.
 // Network first, so a new version shows up as soon as you're online.
 
-const CACHE = 'carry-on-v3';
+const CACHE = 'carry-on-v4'; // bump the number when the files change
 const SHELL = [
   './', 'index.html', 'css/app.css', 'icon.svg', 'icon-180.png', 'manifest.webmanifest',
   'fonts/figtree.woff2', 'fonts/barlow-condensed-600.woff2', 'fonts/barlow-condensed-700.woff2',
@@ -16,7 +16,9 @@ self.addEventListener('install', e => {
 
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys()
-    .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+    // Only this project's own old copies, by exact name: projects served from one address share Cache Storage,
+    // and a looser match would delete another project's copy.
+    .then(keys => Promise.all(keys.filter(k => k !== CACHE && /^carry-on-v[0-9]+$/.test(k)).map(k => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
 

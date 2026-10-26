@@ -55,4 +55,5 @@ To put it online with GitHub Pages: **Settings → Pages → Build and deploymen
 - `js/app.js`, `js/ui.js`, `css/app.css`: the page.
 - `fonts/`: Barlow Condensed and Figtree (SIL Open Font License), served from here so nothing loads from elsewhere.
 - `sw.js`: keeps a copy for using offline.
+- `tools/`: `build.mjs` makes the one-file copies, `dist/carry-on.html` and `dist/artifact.html` (the one published as a Claude Artifact); `screenshots.mjs` redraws `docs/*.png` and `og.png`; `make-icons.mjs` redraws the PNG icons.
 - `test/`: unit tests, the browser test, and stand-ins for Open-Meteo and Google Drive.

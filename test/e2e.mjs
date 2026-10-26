@@ -268,10 +268,15 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   // Works offline once it has been opened (with the service worker this time).
   const ctx2 = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const p2 = await ctx2.newPage();
+  // Another project's offline copy at the same address is left alone; this one's old copy goes.
+  await p2.goto(base + 'manifest.webmanifest');
+  await p2.evaluate(() => Promise.all(['other-project-v1', 'carry-on-v1'].map(k => caches.open(k))));
   await p2.goto(base);
   await p2.waitForFunction(() => navigator.serviceWorker?.controller, null, { timeout: 10000 }).catch(() => {});
   await p2.reload();
   await p2.waitForFunction(() => navigator.serviceWorker?.controller, null, { timeout: 10000 });
+  const kept = await p2.evaluate(() => caches.keys());
+  assert.ok(kept.includes('other-project-v1') && !kept.includes('carry-on-v1'), `caches: ${kept}`);
   await ctx2.setOffline(true);
   await p2.reload();
   await p2.waitForSelector('.welcome h1');
