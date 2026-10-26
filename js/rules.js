@@ -176,6 +176,16 @@ export function plan(doc, trip, mode = 'go') {
   };
 }
 
+// Ticks on too few: the mark keys of things ticked going whose count is higher in after than in before (a longer
+// trip, a higher laundry limit, a higher How many), so the tick stands for fewer than the list now asks for.
+export function grown(before, after, tripId) {
+  const a = before.trips[tripId], b = after.trips[tripId];
+  if (!a || !b || M.gone(a) || M.gone(b)) return [];
+  const rows = (doc, trip) => plan(doc, trip, 'go').groups.flatMap(g => g.rows);
+  const was = new Map(rows(before, a).map(r => [r.key, r.qty]));
+  return rows(after, b).filter(r => r.done && r.qty > (was.get(r.key) ?? Infinity)).map(r => r.key);
+}
+
 // For the trip cards: how far along packing is.
 export function progress(doc, trip) {
   const p = plan(doc, trip, 'go');

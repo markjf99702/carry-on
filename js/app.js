@@ -71,6 +71,40 @@ const missing = () => h('section', { class: 'card empty' }, h('h1', {}, 'That tr
 const go = hash => { if (location.hash === hash) render(); else location.hash = hash; };
 const apply = fn => { store.apply(fn); render(); };
 
+// A change that can raise how many of something a trip needs (a later Back, a higher laundry limit, a higher How
+// many) unticks what was ticked for the old count, so the list can't say all packed two pairs of socks short. Only
+// on trips not under way yet: on one under way, what was ticked going is what Coming home lists. A toast says what
+// was unticked, and Undo puts the ticks back.
+function applyCounting(fn) {
+  const t0 = today(), unticked = [];
+  const after = store.apply(d => {
+    let next = fn(d);
+    for (const t of M.trips(next)) {
+      const keys = t.start >= t0 ? R.grown(d, next, t.id) : [];
+      if (!keys.length) continue;
+      unticked.push([t.id, keys.map(k => [k, t.marks[k].v])]);
+      next = M.markAll(next, t.id, keys, 0);
+    }
+    return next;
+  });
+  if (!unticked.length) return;
+  const names = [], counts = new Set();
+  for (const [id, marks] of unticked) {
+    for (const [k] of marks) {
+      const x = after.items[k.slice(2)];
+      if (!x) continue;
+      if (!names.includes(x.name)) names.push(x.name);
+      counts.add(R.qtyOf(after, after.trips[id], x));
+    }
+  }
+  const one = names.length === 1;
+  const said = names.length > 3 ? `${names.slice(0, 2).join(', ')} and ${names.length - 2} more` : andList(names);
+  toast(`${said} need${one ? 's' : ''} more now${counts.size === 1 ? ` (×${[...counts][0]})` : ''}${unticked.length > 1 ? ` on ${unticked.length} trips` : ''}, so ${one ? 'it’s' : 'they’re'} unticked.`, {
+    label: 'Undo',
+    run: () => apply(d => unticked.reduce((doc1, [id, marks]) => marks.reduce((doc2, [k, v]) => M.mark(doc2, id, k, v), doc1), d)),
+  });
+}
+
 // ---------- the first screen ----------
 
 function welcome() {
@@ -536,7 +570,7 @@ function tripForm(t, again = false) {
     if (D.nights(st.start, st.end) > 90) { err('That’s more than 90 nights. Check the dates.'); return; }
     const id = editing ? t.id : M.newId('t');
     const moved = editing && (t.start !== st.start || t.end !== st.end || t.place?.lat !== st.place?.lat || t.place?.name !== st.place?.name);
-    store.apply(d => {
+    applyCounting(d => {
       let next = M.putTrip(d, { id, place: st.place, start: st.start, end: st.end, travel: st.travel, name: nameIn.value.trim() });
       for (const g of M.tags(d)) {
         const was = !!d.trips[id]?.set?.[g.id]?.v, now = st.tags.has(g.id);
@@ -685,7 +719,8 @@ function itemEditor(x, bagId) {
       const q = qty.value;
       const fields = { id: x?.id, name: n, bag: bag.value, note: note.value.trim(), when: mode.value === 'some' ? [...when] : [], unless: [...unless], per: q === 'day' ? 'day' : '', qty: q === 'day' ? 1 : +q };
       close();
-      apply(d => M.putItem(d, fields));
+      applyCounting(d => M.putItem(d, fields));
+      render();
     };
     return [
       h('label', { class: 'field' }, h('span', {}, 'Name'), name = h('input', { type: 'text', value: x?.name || '', maxlength: 80, autofocus: isNew, autocomplete: 'off' })),
@@ -900,7 +935,7 @@ function settingsView() {
       h('div', { class: 'stepper' },
         h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'One fewer', disabled: l <= 1, onclick: () => apply(x => M.setPref(x, 'laundry', l - 1)) }, '−'),
         h('output', {}, plural(l, 'day')),
-        h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'One more', disabled: l >= 30, onclick: () => apply(x => M.setPref(x, 'laundry', l + 1)) }, '+'))),
+        h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'One more', disabled: l >= 30, onclick: () => { applyCounting(x => M.setPref(x, 'laundry', l + 1)); render(); } }, '+'))),
     driveHost,
     h('section', { class: 'card' },
       h('h2', {}, 'Backup'),

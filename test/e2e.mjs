@@ -377,6 +377,31 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await ctx.close();
 }
 
+// ================= Changes while packing say so =================
+{
+  const { ctx, page } = await phone();
+  await page.click('text=Start with a starter list');
+  await planTrip(page, { where: 'Chic', from: 2, to: 4, by: 'Driving' });
+  const tick = name => row(page, name).locator('.tick');
+  const said = () => page.locator('#toast span').innerText();
+
+  // Back two days later: three pairs of socks ticked aren't five, so the tick goes, and Undo puts it back.
+  await tick('Socks').click();
+  await tick('Belt').click();
+  assert.equal(await row(page, 'Socks').locator('.name').innerText(), 'Socks ×3');
+  await page.click('[aria-label="Edit this trip"]');
+  await page.fill('#end', await day(page, 6));
+  await page.click('text=Save');
+  await page.waitForSelector('.pass h1');
+  assert.equal(await row(page, 'Socks').locator('.name').innerText(), 'Socks ×5');
+  assert.equal(await tick('Socks').getAttribute('aria-checked'), 'false', 'more socks now, so unticked');
+  assert.equal(await tick('Belt').getAttribute('aria-checked'), 'true', 'still one belt, still ticked');
+  assert.equal(await said(), 'Socks needs more now (×5), so it’s unticked.');
+  await toastUndo(page);
+  assert.equal(await tick('Socks').getAttribute('aria-checked'), 'true', 'Undo puts the tick back');
+  await ctx.close();
+}
+
 // ================= A pasted list =================
 {
   const { ctx, page } = await phone();

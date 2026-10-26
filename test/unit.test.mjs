@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as M from '../js/model.js';
-import { plan, conditions, qtyOf, units } from '../js/rules.js';
+import { plan, conditions, qtyOf, units, grown } from '../js/rules.js';
 import { summarize, stale, tripWeather, forecastEdge } from '../js/weather.js';
 import { plugsFor, plugText, localCountry } from '../js/plugs.js';
 import { parsePaste, encodeList, decodeList, guess } from '../js/share.js';
@@ -818,6 +818,33 @@ test('links with an odd shape, or from another app, say what’s wrong', async (
   await assert.rejects(decodeList(await pack({ app: 'brickyard', list: 1, sets: [] })), { message: 'That link is for another app, not Carry On.' });
   const cut = { message: 'That link doesn’t hold a Carry On list. It may have been cut short.' };
   for (const code of ['nonsense', '', (await encodeList({ bags: [] })).slice(0, 12), await pack({ list: 1, bags: [] }), await pack({ app: 'carry-on', bags: {} })]) await assert.rejects(decodeList(code), cut);
+});
+
+test('ticks on too few: a longer trip, a higher laundry limit or a higher How many', () => {
+  const ticked = ['p:s-clothes-socks', 'p:s-clothes-underwear', 'p:s-toiletries-toothbrush', 'p:s-clothes-belt'];
+  let doc = M.setPref(starter(), 'home', 'US');
+  doc = trip(doc, { place: { name: 'Chicago', cc: 'US', country: 'United States' } }); // 5 days
+  doc = M.markAll(doc, 't1', ticked, 1);
+  // Two days later back: socks and underwear go from 5 to 7, ticked; shirts grow too but weren't ticked.
+  const longer = M.putTrip(doc, { id: 't1', end: add(T, 6) });
+  assert.deepEqual(grown(doc, longer, 't1').sort(), ['p:s-clothes-socks', 'p:s-clothes-underwear']);
+  // A shorter trip needs fewer: nothing.
+  assert.deepEqual(grown(doc, M.putTrip(doc, { id: 't1', end: add(T, 2) }), 't1'), []);
+  assert.deepEqual(grown(doc, doc, 't1'), []);
+  // A laundry limit of 3 on a 5-day trip, then 4: more of each.
+  const three = M.setPref(doc, 'laundry', 3);
+  assert.deepEqual(grown(three, M.setPref(three, 'laundry', 4), 't1').sort(), ['p:s-clothes-socks', 'p:s-clothes-underwear']);
+  // A higher limit past the trip's length changes nothing.
+  assert.deepEqual(grown(doc, M.setPref(doc, 'laundry', 9), 't1'), []);
+  // How many goes up for one thing; down for another.
+  const belts = M.putItem(doc, { id: 's-clothes-belt', qty: 2 });
+  assert.deepEqual(grown(doc, belts, 't1'), ['p:s-clothes-belt']);
+  assert.deepEqual(grown(belts, doc, 't1'), []);
+  // One a day instead of just one.
+  assert.deepEqual(grown(doc, M.putItem(doc, { id: 's-toiletries-toothbrush', per: 'day' }), 't1'), ['p:s-toiletries-toothbrush']);
+  // Only ticks: an unticked thing that grows isn't named, and a trip that's gone has none.
+  assert.ok(!grown(doc, longer, 't1').includes('p:s-clothes-shirts'));
+  assert.deepEqual(grown(doc, M.removeTrip(longer, 't1'), 't1'), []);
 });
 
 test('qty', () => {
