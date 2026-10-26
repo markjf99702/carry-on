@@ -104,16 +104,18 @@ async function typical(place, keys, today, signal, errors) {
   return out;
 }
 
-// The weather for each day of a trip: the forecast for the days it reaches, and for the rest the average of
-// the same days in the last three years. Days long gone get nothing (a past trip keeps what it had).
-// Days the forecast should have had but didn't (it failed, or left a day out) get typical weather instead, and a
-// lookup that didn't all come back says so in err, a few words for under the weather.
+// What a lookup that didn't all come back says, under the weather (its err).
 export const SHORT = {
   missing: 'Couldn’t get the weather for every day.',
   forecast: 'Couldn’t get the forecast, so these days show typical weather.',
   gaps: 'The forecast left out some days, so they show typical weather.',
   years: 'Couldn’t get every past year, so typical weather comes from fewer of them.',
 };
+
+// The weather for each day of a trip: the forecast for the days it reaches, and for the rest the average of
+// the same days in the last three years. Days long gone get nothing (a past trip keeps what it had).
+// Days the forecast should have had but didn't (it failed, or left a day out) get typical weather instead, and a
+// lookup that didn't all come back says so in err.
 export async function tripWeather(place, start, end, today, { signal, now = Date.now() } = {}) {
   if (!place || place.lat === undefined) throw new Error('This trip has no place to look up.');
   const days = range(start, end);
@@ -133,7 +135,7 @@ export async function tripWeather(place, start, end, today, { signal, now = Date
         uv: d.uv_index_max?.[i] ?? undefined, code: d.weather_code?.[i] ?? undefined,
       };
     });
-  }, e => { fcErr = e; });
+  }).catch(e => { fcErr = e; });
   if (ty.length) Object.assign(out, await typical(place, ty, today, signal, errors));
   await forecast;
   const gaps = fc.filter(k => !out[k]);

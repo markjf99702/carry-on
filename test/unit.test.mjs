@@ -200,6 +200,7 @@ function weatherStub(now, answer = () => ({})) {
     if (a instanceof Error) throw a;
     const bad = (status, reason) => ({ ok: false, status, json: async () => ({ error: true, reason }) });
     if (a.status) return bad(a.status, a.reason);
+    if (a.raw) return { ok: true, status: 200, json: async () => a.raw };
     if (kind === 'forecast' && s.get('end_date') > add(new Date(now).toISOString().slice(0, 10), 15)) {
       return bad(400, `Parameter 'end_date' is out of allowed range from 2026-07-25 to ${add(new Date(now).toISOString().slice(0, 10), 15)}`);
     }
@@ -279,6 +280,13 @@ test('a lookup that half fails says so, fills its gaps with typical weather, and
     assert.deepEqual(wx.days.map(d => [d.d, !!d.typ]), [['2026-11-04', false], ['2026-11-05', true], ['2026-11-06', false]]);
     assert.ok(stub.calls.includes('archive 2025-11-05 2025-11-05'), stub.calls.join(', '));
     assert.equal(wx.err, 'The forecast left out some days, so they show typical weather.');
+  } finally { stub.restore(); }
+  // A forecast that comes back in a shape it can't read counts as one that failed.
+  stub = weatherStub(now, kind => (kind === 'forecast' ? { raw: { daily: { time: 'soon' } } } : {}));
+  try {
+    const wx = await tripWeather(PLACE, '2026-11-04', '2026-11-06', today, { now });
+    assert.deepEqual(wx.days.map(d => [d.d, !!d.typ]), [['2026-11-04', true], ['2026-11-05', true], ['2026-11-06', true]]);
+    assert.equal(wx.err, 'Couldn’t get the forecast, so these days show typical weather.');
   } finally { stub.restore(); }
   // Nothing at all: the first error, as before.
   stub = weatherStub(now, () => new TypeError('Failed to fetch'));
