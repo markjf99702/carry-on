@@ -21,8 +21,8 @@
 - **And what you'll be doing.** Pick occasions for a trip (work, working out, swimming, dressing up, outdoors, or your own), and things or whole bags come along only for them: the work bag on work trips, the swimsuit when you're swimming or it's hot.
 - **Says why.** Anything that came along for a reason says so under its name ("Rain likely Fri", "Type C/F, 230 V"). **Left off this trip** lists everything that didn't, and why, with a button to pack it anyway. You can also turn any weather or place condition on or off by hand.
 - **Leave things off one trip.** A single thing or job, a whole bag, or a list of jobs (no house jobs when someone's staying home) can be left off one trip from its ⋯ menu. It waits under **Left off this trip**, and stays on your list for other trips.
-- **Counts by the day.** Socks and underwear come one for each day of the trip, up to a laundry limit you set.
-- **Coming home.** Switch to **Coming home** and the list shows only what you packed, with its own ticks and the hotel checklist.
+- **Counts by the day.** Socks and underwear come one for each day of the trip, up to a laundry limit you set. If a trip gets longer, socks ticked for the shorter one come unticked.
+- **Coming home.** Switch to **Coming home** and the list shows only what you packed, with its own ticks and the hotel checklist. Something you got on the trip can go on it there too.
 - **Bring your own list.** Paste a list from Google Keep, Notes or a document. Bags are the lines with things under them, and it makes a first guess at when each thing is needed (passport when abroad, swimsuit for swimming). A list can also go to someone else as a link; the list travels inside the link itself.
 - **On every device, if you like.** Turn on Google Drive in Settings and the list, the trips and their ticks are kept in a "Carry On" folder in your own Drive, merged thing by thing, so two phones can pack the same trip. Without it, everything stays in this browser.
 - No account and no server. It works offline once opened and installs to a phone's home screen.
