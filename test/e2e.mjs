@@ -2,8 +2,9 @@
 // Someone starts from the starter list, plans a trip to Lisbon and packs for it: the forecast, the place and
 // the occasions decide what's on the list, things get ticked, left off, added and moved, and the coming-home
 // pass lists only what went. A trip too far off for a forecast gets typical weather; one with no connection is
-// set by hand. The list is changed, sent as a link and opened on another phone, a list is pasted in, and two
-// phones share one list and its ticks through a stand-in Google Drive (test/fake-google.mjs).
+// set by hand. The list is changed, sent as a link and opened on another phone, a list is pasted in, what's typed
+// stays put while the page redraws, and two phones share one list and its ticks through a stand-in Google Drive
+// (test/fake-google.mjs).
 import { createRequire } from 'node:module';
 import { execSync } from 'node:child_process';
 import { createServer } from 'node:http';
@@ -306,6 +307,87 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   assert.deepEqual(await page.locator('.bag.edit h2').allInnerTexts(), ['ELECTRONICS', 'ATTIRE', 'NOT IN A BAG', 'LEAVING THE HOUSE']);
   assert.match(await page.locator('.edit-row', { hasText: 'Socks' }).innerText(), /one a day/);
   assert.match(await page.locator('.edit-row', { hasText: 'Swimsuit' }).innerText(), /Only for 🌡️ hot or 🏊 swimming/);
+  await ctx.close();
+}
+
+// ================= What's typed stays put while the page redraws =================
+// Switching to another app and back, a forecast arriving, a sync landing or another tab saving all redraw the page.
+{
+  const { ctx, page } = await phone();
+  await page.click('text=Start with a starter list');
+  const other = await ctx.newPage(); // another tab: what it saves reaches this one through a storage event
+  await other.goto(base);
+  const saved = () => page.evaluate(() => JSON.stringify(window.carryOn.store.doc));
+  const elsewhere = async (fn, arg) => {
+    const was = await saved();
+    await other.evaluate(fn, arg);
+    await until(async () => (await saved()) !== was, 'the other tab’s change');
+  };
+  const redraws = async () => {
+    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    await elsewhere(() => window.carryOn.store.apply(d => window.carryOn.M.setPref(d, 'laundry', 3 + Math.round(Math.random() * 9))));
+  };
+  const form = () => page.evaluate(() => ({
+    picked: document.querySelector('.picked b')?.textContent || null,
+    start: document.getElementById('start').value, end: document.getElementById('end').value,
+    name: document.getElementById('name').value,
+    on: [...document.querySelectorAll('.form [aria-pressed="true"]')].map(b => b.textContent),
+  }));
+
+  await page.click('text=Plan a trip');
+  await page.fill('#where', 'Lisb');
+  await page.waitForSelector('.results button');
+  await redraws();
+  assert.equal(await page.inputValue('#where'), 'Lisb', 'the place typed so far');
+  assert.equal(await page.locator('.results button').count(), 2, 'and the places it found');
+  await page.locator('.results button').first().click();
+  await page.fill('#start', await day(page, 30));
+  await page.fill('#end', await day(page, 33));
+  await page.locator('.form .seg button', { hasText: 'Train' }).click();
+  await page.locator('.form .chip', { hasText: / Work$/ }).click();
+  await page.fill('#name', 'Conference');
+  const planned = await form();
+  assert.deepEqual(planned.on, ['🚆 Train', '💼 Work']);
+  await page.evaluate(() => document.getElementById('name').setSelectionRange(4, 4));
+  await redraws();
+  assert.deepEqual(await form(), planned, 'Plan a trip keeps what was typed');
+  assert.deepEqual(await page.evaluate(() => [document.activeElement.id, document.activeElement.selectionStart]), ['name', 4], 'and the cursor where it was');
+  await page.click('text=Make my list');
+  await page.waitForSelector('.pass h1');
+  const id = await page.evaluate(() => location.hash.split('/')[2]);
+  assert.equal(await page.locator('.pass h1').innerText(), 'CONFERENCE');
+
+  // Edit: changes not saved yet stay through the same redraws, and Save keeps them.
+  await page.goto(base + '#/edit/' + id);
+  await page.fill('#name', 'Conference and a day off');
+  await page.fill('#end', await day(page, 34));
+  await page.locator('.form .chip', { hasText: / Work$/ }).click();
+  const edited = await form();
+  await redraws();
+  assert.deepEqual(await form(), edited, 'Edit keeps unsaved changes');
+  await page.click('text=Save');
+  await page.waitForSelector('.pass h1');
+  assert.equal(await page.locator('.pass h1').innerText(), 'CONFERENCE AND A DAY OFF');
+  // Opened again, it shows what was saved, and a change made elsewhere shows up.
+  await page.goto(base + '#/edit/' + id);
+  assert.deepEqual(await form(), edited);
+  await elsewhere(id => window.carryOn.store.apply(d => window.carryOn.M.putTrip(d, { id, end: window.carryOn.D.add(d.trips[id].end, 1) })), id);
+  assert.equal(await page.inputValue('#end'), await day(page, 35), 'the other tab’s new date');
+  assert.equal(await page.inputValue('#name'), 'Conference and a day off');
+  // Deleted elsewhere while it's open here: it says so, and nothing here can bring it back.
+  await page.fill('#name', 'Changed my mind');
+  await elsewhere(id => window.carryOn.store.apply(d => window.carryOn.M.removeTrip(d, id)), id);
+  assert.match(await page.locator('main h1').innerText(), /That trip isn’t here/i);
+  assert.ok(await page.evaluate(id => window.carryOn.M.gone(window.carryOn.store.doc.trips[id]), id));
+
+  // My list: half-typed into a bag's add box.
+  await page.goto(base + '#/list');
+  const box = page.getByPlaceholder('Add to Toiletries bag');
+  await box.fill('Cotton sw');
+  await redraws();
+  assert.equal(await box.inputValue(), 'Cotton sw', 'the add box keeps its text');
+  assert.equal(await page.evaluate(() => document.activeElement.placeholder), 'Add to Toiletries bag', 'and the cursor');
+  await other.close();
   await ctx.close();
 }
 

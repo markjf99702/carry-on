@@ -23,16 +23,31 @@ const TAG_ICONS = ['🏷️', '💼', '🏋️', '🏊', '👔', '🥾', '💍',
 // ---------- drawing ----------
 
 let current = '';
+// What's been changed on Plan a trip, Edit trip or Go again but not saved yet. The page redraws underneath it
+// (back from another app, a forecast arriving, a sync landing, another tab saving), and the form is rebuilt from
+// this. It holds only what was changed, so the rest still follows the trip, and it goes when the screen changes,
+// on Save and on Delete.
+let draft = null;
 function render() {
   const hash = location.hash || '#/';
   if (hash.startsWith('#list=')) { takeLink(hash.slice(6)); return; }
   const [, page = '', id = ''] = hash.slice(1).split('/');
-  const key = document.activeElement?.dataset?.key;
-  const screen = page + '/' + id;
+  const screen = page + '/' + id, moved = screen !== current;
+  if (moved) draft = null;
+  // Focus, where the cursor was in a text box, and anything half-typed in an add box come through the redraw.
+  const was = document.activeElement;
+  const key = was?.dataset?.key, fid = !moved && !key && main.contains(was) ? was.id : '';
+  const caret = was?.selectionStart != null ? [was.selectionStart, was.selectionEnd] : null;
+  const typed = moved ? [] : [...main.querySelectorAll('input[data-key]')].filter(x => x.value).map(x => [x.dataset.key, x.value]);
   const nodes = view(page, decodeURIComponent(id));
   main.replaceChildren(...[nodes].flat(Infinity).filter(Boolean));
-  if (screen !== current) { current = screen; window.scrollTo(0, 0); main.focus({ preventScroll: true }); }
-  if (key) main.querySelector(`[data-key="${CSS.escape(key)}"]`)?.focus({ preventScroll: true });
+  for (const [k, v] of typed) { const x = main.querySelector(`input[data-key="${CSS.escape(k)}"]`); if (x && !x.value) x.value = v; }
+  if (moved) { current = screen; window.scrollTo(0, 0); main.focus({ preventScroll: true }); }
+  const back = key ? main.querySelector(`[data-key="${CSS.escape(key)}"]`) : fid ? main.querySelector('#' + CSS.escape(fid)) : null;
+  if (back) {
+    back.focus({ preventScroll: true });
+    if (caret && back.setSelectionRange) try { back.setSelectionRange(...caret); } catch { /* not a text box */ }
+  }
   document.body.dataset.page = page || 'home';
 }
 
@@ -40,7 +55,12 @@ function view(page, id) {
   if (!M.hasList(doc()) && page !== 'settings') return welcome();
   if (page === 'trip') { const t = doc().trips[id]; return t && !M.gone(t) ? tripView(t) : missing(); }
   if (page === 'new') return tripForm(null);
-  if (page === 'edit' || page === 'again') { const t = doc().trips[id]; return t ? tripForm(t, page === 'again') : missing(); }
+  if (page === 'edit' || page === 'again') {
+    const t = doc().trips[id];
+    // Deleted, maybe on another device: saving the form would bring it back.
+    if (!t || (page === 'edit' && M.gone(t))) { draft = null; return missing(); }
+    return tripForm(t, page === 'again');
+  }
   if (page === 'list') return listView();
   if (page === 'settings') return settingsView();
   return homeView();
@@ -385,47 +405,55 @@ function condSheet(id) {
 
 function tripForm(t, again = false) {
   const editing = t && !again;
+  const key = (editing ? 'edit/' : again ? 'again/' : 'new/') + (t ? t.id : '');
+  if (draft?.key !== key) draft = { key, results: [], searchErr: '', typed: '', err: '' };
+  const dr = draft;
   const st = {
     place: t?.place || null, start: editing ? t.start : '', end: editing ? t.end : '', travel: t?.travel || 'fly', name: editing ? t.name : '',
     tags: new Set(Object.entries(t?.set || {}).filter(([k, m]) => m.v === true && doc().tags[k]).map(([k]) => k)),
   };
-  let results = [], searchErr = '', ctl = null, timer = null;
+  for (const k of Object.keys(st)) if (k in dr) st[k] = dr[k];
+  const set = (k, v) => { st[k] = dr[k] = v; };
   const where = h('div', { class: 'where-field' });
-  const input = h('input', { type: 'search', id: 'where', placeholder: 'A city or town', autocomplete: 'off', enterkeyhint: 'search', 'aria-describedby': 'whereHelp' });
+  const input = h('input', { type: 'search', id: 'where', value: dr.typed, placeholder: 'A city or town', autocomplete: 'off', enterkeyhint: 'search', 'aria-describedby': 'whereHelp' });
   const list = h('ul', { class: 'results', role: 'listbox', 'aria-label': 'Places' });
   const drawWhere = () => {
     if (st.place) {
       where.replaceChildren(h('div', { class: 'picked' },
         h('span', {}, h('b', {}, st.place.name), ' ', h('span', { class: 'muted' }, [st.place.admin, st.place.country].filter(Boolean).join(', '))),
-        h('button', { type: 'button', class: 'icon-btn small', 'aria-label': 'Pick another place', html: ICONS.close, onclick: () => { st.place = null; drawWhere(); input.focus(); } })));
+        h('button', { type: 'button', class: 'icon-btn small', 'aria-label': 'Pick another place', html: ICONS.close, onclick: () => { set('place', null); drawWhere(); input.focus(); } })));
       return;
     }
-    list.replaceChildren(...results.map(r => h('li', {}, h('button', { type: 'button', role: 'option', onclick: () => { st.place = r; results = []; drawWhere(); } },
+    list.replaceChildren(...dr.results.map(r => h('li', {}, h('button', { type: 'button', role: 'option', onclick: () => { set('place', r); dr.results = []; drawWhere(); } },
       h('b', {}, r.name), ' ', h('span', { class: 'muted' }, [r.admin, r.country].filter(Boolean).join(', '))))));
     const typed = input.value.trim();
-    if (searchErr && typed) list.append(h('li', { class: 'err small' }, single ? 'This copy can’t reach the weather service. Use what you typed and set the weather by hand, or open carry-on.junkdrawer.works for the forecast.' : searchErr), h('li', {}, h('button', { type: 'button', onclick: () => { st.place = { name: typed, admin: '', country: '', cc: '' }; drawWhere(); } }, `Use “${typed}” without looking it up`)));
+    if (dr.searchErr && typed) list.append(h('li', { class: 'err small' }, single ? 'This copy can’t reach the weather service. Use what you typed and set the weather by hand, or open carry-on.junkdrawer.works for the forecast.' : dr.searchErr), h('li', {}, h('button', { type: 'button', onclick: () => { set('place', { name: typed, admin: '', country: '', cc: '' }); drawWhere(); } }, `Use “${typed}” without looking it up`)));
     where.replaceChildren(input, list);
   };
+  // A search that answers after a redraw shows on the form that's there now.
+  dr.drawWhere = drawWhere;
   input.addEventListener('input', () => {
-    clearTimeout(timer);
-    if (ctl) ctl.abort();
+    dr.typed = input.value;
+    clearTimeout(dr.timer);
+    if (dr.ctl) dr.ctl.abort();
     const q = input.value;
-    timer = setTimeout(() => {
-      ctl = new AbortController();
-      W.searchPlaces(q, { signal: ctl.signal }).then(r => { results = r; searchErr = q.trim().length > 1 && !r.length ? 'No places by that name.' : ''; drawWhere(); }, e => { if (e.name !== 'AbortError') { results = []; searchErr = e.message; drawWhere(); } });
+    dr.timer = setTimeout(() => {
+      const ctl = dr.ctl = new AbortController();
+      W.searchPlaces(q, { signal: ctl.signal }).then(r => { dr.results = r; dr.searchErr = q.trim().length > 1 && !r.length ? 'No places by that name.' : ''; dr.drawWhere(); }, e => { if (e.name !== 'AbortError') { dr.results = []; dr.searchErr = e.message; dr.drawWhere(); } });
     }, 300);
   });
   drawWhere();
-  const errBox = h('p', { class: 'err', role: 'alert' });
-  const startIn = h('input', { type: 'date', id: 'start', value: st.start, min: editing ? null : D.add(today(), -30), required: true, onchange: e => { st.start = e.target.value; if (!st.end || st.end < st.start) { st.end = st.start; endIn.value = st.end; } } });
-  const endIn = h('input', { type: 'date', id: 'end', value: st.end, required: true, onchange: e => { st.end = e.target.value; } });
-  const nameIn = h('input', { type: 'text', id: 'name', value: st.name, maxlength: 60, placeholder: 'Sam’s wedding', autocomplete: 'off' });
+  const errBox = h('p', { class: 'err', role: 'alert' }, dr.err);
+  const err = msg => { errBox.textContent = dr.err = msg; };
+  const startIn = h('input', { type: 'date', id: 'start', value: st.start, min: editing ? null : D.add(today(), -30), required: true, oninput: e => set('start', e.target.value), onchange: e => { set('start', e.target.value); if (!st.end || st.end < st.start) { set('end', st.start); endIn.value = st.end; } } });
+  const endIn = h('input', { type: 'date', id: 'end', value: st.end, required: true, oninput: e => set('end', e.target.value), onchange: e => set('end', e.target.value) });
+  const nameIn = h('input', { type: 'text', id: 'name', value: st.name, maxlength: 60, placeholder: 'Sam’s wedding', autocomplete: 'off', oninput: e => set('name', e.target.value) });
   const save = () => {
     st.start = startIn.value; st.end = endIn.value;
-    if (!st.place && input.value.trim()) { errBox.textContent = 'Pick a place from the list, or use what you typed.'; return; }
-    if (!st.start || !st.end) { errBox.textContent = 'When do you leave, and when are you back?'; return; }
-    if (st.end < st.start) { errBox.textContent = 'You’re back before you leave. Check the dates.'; return; }
-    if (D.nights(st.start, st.end) > 90) { errBox.textContent = 'That’s more than 90 nights. Check the dates.'; return; }
+    if (!st.place && input.value.trim()) { err('Pick a place from the list, or use what you typed.'); return; }
+    if (!st.start || !st.end) { err('When do you leave, and when are you back?'); return; }
+    if (st.end < st.start) { err('You’re back before you leave. Check the dates.'); return; }
+    if (D.nights(st.start, st.end) > 90) { err('That’s more than 90 nights. Check the dates.'); return; }
     const id = editing ? t.id : M.newId('t');
     const moved = editing && (t.start !== st.start || t.end !== st.end || t.place?.lat !== st.place?.lat || t.place?.name !== st.place?.name);
     store.apply(d => {
@@ -437,6 +465,7 @@ function tripForm(t, again = false) {
       if (moved || !editing) next = { ...next, trips: { ...next.trips, [id]: { ...next.trips[id], wx: undefined } } };
       return next;
     });
+    draft = null;
     if (moved || !editing) delete wxTried[id];
     go(`#/trip/${id}`);
   };
@@ -452,13 +481,14 @@ function tripForm(t, again = false) {
       h('div', { class: 'field' }, h('span', { class: 'label' }, 'Getting there'),
         h('div', { class: 'seg', role: 'group', 'aria-label': 'Getting there' }, M.TRAVEL.map(k => {
           const info = R.CONDITIONS.find(x => x.k === k);
-          const b = h('button', { type: 'button', 'aria-pressed': String(st.travel === k), onclick: () => { st.travel = k; b.parentNode.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b))); } }, `${info.icon} ${info.name}`);
+          const b = h('button', { type: 'button', 'aria-pressed': String(st.travel === k), onclick: () => { set('travel', k); b.parentNode.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b))); } }, `${info.icon} ${info.name}`);
           return b;
         }))),
       h('div', { class: 'field' }, h('span', { class: 'label' }, 'What’s on?'),
         h('div', { class: 'chips pick' }, M.tags(doc()).map(g => {
           const b = h('button', { type: 'button', class: 'chip' + (st.tags.has(g.id) ? ' on' : ''), 'aria-pressed': String(st.tags.has(g.id)), onclick: () => {
             if (st.tags.has(g.id)) st.tags.delete(g.id); else st.tags.add(g.id);
+            set('tags', st.tags);
             b.classList.toggle('on', st.tags.has(g.id)); b.setAttribute('aria-pressed', String(st.tags.has(g.id)));
           } }, `${g.icon} ${g.name}`);
           return b;
@@ -467,6 +497,7 @@ function tripForm(t, again = false) {
       errBox,
       h('div', { class: 'actions' }, h('button', { type: 'button', class: 'btn primary big', onclick: save }, editing ? 'Save' : 'Make my list'))),
     editing ? h('div', { class: 'danger-zone' }, confirmBtn('Delete this trip', 'Tap again to delete it', () => {
+      draft = null;
       store.apply(d => M.removeTrip(d, t.id));
       go('#/');
       toast(`${title(t)} deleted.`, { label: 'Undo', run: () => apply(d => M.restoreTrip(d, t.id)) });
