@@ -43,6 +43,7 @@ let toastT = null;
 export function toast(msg, action) {
   const el = document.getElementById('toast');
   clearTimeout(toastT);
+  placeToast();
   el.replaceChildren(h('span', {}, msg));
   if (action) {
     const shown = Date.now();
@@ -51,6 +52,13 @@ export function toast(msg, action) {
   }
   el.hidden = false;
   toastT = setTimeout(() => { el.hidden = true; }, action ? 6000 : 3000);
+}
+
+// An open sheet covers the rest of the page, so the toast goes inside it while it's open, and Undo stays in reach.
+function placeToast() {
+  const el = document.getElementById('toast'), dlg = document.getElementById('sheet');
+  if (dlg.open && el.parentNode !== dlg) dlg.append(el);
+  else if (!dlg.open && el.parentNode === dlg) dlg.before(el);
 }
 
 // ---------- bottom sheet ----------
@@ -68,6 +76,7 @@ export function sheet(title, build, { wide = false, done } = {}) {
       h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Close', html: ICONS.close, onclick: close })),
     ...[build(close)].flat(Infinity).filter(x => x !== null && x !== undefined && x !== false));
   if (!dlg.open) dlg.showModal();
+  placeToast();
   const first = body.querySelector('[autofocus]');
   if (first) first.focus();
   return close;
@@ -78,7 +87,7 @@ export function setupSheet() {
   const dlg = document.getElementById('sheet');
   // A tap on the dimmed page around the sheet closes it.
   dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
-  dlg.addEventListener('close', () => { const f = onClose; onClose = null; if (f) f(); });
+  dlg.addEventListener('close', () => { placeToast(); const f = onClose; onClose = null; if (f) f(); });
   // Enter in a text box inside a sheet presses its main button rather than closing it.
   dlg.addEventListener('submit', e => { e.preventDefault(); dlg.querySelector('.sheet-body .btn.primary:not([disabled])')?.click(); });
 }

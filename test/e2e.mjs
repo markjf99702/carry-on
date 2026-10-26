@@ -121,6 +121,22 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   assert.match(await page.locator('.left .row', { hasText: 'Warm coat' }).innerText(), /Only for cold/);
   await left.locator('button').click();
   assert.ok((await rowsText(page)).includes('Snacks'));
+  // The Undo toast lets taps through to the list under it, and stays in reach over the next sheet.
+  await more(page, 'Snacks');
+  await page.click('text=Leave it off this trip');
+  const words = await page.locator('#toast span').boundingBox();
+  await row(page, 'Umbrella').evaluate((el, y) => window.scrollBy(0, el.getBoundingClientRect().top + el.offsetHeight / 2 - y), words.y + words.height / 2);
+  const under = () => page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest('#toast, li.row')?.textContent, [words.x + 8, words.y + words.height / 2]);
+  assert.match(await under(), /^Umbrella/, 'the row under the toast’s words takes the tap');
+  await more(page, 'Umbrella');
+  const undo = await page.locator('#toast button').boundingBox();
+  assert.equal(await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.textContent, [undo.x + undo.width / 2, undo.y + undo.height / 2]), 'Undo', 'Undo shows over the sheet');
+  assert.ok(undo.height >= 44, 'and is big enough to tap');
+  await wait(500);
+  await page.click('#toast button');
+  await closeSheet(page);
+  assert.ok((await rowsText(page)).includes('Snacks'), 'Undo brought it back');
+  assert.ok(await page.evaluate(() => document.getElementById('toast').parentNode === document.body), 'the toast is back on the page');
   // Pack something the rules left off.
   await page.locator('.left .row', { hasText: 'Hiking boots' }).locator('button').click();
   assert.match(await row(page, 'Hiking boots').innerText(), /Added for this trip/);
