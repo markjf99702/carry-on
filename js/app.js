@@ -486,6 +486,7 @@ function bagSheet(t, g, mode) {
     h('div', { class: 'stack' },
       h('button', { type: 'button', class: 'btn', onclick: () => { close(); apply(d => M.markAll(d, t.id, keys, all ? 0 : 1)); } },
         all ? 'Untick everything in it' : b.kind === 'bag' ? (mode === 'go' ? 'It’s all packed already' : 'It’s all back in') : 'All done'),
+      b.kind === 'bag' && mode === 'go' ? h('button', { type: 'button', class: 'btn', onclick: () => { close(); extraSheet(t, b.id); } }, 'Add something to this bag') : null,
       h('button', { type: 'button', class: 'btn', onclick: () => {
         close();
         const was = t.marks?.['x:' + b.id]?.v;
@@ -499,14 +500,21 @@ function bagSheet(t, g, mode) {
   ]);
 }
 
-function extraSheet(t) {
+// A bag by name in a sentence: "the Day bag", but "Electronics".
+const theBag = b => (/\b(bag|case|pack|backpack|suitcase|pouch|kit|box|tote|purse)\b/i.test(b.name) ? 'the ' + b.name : b.name);
+
+// Something for this trip, in the bag it was asked for from (a bag's ⋯), or else the bag picked last time.
+let lastBag = '';
+function extraSheet(t, bagId) {
   const bagsList = M.bags(doc()).filter(b => b.kind === 'bag');
+  const first = [bagId, lastBag].find(id => bagsList.some(b => b.id === id)) || bagsList[0]?.id;
   let name, bag, keep;
   sheet('Add something', close => {
     const save = () => {
       const n = name.value.trim();
       if (!n) { name.focus(); return; }
       close();
+      lastBag = bag.value;
       if (keep.checked) {
         const g = guess(n);
         const id = M.newId('i');
@@ -514,12 +522,16 @@ function extraSheet(t) {
         // On this trip whatever its conditions say, since it was asked for.
         if (g.when.length) store.apply(d => M.mark(d, t.id, 'x:' + id, 'add'));
         toast(`${n} is on your list now.`);
-      } else store.apply(d => M.putExtra(d, t.id, { name: n, bag: bag.value }));
+      } else {
+        const id = M.newId('e'), b = doc().bags[bag.value];
+        store.apply(d => M.putExtra(d, t.id, { id, name: n, bag: b.id }));
+        toast(`${n} is in ${theBag(b)}, just for this trip.`, { label: 'Undo', run: () => apply(d => M.removeExtra(d, t.id, id)) });
+      }
       render();
     };
     return [
       h('label', { class: 'field' }, h('span', {}, 'What is it?'), name = h('input', { type: 'text', autofocus: true, maxlength: 80, placeholder: 'A gift for the hosts', autocomplete: 'off' })),
-      h('label', { class: 'field' }, h('span', {}, 'Which bag?'), bag = h('select', {}, bagsList.map(b => h('option', { value: b.id }, `${b.icon} ${b.name}`)))),
+      h('label', { class: 'field' }, h('span', {}, 'Which bag?'), bag = h('select', {}, bagsList.map(b => h('option', { value: b.id, selected: b.id === first }, `${b.icon} ${b.name}`)))),
       h('label', { class: 'check' }, keep = h('input', { type: 'checkbox' }), h('span', {}, 'Put it on my list for every trip')),
       h('div', { class: 'sheet-actions' }, h('button', { type: 'button', class: 'btn primary', onclick: save }, 'Add it')),
     ];

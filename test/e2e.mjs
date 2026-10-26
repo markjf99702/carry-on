@@ -556,6 +556,25 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   assert.match(await row(page, 'Travel umbrella').innerText(), /Added for this trip/);
   assert.equal(await page.locator('.progress p').innerText(), packed, 'the same count packed');
   assert.equal(await said(), 'Travel umbrella is on your list now, only for rain. Tap it in My list to change that.');
+
+  // From a bag's ⋯, something just for this trip goes in that bag, and says so.
+  const electronics = page.locator('.bag', { hasText: 'Electronics' });
+  await electronics.locator('.bag-head .icon-btn').click();
+  await page.click('text=Add something to this bag');
+  assert.equal(await page.locator('.sheet select').inputValue(), 's-electronics', 'that bag to start with');
+  await page.fill('.sheet input[type="text"]', 'Camera');
+  await page.click('.sheet .btn.primary');
+  assert.match(await electronics.innerText(), /Camera\s+Just for this trip/);
+  assert.equal(await said(), 'Camera is in Electronics, just for this trip.');
+  await toastUndo(page);
+  assert.equal(await row(page, 'Camera').count(), 0, 'Undo takes it off');
+  // Adding again starts in the bag picked last.
+  await page.click('text=Add something for this trip');
+  assert.equal(await page.locator('.sheet select').inputValue(), 's-electronics');
+  await page.fill('.sheet input[type="text"]', 'Gift for the hosts');
+  await page.selectOption('.sheet select', { label: '🎒 Day bag' });
+  await page.click('.sheet .btn.primary');
+  assert.equal(await said(), 'Gift for the hosts is in the Day bag, just for this trip.');
   await ctx.close();
 }
 
