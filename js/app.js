@@ -190,7 +190,9 @@ function weatherStrip(t, c) {
       h('span', { class: 'hi' }, W.temp(d.hi, u)),
       h('span', { class: 'lo' }, W.temp(d.lo, u)),
       h('span', { class: 'rp' }, d.typ ? (d.wet >= 0.3 ? `${Math.round(d.wet * 100)}%` : '') : (d.pop >= 30 ? `${d.pop}%` : ''))))) : null,
-    ty && days.length ? h('p', { class: 'muted small' }, fc ? 'Past the forecast, the days show what the same dates were like in recent years.' : 'Too far off for a forecast, so these are the same dates in recent years. It switches to the forecast about two weeks out.') : null);
+    t.wx?.err ? h('p', { class: 'muted small' }, t.wx.err) : null,
+    // Unless typical weather is standing in for a forecast that didn't come back, why there's typical weather at all.
+    ty && !days.some(d => d.typ && d.d <= W.forecastEdge(today())) ? h('p', { class: 'muted small' }, fc ? 'Past the forecast, the days show what the same dates were like in recent years.' : 'Too far off for a forecast, so these are the same dates in recent years. It switches to the forecast about two weeks out.') : null);
 }
 
 // ---------- one trip ----------

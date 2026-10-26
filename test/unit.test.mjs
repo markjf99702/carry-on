@@ -210,9 +210,53 @@ test('typical weather lines each past year up by its own dates, 29 February too'
   } finally { stub.restore(); }
 });
 
+test('a lookup that half fails says so, fills its gaps with typical weather, and looks again soon', async () => {
+  const now = Date.parse('2026-11-02T12:00:00Z'), today = '2026-11-02', soon = 31 * 60e3;
+  // The forecast fails for a trip that straddles its edge: its days come from the archive too.
+  let stub = weatherStub(now, kind => (kind === 'forecast' ? { status: 503, reason: 'Busy' } : {}));
+  try {
+    const wx = await tripWeather(PLACE, '2026-11-12', '2026-11-22', today, { now });
+    assert.deepEqual(wx.days.map(d => d.d), range('2026-11-12', '2026-11-22'), 'every day is there');
+    assert.ok(wx.days.every(d => d.typ));
+    assert.equal(wx.err, 'Couldn’t get the forecast, so these days show typical weather.');
+    assert.ok(stub.calls.includes('archive 2025-11-12 2025-11-17') && stub.calls.includes('archive 2025-11-18 2025-11-22'), stub.calls.join(', '));
+    assert.equal(M.cleanWx(wx).err, wx.err, 'the saved copy keeps the note');
+    assert.equal(stale(wx, '2026-11-12', '2026-11-22', today, now + 60e3), false, 'not straight away');
+    assert.equal(stale(wx, '2026-11-12', '2026-11-22', today, now + soon), true, 'but after half an hour');
+  } finally { stub.restore(); }
+  // One past year fails: the days come from the other two, and it says so.
+  stub = weatherStub(now, (kind, u) => (u.searchParams.get('start_date').startsWith('2024') ? { status: 500, reason: 'Oops' } : { daily: { temperature_2m_max: () => (u.searchParams.get('start_date').startsWith('2025') ? 10 : 20) } }));
+  try {
+    const wx = await tripWeather(PLACE, '2026-12-20', '2026-12-22', today, { now });
+    assert.deepEqual(wx.days.map(d => [d.d, d.hi]), [['2026-12-20', 15], ['2026-12-21', 15], ['2026-12-22', 15]]);
+    assert.equal(wx.err, 'Couldn’t get every past year, so typical weather comes from fewer of them.');
+    assert.equal(stale(wx, '2026-12-20', '2026-12-22', today, now + soon), true);
+  } finally { stub.restore(); }
+  // A forecast day with no temperatures: typical weather stands in for it.
+  stub = weatherStub(now, kind => (kind === 'forecast' ? { daily: { temperature_2m_max: d => (d === '2026-11-05' ? null : 20) } } : {}));
+  try {
+    const wx = await tripWeather(PLACE, '2026-11-04', '2026-11-06', today, { now });
+    assert.deepEqual(wx.days.map(d => [d.d, !!d.typ]), [['2026-11-04', false], ['2026-11-05', true], ['2026-11-06', false]]);
+    assert.ok(stub.calls.includes('archive 2025-11-05 2025-11-05'), stub.calls.join(', '));
+    assert.equal(wx.err, 'The forecast left out some days, so they show typical weather.');
+  } finally { stub.restore(); }
+  // Nothing at all: the first error, as before.
+  stub = weatherStub(now, () => new TypeError('Failed to fetch'));
+  try {
+    await assert.rejects(tripWeather(PLACE, '2026-11-04', '2026-11-06', today, { now }), { message: 'Couldn’t reach the weather service.' });
+  } finally { stub.restore(); }
+  // A lookup that came back whole needs nothing sooner than before.
+  stub = weatherStub(now);
+  try {
+    const wx = await tripWeather(PLACE, '2026-11-12', '2026-11-22', today, { now });
+    assert.equal(wx.err, undefined);
+    assert.equal(stale(wx, '2026-11-12', '2026-11-22', today, now + soon), false);
+  } finally { stub.restore(); }
+});
+
 test('Open-Meteo’s out-of-range answer reads as plain words', async () => {
   const now = Date.parse('2026-10-26T20:00:00Z');
-  const stub = weatherStub(now, kind => (kind === 'forecast' ? { status: 400, reason: "Parameter 'end_date' is out of allowed range from 2026-07-25 to 2026-11-10" } : {}));
+  const stub = weatherStub(now, kind => (kind === 'forecast' ? { status: 400, reason: "Parameter 'end_date' is out of allowed range from 2026-07-25 to 2026-11-10" } : { status: 500, reason: 'Down' }));
   try {
     await assert.rejects(tripWeather(PLACE, '2026-11-01', '2026-11-03', '2026-10-27', { now }), { message: 'The forecast doesn’t reach that far yet.' });
   } finally { stub.restore(); }

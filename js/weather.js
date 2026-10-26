@@ -106,41 +106,53 @@ async function typical(place, keys, today, signal, errors) {
 
 // The weather for each day of a trip: the forecast for the days it reaches, and for the rest the average of
 // the same days in the last three years. Days long gone get nothing (a past trip keeps what it had).
+// Days the forecast should have had but didn't (it failed, or left a day out) get typical weather instead, and a
+// lookup that didn't all come back says so in err, a few words for under the weather.
+export const SHORT = {
+  missing: 'Couldn’t get the weather for every day.',
+  forecast: 'Couldn’t get the forecast, so these days show typical weather.',
+  gaps: 'The forecast left out some days, so they show typical weather.',
+  years: 'Couldn’t get every past year, so typical weather comes from fewer of them.',
+};
 export async function tripWeather(place, start, end, today, { signal, now = Date.now() } = {}) {
   if (!place || place.lat === undefined) throw new Error('This trip has no place to look up.');
   const days = range(start, end);
   const last = forecastEdge(today, now), first = add(today, -60);
   const fc = days.filter(d => d >= first && d <= last), ty = days.filter(d => d > last);
   const out = {}, errors = [];
-  const jobs = [];
-  if (fc.length) {
-    jobs.push(reach(forecastUrl(place, fc[0], fc.at(-1)), signal, 'the weather service').then(raw => {
-      const d = raw.daily || {};
-      (d.time || []).forEach((k, i) => {
-        if (d.temperature_2m_max[i] === null || d.temperature_2m_min[i] === null) return;
-        const rain = d.rain_sum?.[i], showers = d.showers_sum?.[i];
-        out[k] = {
-          d: k, hi: d.temperature_2m_max[i], lo: d.temperature_2m_min[i], mm: d.precipitation_sum?.[i] ?? 0,
-          pop: d.precipitation_probability_max?.[i] ?? undefined, snow: d.snowfall_sum?.[i] ?? 0,
-          rain: rain == null && showers == null ? undefined : (rain ?? 0) + (showers ?? 0),
-          uv: d.uv_index_max?.[i] ?? undefined, code: d.weather_code?.[i] ?? undefined,
-        };
-      });
-    }).catch(e => { errors.push(e); }));
-  }
+  let fcErr = null;
+  const forecast = !fc.length ? null : reach(forecastUrl(place, fc[0], fc.at(-1)), signal, 'the weather service').then(raw => {
+    const d = raw.daily || {};
+    (d.time || []).forEach((k, i) => {
+      if (d.temperature_2m_max?.[i] == null || d.temperature_2m_min?.[i] == null) return;
+      const rain = d.rain_sum?.[i], showers = d.showers_sum?.[i];
+      out[k] = {
+        d: k, hi: d.temperature_2m_max[i], lo: d.temperature_2m_min[i], mm: d.precipitation_sum?.[i] ?? 0,
+        pop: d.precipitation_probability_max?.[i] ?? undefined, snow: d.snowfall_sum?.[i] ?? 0,
+        rain: rain == null && showers == null ? undefined : (rain ?? 0) + (showers ?? 0),
+        uv: d.uv_index_max?.[i] ?? undefined, code: d.weather_code?.[i] ?? undefined,
+      };
+    });
+  }, e => { fcErr = e; });
   if (ty.length) Object.assign(out, await typical(place, ty, today, signal, errors));
-  await Promise.all(jobs);
-  const list = days.map(k => out[k]).filter(Boolean);
+  await forecast;
+  const gaps = fc.filter(k => !out[k]);
+  if (gaps.length && !signal?.aborted) Object.assign(out, await typical(place, gaps, today, signal, errors));
   if (signal?.aborted) throw new DOMException('Stopped', 'AbortError');
-  if (!list.length) throw errors[0] || new Error('No weather came back for those days.');
-  return { at: now, days: list };
+  const list = days.map(k => out[k]).filter(Boolean);
+  if (!list.length) throw fcErr || errors[0] || new Error('No weather came back for those days.');
+  const wx = { at: now, days: list };
+  const err = days.some(k => k >= first && !out[k]) ? SHORT.missing : fcErr ? SHORT.forecast : gaps.length ? SHORT.gaps : errors.length ? SHORT.years : '';
+  if (err) wx.err = err;
+  return wx;
 }
 
 // Old enough to look up again: a forecast after three hours. Typical weather doesn't change, so only once the
-// forecast reaches it (or after a week, in case a lookup came back short).
+// forecast reaches it (or after a week). A lookup that didn't all come back, after half an hour.
 export function stale(wx, start, end, today, now = Date.now()) {
   if (end < add(today, -1)) return false;
   if (!wx || !wx.days.length) return true;
+  if (wx.err) return now - wx.at > 30 * 60e3;
   const forecast = wx.days.some(d => !d.typ);
   if (now - wx.at > (forecast ? 3 * 3600e3 : 7 * 86400e3)) return true;
   return wx.days.some(d => d.typ && d.d <= forecastEdge(today, now));
