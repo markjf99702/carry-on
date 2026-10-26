@@ -300,6 +300,15 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   assert.ok(await other.page.locator('.chip', { hasText: 'Wedding' }).count(), 'and the occasion');
   assert.equal(await other.page.evaluate(() => Object.keys(window.carryOn.store.doc.trips).length), 0, 'no trips in a list link');
   await other.ctx.close();
+
+  // With every bag deleted, the first screen comes back, and the trips can still be opened from it.
+  await page.evaluate(() => { const { store, M } = window.carryOn; for (const b of M.bags(store.doc)) store.apply(d => M.removeBag(d, b.id)); });
+  await page.goto(base + '#/');
+  await page.waitForSelector('.welcome');
+  assert.deepEqual(await page.locator('.welcome .past b').allInnerTexts(), ['Lisbon', 'Reykjavík']);
+  await page.locator('.welcome .past a', { hasText: 'Reykjavík' }).click();
+  await page.waitForSelector('.pass h1');
+  assert.match(await page.locator('main').innerText(), /Your list is empty, so nothing from it is on this trip/);
   await ctx.close();
 }
 
@@ -570,6 +579,20 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
     assert.ok(!(await headings(p)).includes('LEAVING THE HOUSE'), 'Leaving the house stays deleted');
     assert.ok((await headings(p)).includes('LEAVING THE HOTEL'));
   }
+
+  // Every bag deleted and synced, then a fresh start from the starter list: the next sync keeps it.
+  await a.page.evaluate(() => { const { store, M, render } = window.carryOn; for (const b of M.bags(store.doc)) store.apply(d => M.removeBag(d, b.id)); render(); });
+  await until(() => !Object.values(inDrive().bags).some(x => !x.del), 'the deletions in Drive');
+  await a.page.goto(base + '#/');
+  await a.page.click('text=Start with a starter list');
+  await wait(1500);
+  await synced(a.page);
+  await a.page.click('#cloud');
+  await synced(a.page);
+  const bagCount = p => p.evaluate(() => window.carryOn.M.bags(window.carryOn.store.doc).length);
+  assert.equal(await bagCount(a.page), 9, 'the starter list stays after syncing');
+  await b.page.click('#cloud');
+  await until(async () => (await bagCount(b.page)) === 9, 'the starter list on the other phone');
   await a.ctx.close(); await b.ctx.close();
 }
 

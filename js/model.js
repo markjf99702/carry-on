@@ -454,10 +454,12 @@ function listDoc(list, t) {
   return doc;
 }
 
-// The starter list goes in untouched (t = 0).
+// The starter list goes in untouched (t = 0), except over something deleted here before (starting again after
+// deleting every bag): that goes in newer than its deletion, which would otherwise win again at the next sync.
 export function startWith(doc, list) {
   const fresh = listDoc(list, 0);
-  return { ...doc, bags: { ...doc.bags, ...fresh.bags }, items: { ...doc.items, ...fresh.items }, tags: { ...fresh.tags, ...doc.tags } };
+  const over = coll => Object.fromEntries(Object.entries(fresh[coll]).map(([id, x]) => [id, doc[coll][id] ? { ...x, t: stamp(doc[coll][id]) } : x]));
+  return { ...doc, bags: { ...doc.bags, ...over('bags') }, items: { ...doc.items, ...over('items') }, tags: { ...fresh.tags, ...doc.tags } };
 }
 
 // Swaps the list for another one. Trips keep their ticks: the ones for things that are still on the list

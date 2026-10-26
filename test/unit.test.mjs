@@ -256,6 +256,22 @@ test('a starter bag with a thing of your own in it stays when the phone joins a 
   }
 });
 
+test('starting again from the starter list after deleting every bag sticks at the next sync', () => {
+  let doc = trip(starter(), {});
+  doc = M.putItem(doc, { id: 'i-mine', name: 'My own thing', bag: 's-daybag' });
+  for (const b of M.bags(doc)) doc = M.removeBag(doc, b.id);
+  const synced = doc; // what Drive and the other phones have
+  later();
+  const again = M.startWith(doc, starterList());
+  assert.equal(M.bags(again).length, M.bags(starter()).length);
+  for (const m of [M.mergeDocs(again, synced), M.mergeDocs(synced, again)]) {
+    assert.equal(M.bags(m).length, M.bags(starter()).length, 'the bags stay');
+    assert.equal(M.items(m).length, M.items(starter()).length, 'and the starter things, but not my own thing');
+  }
+  // A phone that never had a list still starts untouched, so it gives way to a list in Drive.
+  assert.ok(M.items(starter()).every(x => x.t === 0));
+});
+
 test('a first merge: a deletion on one side does not take away what the other side still has', () => {
   const base = M.replaceList(M.blankDoc(), starterList());
   const a = M.removeItem(base, 's-daybag-snacks');

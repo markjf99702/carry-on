@@ -52,7 +52,8 @@ function render() {
 }
 
 function view(page, id) {
-  if (!M.hasList(doc()) && page !== 'settings') return welcome();
+  // With no list there's nothing to plan, but trips already made can still be opened.
+  if (!M.hasList(doc()) && !['settings', 'trip', 'edit'].includes(page)) return welcome();
   if (page === 'trip') { const t = doc().trips[id]; return t && !M.gone(t) ? tripView(t) : missing(); }
   if (page === 'new') return tripForm(null);
   if (page === 'edit' || page === 'again') {
@@ -86,7 +87,18 @@ function welcome() {
       h('button', { type: 'button', class: 'btn primary big', onclick: () => { store.apply(d => M.startWith(d, starterList())); toast('Starter list in. Change anything in My list.'); go('#/'); } }, 'Start with a starter list'),
       h('button', { type: 'button', class: 'btn big', onclick: pasteSheet }, 'Paste my own list'),
       drive.ready ? h('a', { class: 'btn big', href: '#/settings' }, 'Bring my list from Google Drive') : null),
-    h('p', { class: 'small muted' }, 'Pasting works with a list copied from Google Keep, Notes or a document. Put each bag’s things under its name.'));
+    h('p', { class: 'small muted' }, 'Pasting works with a list copied from Google Keep, Notes or a document. Put each bag’s things under its name.'),
+    yourTrips());
+}
+
+// Trips made before the list went: still here, and they fill in again once there's a list.
+function yourTrips() {
+  const t0 = today(), all = M.trips(doc()).sort((a, b) => (a.end < t0) - (b.end < t0) || (a.end < t0 ? b.start.localeCompare(a.start) : a.start.localeCompare(b.start)));
+  if (!all.length) return null;
+  return h('section', { class: 'past' },
+    h('h2', {}, 'Your trips'),
+    h('ul', {}, all.map(t => h('li', {},
+      h('a', { href: `#/trip/${t.id}` }, h('b', {}, title(t)), h('span', { class: 'muted' }, D.span(t.start, t.end, t0.slice(0, 4))))))));
 }
 
 // ---------- trips ----------
@@ -230,8 +242,9 @@ function tripView(t) {
       h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: hide, onchange: e => { store.hide = e.target.checked; render(); } }), h('span', {}, 'Hide done'))),
     mode === 'back' && !Object.keys(t.marks || {}).some(k => k.startsWith('p:') && t.marks[k].v === 1)
       ? h('p', { class: 'muted small hint' }, 'Nothing was ticked going, so this is everything that was on the list.') : null,
+    M.hasList(doc()) ? null : h('p', { class: 'muted small hint' }, 'Your list is empty, so nothing from it is on this trip. ', h('a', { href: '#/' }, 'Start a list'), ' and it fills in.'),
     p.groups.map(g => bagCard(t, g, mode, hide, c.why)),
-    mode === 'go' ? h('button', { type: 'button', class: 'btn add-extra', onclick: () => extraSheet(t) }, h('span', { html: ICONS.plus }), 'Add something for this trip') : null,
+    mode === 'go' && M.bags(doc()).some(b => b.kind === 'bag') ? h('button', { type: 'button', class: 'btn add-extra', onclick: () => extraSheet(t) }, h('span', { html: ICONS.plus }), 'Add something for this trip') : null,
     p.tasks.map(g => bagCard(t, g, mode, hide, c.why, true)),
     p.left.length || p.leftBags.length ? leftOff(t, p.left, p.leftBags) : null,
   ];
