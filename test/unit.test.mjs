@@ -1149,6 +1149,36 @@ test('pasted lists: colons, dashes and checkboxes', () => {
 // "Bag: thing, thing | Bag: thing" for comparing a pasted list at a glance.
 const shape = text => { const l = parsePaste(text); return l.bags.map(b => `${b.name}: ${l.items.filter(x => x.bag === b.id).map(x => x.name).join(', ')}`).join(' | '); };
 
+test('pasted lists: a plain line after a heading’s bullets is on its own, as the paste sheet’s example says', async () => {
+  // The example in the paste sheet, as the page has it.
+  const { readFile } = await import('node:fs/promises');
+  const app = await readFile(new URL('../js/app.js', import.meta.url), 'utf8');
+  const example = JSON.parse('"' + /placeholder: '(Electronics:[^']*)'/.exec(app)[1] + '"');
+  assert.match(example, /\nPassport$/);
+  assert.equal(shape(example), 'Electronics: Phone charger, Headphones | Toiletries: Toothbrush, Floss | Not in a bag: Passport');
+  assert.equal(shape('Electronics:\n- Phone charger\n\nPassport'), 'Electronics: Phone charger | Not in a bag: Passport');
+  assert.equal(shape('Toiletries:\n  Toothbrush\n  Floss\nPassport\nSunglasses'), 'Toiletries: Toothbrush, Floss | Not in a bag: Passport, Sunglasses');
+  assert.equal(shape('## Toiletries\n- Toothbrush\nFloss'), 'Toiletries: Toothbrush | Not in a bag: Floss');
+  // Things at the heading's own level, the way Google Keep has them, are still its things; so is a box after them.
+  assert.equal(shape('Toiletries:\nToothbrush\nFloss'), 'Toiletries: Toothbrush, Floss');
+  assert.equal(shape('Electronics:\nHeadphones\n☐ Charger'), 'Electronics: Headphones, Charger');
+  // Under bullets, another bullet is still one of them.
+  assert.equal(shape('Clothes:\n- Socks\n- Shirt\nShoes:\n- Boots'), 'Clothes: Socks, Shirt | Shoes: Boots');
+});
+
+test('pasted lists: a heading with no name keeps what’s under it, and a long list of the same thing is quick', () => {
+  assert.equal(shape('Notes\n:\nSocks'), 'Not in a bag: Notes, Socks');
+  assert.equal(shape('Toiletries:\n- Floss\n-:\n- Socks'), 'Toiletries: Floss, Socks');
+  assert.equal(shape(':\n- Socks'), 'Not in a bag: Socks');
+  // Ids: the same as ever, base, base-2, base-3, so the same text still makes the same list.
+  const ids = parsePaste('Clothes:\nSocks\nSocks\nSocks').items.map(x => x.id);
+  assert.deepEqual(ids, ['i-clothes-socks', 'i-clothes-socks-2', 'i-clothes-socks-3']);
+  const t0 = performance.now();
+  const many = parsePaste(Array(5000).fill('Socks').join('\n'));
+  assert.ok(performance.now() - t0 < 200, `${Math.round(performance.now() - t0)} ms`);
+  assert.equal(new Set(many.items.map(x => x.id)).size, 5000);
+});
+
 test('pasted lists: a title line isn’t a thing', () => {
   // Google Keep shares a list as its title, a blank line, then boxes.
   assert.equal(shape('Packing list\n\n☐ Toothbrush\n☐ Socks\n☑ Passport'), 'Not in a bag: Toothbrush, Socks, Passport');

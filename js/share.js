@@ -130,6 +130,9 @@ export function counted(line) {
 //   - a line ending with ":" starts a bag, and so do "# Heading" and "**Heading**", and a line with
 //     more-indented lines under it;
 //   - a line with a bullet, a box or a number at the margin, right under a line without one, is under it;
+//   - under a heading whose things came in deeper (with bullets, boxes or an indent), a plain line at the
+//     heading's own level isn't one of them: it's on its own;
+//   - a heading with no name ("-:") starts no bag: what's under it stays with the bag before;
 //   - "●" and "○" bullets (Google Docs) count as levels the same way indents do;
 //   - a top-level line with nothing under it is a thing on its own, kept together in "Not in a bag";
 //   - a title line goes: "# Title", or a line on its own above a blank line and a list of boxes or bullets,
@@ -153,9 +156,18 @@ const DOCS_LEVEL = { '●': 0, '•': 0, '○': 4, '◦': 4, '■': 8, '▪': 8 
 // Puts the lines in bags. Levels are relative: whatever is deeper than the line before is under it. With
 // blocks, a blank line ends a bag.
 function read(lines, blocks = false) {
-  const bags = [], items = [], used = new Set();
-  const uid = base => { let id = base, n = 2; while (used.has(id)) id = `${base}-${n++}`; used.add(id); return id; };
-  let loose = null, cur = null, curLevel = -1, colon = false;
+  const bags = [], items = [], used = new Set(), nextN = new Map();
+  // The first of base, base-2, base-3… not used yet. Each base remembers how far it got, so a thousand of the same
+  // line don't each count up from the start.
+  const uid = base => {
+    let n = nextN.get(base) || 1, id;
+    do { id = n === 1 ? base : `${base}-${n}`; n++; } while (used.has(id));
+    nextN.set(base, n);
+    used.add(id);
+    return id;
+  };
+  // firstLevel: the level of the current bag's first thing.
+  let loose = null, cur = null, curLevel = -1, colon = false, firstLevel = null;
   const makeBag = (heading) => {
     let name = heading, icon = '';
     const e = EMOJI.exec(name);
@@ -185,13 +197,17 @@ function read(lines, blocks = false) {
     const under = deeper >= 1 || (deeper > 0 && !(cur && colon && ln.level === curLevel && !lastMarked));
     const header = ln.head || /:$/.test(ln.body) || (under && (cur === null || ln.level <= curLevel));
     if (header) {
-      cur = makeBag(ln.body.replace(/:$/, '').trim());
+      const name = ln.body.replace(/:$/, '').trim();
+      if (!name) return;
+      cur = makeBag(name);
       curLevel = ln.level;
       colon = !!ln.head || /:$/.test(ln.body);
       lastMarked = null;
-    } else if (cur && (ln.level > curLevel || (colon && ln.level === curLevel))) {
+      firstLevel = null;
+    } else if (cur && (ln.level > curLevel || (colon && ln.level === curLevel && !(firstLevel !== null && firstLevel > curLevel && !ln.marked)))) {
       addItem(cur, ln.body);
       lastMarked = ln.marked;
+      if (firstLevel === null) firstLevel = ln.level;
     } else {
       cur = null; curLevel = -1;
       if (!loose) loose = makeBag('Not in a bag');
