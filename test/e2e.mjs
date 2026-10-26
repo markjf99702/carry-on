@@ -399,6 +399,21 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   assert.equal(await said(), 'Socks needs more now (×5), so it’s unticked.');
   await toastUndo(page);
   assert.equal(await tick('Socks').getAttribute('aria-checked'), 'true', 'Undo puts the tick back');
+
+  // Something just for this trip, ticked, then put on the list for every trip: still on this trip and still ticked,
+  // though its name says rain and this trip has none.
+  await page.click('text=Add something for this trip');
+  await page.fill('.sheet input[type="text"]', 'Travel umbrella');
+  await page.selectOption('.sheet select', { label: '🎒 Day bag' });
+  await page.click('.sheet .btn.primary');
+  await tick('Travel umbrella').click();
+  const packed = await page.locator('.progress p').innerText();
+  await more(page, 'Travel umbrella');
+  await page.click('text=Add it to my list for every trip');
+  assert.equal(await tick('Travel umbrella').getAttribute('aria-checked'), 'true', 'still on the trip, still ticked');
+  assert.match(await row(page, 'Travel umbrella').innerText(), /Added for this trip/);
+  assert.equal(await page.locator('.progress p').innerText(), packed, 'the same count packed');
+  assert.equal(await said(), 'Travel umbrella is on your list now, only for rain. Tap it in My list to change that.');
   await ctx.close();
 }
 

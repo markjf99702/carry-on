@@ -417,10 +417,29 @@ function itemSheet(t, r, mode, jobs) {
         jobs ? null : h('label', { class: 'field' }, h('span', {}, 'Pack it in, this trip'),
           h('select', { onchange: e => { close(); apply(d => M.mark(d, t.id, 'b:' + id, e.target.value)); } },
             bagsList.map(b => h('option', { value: b.id, selected: b.id === cur }, `${b.icon} ${b.name}`)))),
-        r.extra ? h('button', { type: 'button', class: 'btn', onclick: () => { close(); apply(d => M.removeExtra(M.putItem(d, { name: r.name, bag: cur, ...guess(r.name) }), t.id, id)); toast(`${r.name} is on your list for every trip now.`); } }, 'Add it to my list for every trip')
+        r.extra ? h('button', { type: 'button', class: 'btn', onclick: () => { close(); toList(t, r, cur); } }, 'Add it to my list for every trip')
           : h('button', { type: 'button', class: 'btn', onclick: () => { close(); itemEditor(doc().items[id]); } }, 'Change it in my list')),
     ];
   });
+}
+
+// Something added just for this trip goes on the list for every trip. It becomes a new thing, so its tick and its
+// bag for this trip go with it, and it stays on this trip even when the first guess at its conditions says no
+// (a travel umbrella on a dry trip). A tick on one goes only if it now comes one a day.
+function toList(t, r, bag) {
+  const nid = M.newId('i'), g = guess(r.name);
+  apply(d => {
+    let next = M.putItem(d, { id: nid, name: r.name, bag, ...g });
+    const trip = next.trips[t.id];
+    for (const k of ['p:', 'b:']) {
+      const v = trip.marks?.[k + r.id]?.v;
+      if (v && !(k === 'p:' && R.qtyOf(next, trip, next.items[nid]) > 1)) next = M.mark(next, t.id, k + nid, v);
+    }
+    if (g.when.length) next = M.mark(next, t.id, 'x:' + nid, 'add');
+    return M.removeExtra(next, t.id, r.id);
+  });
+  const when = g.when.map(k => R.condInfo(doc(), k)?.name.toLowerCase()).filter(Boolean);
+  toast(when.length || g.per ? `${r.name} is on your list now, ${g.per ? 'one for each day' : `only for ${when.join(' or ')}`}. Tap it in My list to change that.` : `${r.name} is on your list for every trip now.`);
 }
 
 function bagSheet(t, g, mode) {
