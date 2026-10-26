@@ -119,6 +119,13 @@ export function passes(rule, on) {
 export const days = trip => nights(trip.start, trip.end) + 1;
 export const qtyOf = (doc, trip, item) => (item.per === 'day' ? Math.min(days(trip), laundry(doc)) : item.qty || 1);
 
+// Whether a bag or list of jobs comes on a trip: its conditions say so, or it was brought along anyway, and it
+// wasn't left off ('x:BAGID').
+export function bagComing(trip, bag, on) {
+  const pick = trip.marks?.['x:' + bag.id]?.v;
+  return pick === 'add' || (pick !== 'skip' && passes(bag, on).ok);
+}
+
 // Why something isn't coming: "Only when it's cold or snow's likely", "Only for work", "Not when you're driving".
 export function whyNot(doc, rule, res) {
   if (!res.ok && res.blocks?.length) return `Not ${whenWords(doc, res.blocks)}`;
@@ -131,8 +138,12 @@ export function whyNot(doc, rule, res) {
 //   ticked going, everything that was on the list) and the jobs before leaving the hotel.
 // A whole bag or list of jobs can be left off one trip ('x:BAGID' 'skip'), or brought along when its
 // conditions say no ('add'), the same way a single thing can.
+// A thing goes in the bag it's in this trip: its own, or the one it was moved to ('b:ID'). It comes along when
+// either of those does, so moving it out of a bag that's left off brings it.
 // Returns { groups: [{ bag, rows }], tasks: [{ bag, rows }], left: [{ item, why, skipped }] (things, then jobs),
-//   leftBags: [{ bag, why, skipped, count }], done, total, cond }
+//   leftBags: [{ bag, why, skipped, count, more }], done, total, cond }
+//   count: how many of the bag's things its line stands for. more: some things in it are on the list anyway (moved
+//   or added to it, or packed already), so those are more.
 // A row: { id, name, note, qty, capped (one a day, stopped at the laundry limit), hits: [condition keys],
 //   key: the mark key, done, extra?, gone?, deleted? (coming home: packed going, deleted from My list since) }
 export function plan(doc, trip, mode = 'go') {
@@ -143,34 +154,27 @@ export function plan(doc, trip, mode = 'go') {
   const isPacked = id => marks['p:' + id]?.v === 1;
   const anyPacked = Object.entries(marks).some(([k, m]) => k.startsWith('p:') && m.v === 1);
   const allBags = M.bags(doc);
-  const bagOk = Object.fromEntries(allBags.map(b => [b.id, passes(b, on)]));
-  const coming = b => pick(b.id) === 'add' || (pick(b.id) !== 'skip' && bagOk[b.id].ok);
+  const coming = b => bagComing(trip, b, on);
   const groups = new Map(), tasks = [], left = [], leftBags = [];
   const groupOf = bag => { if (!groups.has(bag.id)) groups.set(bag.id, { bag, rows: [] }); return groups.get(bag.id); };
   const fallback = { id: '_loose', name: 'Not in a bag', icon: '🧳', kind: 'bag', when: [], unless: [], order: 1e9 };
   const bagFor = id => allBags.find(b => b.id === id && b.kind === 'bag');
-
-  // Bags and lists of jobs not coming on this trip, the ones this way of packing shows.
-  const kinds = mode === 'go' ? ['bag', 'leave'] : ['back'];
-  for (const b of allBags) {
-    if (!kinds.includes(b.kind) || coming(b) || !M.items(doc, b.id).length) continue;
-    const skipped = pick(b.id) === 'skip';
-    leftBags.push({ bag: b, skipped, why: skipped ? 'You left it off this trip' : whyNot(doc, b, bagOk[b.id]), count: M.items(doc, b.id).length });
-  }
+  const covered = {}; // bag id → how many of its things this trip wait under its line in Left off
 
   for (const b of allBags.filter(b => b.kind === 'bag')) groupOf(b);
   for (const it of M.items(doc)) {
     const home = allBags.find(b => b.id === it.bag);
     if (!home || home.kind !== 'bag') continue;
-    const res = passes(it, on), bagIn = coming(home);
+    const to = bagFor(mv(it.id)), bag = to || home;
+    const res = passes(it, on), bagIn = coming(home) || (!!to && coming(to));
     const p = pick(it.id), packed = isPacked(it.id);
     if (!(p === 'add' || packed || (p !== 'skip' && res.ok && bagIn))) {
       // Things in a bag that isn't coming are covered by the bag's own line.
       if (bagIn) left.push({ item: it, skipped: p === 'skip', why: p === 'skip' ? 'You left it off this trip' : whyNot(doc, it, res) });
+      else covered[bag.id] = (covered[bag.id] || 0) + 1;
       continue;
     }
     if (mode === 'back' && anyPacked && !packed) continue;
-    const bag = bagFor(mv(it.id)) || home;
     groupOf(bag).rows.push({
       id: it.id, name: it.name, note: it.note, qty: qtyOf(doc, trip, it), capped: it.per === 'day' && days(trip) > laundry(doc),
       hits: res.hits, key: (mode === 'go' ? 'p:' : 'r:') + it.id,
@@ -195,6 +199,15 @@ export function plan(doc, trip, mode = 'go') {
         hits: [], key: 'r:' + it.id, deleted: true,
       });
     }
+  }
+  // Bags and lists of jobs not coming on this trip, the ones this way of packing shows, each with what it stands for.
+  const kinds = mode === 'go' ? ['bag', 'leave'] : ['back'];
+  for (const b of allBags) {
+    if (!kinds.includes(b.kind) || coming(b)) continue;
+    const count = b.kind === 'bag' ? covered[b.id] || 0 : M.items(doc, b.id).length;
+    if (!count) continue;
+    const skipped = pick(b.id) === 'skip';
+    leftBags.push({ bag: b, skipped, why: skipped ? 'You left it off this trip' : whyNot(doc, b, passes(b, on)), count, more: !!groups.get(b.id)?.rows.length });
   }
   // Jobs, for leaving the house or the hotel. One left off this trip, or that its conditions leave off, waits
   // under Left off while its list is coming (a list that isn't has its own line).

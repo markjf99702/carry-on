@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as M from '../js/model.js';
-import { plan, conditions, qtyOf, units, grown, whyNot, passes, whenWords } from '../js/rules.js';
+import { plan, conditions, qtyOf, units, grown, whyNot, passes, whenWords, bagComing } from '../js/rules.js';
 import { summarize, stale, tripWeather, tripDays, placeKey, forecastEdge, dayIcon, dayWords } from '../js/weather.js';
 import { plugsFor, plugText, localCountry } from '../js/plugs.js';
 import { parsePaste, encodeList, decodeList, guess, bagIcon, bagKind } from '../js/share.js';
@@ -445,6 +445,59 @@ test('a bag can depend on a condition, and its things go with it', () => {
   p = plan(doc, doc.trips.t1);
   assert.deepEqual(names(p, 'Work bag'), ['Badge', 'Notebook and pen', 'Business cards']);
   assert.deepEqual(p.leftBags, []);
+});
+
+test('a thing goes in the bag it’s in this trip, and a bag left off stands for only what isn’t on the list', () => {
+  const left = p => p.leftBags.map(l => [l.bag.name, l.count, l.more, l.why]);
+  // A drive with no work: the Work bag stays home, all three of its things with it.
+  const base = trip(starter(), { travel: 'drive' });
+  assert.deepEqual(left(plan(base, base.trips.t1)), [['Work bag', 3, false, 'Only for work']]);
+  const on = conditions(base, base.trips.t1).on;
+  assert.deepEqual(M.bags(base).filter(b => b.kind === 'bag' && bagComing(base.trips.t1, b, on)).map(b => b.id).includes('s-work'), false);
+  // Something just for this trip put in it, or moved into it: the bag's card has that, and its line the 3 more.
+  for (const doc of [M.putExtra(base, 't1', { id: 'e1', name: 'Gift for the hosts', bag: 's-work' }), M.mark(base, 't1', 'b:s-documents-id', 's-work')]) {
+    const p = plan(doc, doc.trips.t1);
+    assert.equal(names(p, 'Work bag').length, 1, names(p, 'Work bag').join());
+    assert.deepEqual(left(p), [['Work bag', 3, true, 'Only for work']]);
+  }
+  // One of its things brought anyway, or packed before the plans changed: that one's on the list, 2 more aren't.
+  const added = M.mark(base, 't1', 'x:s-work-badge', 'add');
+  const work = M.mark(M.setCond(base, 't1', 'work', true), 't1', 'p:s-work-badge', 1);
+  const packed = M.setCond(work, 't1', 'work', null);
+  for (const doc of [added, packed]) {
+    const p = plan(doc, doc.trips.t1);
+    assert.deepEqual(names(p, 'Work bag'), ['Badge']);
+    assert.deepEqual(left(p), [['Work bag', 2, true, 'Only for work']]);
+  }
+  // Every one of its things on the list: nothing of it is left off, so no line.
+  let all = base;
+  for (const x of M.items(base, 's-work')) all = M.mark(all, 't1', 'x:' + x.id, 'add');
+  assert.deepEqual(left(plan(all, all.trips.t1)), []);
+  // The other way: on a work trip, Badge moved into the Day bag, then the Work bag left off. Badge still comes.
+  let doc = M.setCond(base, 't1', 'work', true);
+  doc = M.mark(doc, 't1', 'b:s-work-badge', 's-daybag');
+  doc = M.mark(doc, 't1', 'x:s-work', 'skip');
+  let p = plan(doc, doc.trips.t1);
+  assert.ok(names(p, 'Day bag').includes('Badge'));
+  assert.ok(p.groups.flatMap(g => g.rows).find(r => r.name === 'Badge').moved);
+  assert.deepEqual(left(p), [['Work bag', 2, false, 'You left it off this trip']]);
+  // Moved into a bag that's left off, from one that's coming: still on the list, in the bag it's in.
+  doc = M.mark(M.mark(base, 't1', 'b:s-daybag-sunglasses', 's-work'), 't1', 'x:s-work', 'skip');
+  p = plan(doc, doc.trips.t1);
+  assert.deepEqual(names(p, 'Work bag'), ['Sunglasses']);
+  assert.ok(!names(p, 'Day bag').includes('Sunglasses'));
+  assert.deepEqual(left(p), [['Work bag', 3, true, 'You left it off this trip']]);
+  // Moved from one left-off bag into another: the line of the bag it's in stands for it.
+  doc = M.mark(M.mark(base, 't1', 'b:s-work-badge', 's-daybag'), 't1', 'x:s-daybag', 'skip');
+  p = plan(doc, doc.trips.t1);
+  assert.ok(!allNames(p).includes('Badge'));
+  assert.deepEqual(left(p).map(l => l.slice(0, 3)), [['Day bag', M.items(base, 's-daybag').length + 1, false], ['Work bag', 2, false]]);
+  // Its own conditions still count: moved out of a bag left off, a thing they say no to waits under Left off.
+  doc = M.mark(M.mark(base, 't1', 'b:s-daybag-umbrella', 's-clothes'), 't1', 'x:s-daybag', 'skip');
+  p = plan(doc, doc.trips.t1);
+  assert.ok(!allNames(p).includes('Umbrella'));
+  assert.deepEqual(p.left.filter(l => l.item.name === 'Umbrella').map(l => l.why), ['Only when rain’s likely']);
+  assert.equal(p.leftBags.find(l => l.bag.name === 'Day bag').count, M.items(base, 's-daybag').length - 1);
 });
 
 test('a whole bag or list of jobs left off one trip', () => {

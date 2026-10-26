@@ -493,7 +493,8 @@ function leftOff(t, left, leftBags, mode) {
       leftBags.map(l => h('li', { class: 'row left-row' },
         h('div', { class: 'what' },
           h('span', { class: 'name' }, `${l.bag.icon} ${l.bag.name}`),
-          h('small', {}, `${plural(l.count, l.bag.kind === 'bag' ? 'thing' : 'job')} · ${l.why}`)),
+          // Partly on the list already: "2 more things".
+          h('small', {}, `${plural(l.count, l.more ? 'more thing' : l.bag.kind === 'bag' ? 'thing' : 'job', l.more ? 'more things' : undefined)} · ${l.why}`)),
         // Each button says what it's for: "Bring it, the Work bag".
         h('button', { type: 'button', class: 'btn small', 'data-key': 'x:' + l.bag.id, 'aria-label': `${l.skipped ? 'Put back' : 'Bring it'}, ${theBag(l.bag)}`, onclick: () => put(l.bag.id, l.skipped, l.bag.name) }, l.skipped ? 'Put back' : 'Bring it'))),
       left.map(l => {
@@ -524,8 +525,10 @@ function itemSheet(t, r, mode, jobs) {
         h('div', { class: 'stack' },
           h('button', { type: 'button', class: 'btn', onclick: () => { done(); apply(d => M.mark(d, t.id, r.key, gone ? 0 : 2)); } }, gone ? 'It’s coming back after all' : 'Not bringing it back'))];
     }
-    const bagsList = M.bags(doc()).filter(b => b.kind === 'bag');
     const cur = t.marks?.['b:' + id]?.v || (r.extra ? t.extras[id].bag : doc().items[id]?.bag);
+    // The bags coming on this trip, and the one it's in.
+    const on = R.conditions(doc(), t).on;
+    const bagsList = M.bags(doc()).filter(b => b.kind === 'bag' && (b.id === cur || R.bagComing(t, b, on)));
     // Arrow keys and letters change a closed picker's bag without opening it (Chrome on Windows and Linux, screen
     // readers), a bag a key. A change that follows a key moves it and says so here, and the sheet stays open to look
     // further; Enter or Escape closes it, and the toast says where it went. A change from the picker itself closes it.
@@ -621,7 +624,10 @@ let lastBag = '';
 // which puts it on the list coming home. (When nothing was ticked going, coming home lists everything anyway, and
 // a tick going would hide all the rest.)
 function extraSheet(t, bagId, { home = false } = {}) {
-  const bagsList = M.bags(doc()).filter(b => b.kind === 'bag');
+  // The bags coming on this trip, and the one it was asked for from; every bag, should all of them be left off.
+  const all = M.bags(doc()).filter(b => b.kind === 'bag'), on = R.conditions(doc(), t).on;
+  const coming = all.filter(b => b.id === bagId || R.bagComing(t, b, on));
+  const bagsList = coming.length ? coming : all;
   const first = [bagId, lastBag].find(id => bagsList.some(b => b.id === id)) || bagsList[0]?.id;
   let name, bag, keep;
   sheet(home ? 'Bring something home' : 'Add something', close => {
