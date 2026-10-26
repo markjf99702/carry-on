@@ -39,19 +39,50 @@ export const ICONS = {
 };
 
 // ---------- toast ----------
-let toastT = null;
+// It goes after a few seconds, or about eight with an Undo, but waits while the pointer is on it or it has the
+// focus. A screen reader hears it from a live region that's on the page from the start (MDN, "ARIA live regions"),
+// and the sheet's own while a sheet is open, since the rest of the page is hidden then; the words go in a moment
+// after it's emptied, so they're heard as new.
+let toastT = null, sayT = null, toastLeft = 0, toastEnd = 0, paused = false;
+const lives = () => ['said', 'sheetSaid'].map(id => document.getElementById(id));
+function hideToast() {
+  document.getElementById('toast').hidden = true;
+  for (const live of lives()) live.textContent = '';
+}
+function hideIn(ms) {
+  clearTimeout(toastT);
+  toastEnd = Date.now() + ms;
+  if (!paused) toastT = setTimeout(hideToast, ms);
+}
+function pause(on) {
+  if (on === paused || document.getElementById('toast').hidden) return;
+  paused = on;
+  if (on) { clearTimeout(toastT); toastLeft = toastEnd - Date.now(); } else hideIn(Math.max(toastLeft, 1500));
+}
 export function toast(msg, action) {
   const el = document.getElementById('toast');
-  clearTimeout(toastT);
   placeToast();
   el.replaceChildren(h('span', {}, msg));
   if (action) {
     const shown = Date.now();
     // Undo ignores taps for its first moment, so a second tap meant for the list can't land on it.
-    el.append(h('button', { type: 'button', onclick: () => { if (Date.now() - shown < 400) return; el.hidden = true; action.run(); } }, action.label));
+    el.append(h('button', { type: 'button', onclick: () => {
+      if (Date.now() - shown < 400) return;
+      paused = false;
+      hideToast();
+      action.run();
+      // From the keyboard, back to the place on the page the focus was at last.
+      const a = document.activeElement;
+      if (!a || a === document.body || !a.isConnected || el.contains(a)) byKey(document, place)?.focus({ preventScroll: true });
+    } }, action.label));
   }
   el.hidden = false;
-  toastT = setTimeout(() => { el.hidden = true; }, action ? 6000 : 3000);
+  paused = false;
+  hideIn(action ? 8000 : 3000);
+  const [page, inSheet] = lives(), live = document.getElementById('sheet').open ? inSheet : page;
+  page.textContent = inSheet.textContent = '';
+  clearTimeout(sayT);
+  sayT = setTimeout(() => { live.textContent = msg; }, 50);
 }
 
 // An open sheet covers the rest of the page, so the toast goes inside it while it's open, and Undo stays in reach.
@@ -67,13 +98,20 @@ function placeToast() {
 // (MDN, <button>, "Clicking and focus"), so the control with a key clicked last is kept here too, until the focus or
 // a key goes somewhere else. Not a text box: putting the focus in one would bring up a phone's keyboard.
 export const tapped = { key: '', el: null };
+// And the key of the last control on the page (not in a sheet) that had the focus or was tapped.
+let place = '';
 const forget = () => { tapped.key = ''; tapped.el = null; };
+const onPage = el => el.dataset?.key && !el.closest('#sheet, #toast');
 document.addEventListener('click', e => {
   const el = e.target.closest?.('[data-key]');
   if (el && !el.matches('input[type="text"], input[type="search"], textarea')) { tapped.key = el.dataset.key; tapped.el = el; } else forget();
+  if (el && onPage(el)) place = el.dataset.key;
 }, true);
 document.addEventListener('keydown', forget, true);
-document.addEventListener('focusin', e => { if (e.target !== tapped.el) forget(); }, true);
+document.addEventListener('focusin', e => {
+  if (e.target !== tapped.el) forget();
+  if (onPage(e.target)) place = e.target.dataset.key;
+}, true);
 // The key of the control that was pressed: the one clicked, or else the one with the focus, inside box.
 export function pressedKey(box) {
   if (tapped.el && box.contains(tapped.el)) return tapped.key;
@@ -117,7 +155,11 @@ export function sheet(title, build, { wide = false, done } = {}) {
 export function closeSheet() { const dlg = document.getElementById('sheet'); if (dlg.open) dlg.close(); }
 
 export function setupSheet() {
-  const dlg = document.getElementById('sheet');
+  const dlg = document.getElementById('sheet'), t = document.getElementById('toast');
+  t.addEventListener('pointerenter', () => pause(true));
+  t.addEventListener('pointerleave', () => pause(false));
+  t.addEventListener('focusin', () => pause(true));
+  t.addEventListener('focusout', () => pause(false));
   // A tap on the dimmed page around the sheet closes it.
   dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
   dlg.addEventListener('close', () => { placeToast(); backToOpener(); const f = onClose; onClose = null; if (f) f(); });

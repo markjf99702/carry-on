@@ -75,6 +75,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .err:empty { display: none; }
 .pad { padding: 10px 14px; margin: 0; }
 [hidden] { display: none !important; }
+/* For screen readers only. */
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 :focus-visible { outline: 3px solid var(--sky); outline-offset: 2px; }
 
 /* ---------- top bar ---------- */

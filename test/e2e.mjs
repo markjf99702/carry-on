@@ -143,9 +143,12 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   assert.match(await page.locator('.left .row', { hasText: 'Workout clothes' }).innerText(), /Only for working out/);
   await left.locator('button').click();
   assert.ok((await rowsText(page)).includes('Snacks'));
-  // The Undo toast lets taps through to the list under it, and stays in reach over the next sheet.
+  // The Undo toast lets taps through to the list under it, and stays in reach over the next sheet. A screen reader
+  // hears it from a live region that was on the page from the start.
   await more(page, 'Snacks');
   await page.click('text=Leave it off this trip');
+  await until(async () => (await page.locator('#said').textContent()) === 'Snacks is off this trip.', 'the toast in the live region', 2000);
+  assert.equal(await page.locator('#said').getAttribute('role'), 'status');
   const words = await page.locator('#toast span').boundingBox();
   await row(page, 'Umbrella').evaluate((el, y) => window.scrollBy(0, el.getBoundingClientRect().top + el.offsetHeight / 2 - y), words.y + words.height / 2);
   const under = () => page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest('#toast, li.row')?.textContent, [words.x + 8, words.y + words.height / 2]);
