@@ -21,6 +21,10 @@ const plural = (n, one, many = one + 's') => `${n} ${n === 1 ? one : many}`;
 // How many a day, in words: "one", "two", "three", then numbers.
 const perDay = n => ['one', 'two', 'three'][(n || 1) - 1] || String(n);
 const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+// A first guess at when a new thing is needed (share.js guess) names only occasions that are here: one deleted since
+// would keep the thing home on every trip. With Swimming deleted, a snorkel comes on every trip, a swimsuit when it's hot.
+const liveOnly = g => ({ ...g, when: (g.when || []).filter(k => R.condInfo(doc(), k)), unless: (g.unless || []).filter(k => R.condInfo(doc(), k)) });
+const guessHere = (name, forBag) => liveOnly(guess(name, forBag));
 const BAG_ICONS = ['🧳', '🧴', '🪥', '💊', '🔌', '🛂', '👜', '🎒', '👕', '👟', '💼', '🏋️', '🧸', '🍼', '📷', '🎮', '⛳', '🏕️', '🎿', '🏖️', '🐶', '📚', '🍫', '🏠', '🏨'];
 const TAG_ICONS = ['🏷️', '💼', '🏋️', '🏊', '👔', '🥾', '💍', '🎉', '⛳', '🎿', '🏕️', '👶', '🐶', '🎭', '🏖️', '🎸', '🚴', '🎣'];
 
@@ -960,7 +964,7 @@ function itemSheet(t, r, mode, jobs) {
 // (a travel umbrella on a dry trip). A tick on one goes only if it now comes one a day, and only before the trip,
 // as applyCounting does: on a trip under way, it's what Coming home lists.
 function toList(t, r, bag) {
-  const nid = M.newId('i'), g = guess(r.name), under = t.start < today();
+  const nid = M.newId('i'), g = guessHere(r.name), under = t.start < today();
   apply(d => {
     let next = M.putItem(d, { id: nid, name: r.name, bag, ...g });
     const trip = next.trips[t.id];
@@ -1025,7 +1029,7 @@ function extraSheet(t, bagId, { home = false } = {}) {
       close();
       lastBag = bag.value;
       if (keep?.checked) {
-        const g = guess(n);
+        const g = guessHere(n);
         const id = M.newId('i');
         store.apply(d => M.putItem(d, { id, name: n, bag: bag.value, ...g }));
         // On this trip whatever its conditions say, since it was asked for.
@@ -1450,7 +1454,7 @@ function listBag(b) {
   const addOne = () => {
     const n = input.value.trim();
     if (!n) return;
-    const g = b.kind === 'bag' ? guess(n) : { when: [], unless: [], per: '' };
+    const g = b.kind === 'bag' ? guessHere(n) : { when: [], unless: [], per: '' };
     store.apply(d => M.putItem(d, { name: n, bag: b.id, ...g }));
     input.value = '';
     render();
@@ -1781,7 +1785,7 @@ function pasteSheet(text = '') {
   let area, err;
   sheet('Paste a list', close => {
     const next = () => {
-      const typed = area.value, list = parsePaste(typed);
+      const typed = area.value, pasted = parsePaste(typed), list = { ...pasted, bags: pasted.bags.map(liveOnly), items: pasted.items.map(liveOnly) };
       if (!list.items.length) { err.textContent = 'Nothing to bring in yet: paste a list first.'; area.focus(); return; }
       close();
       offerList(list, 'Your pasted list', { back: () => pasteSheet(typed) });

@@ -1735,6 +1735,26 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   await page.click('.sheet .btn.danger-quiet');
   assert.equal(await page.locator('.sheet .btn.danger-quiet').innerText(), 'Delete it? 1 thing and 1 job only come for it');
   await closeSheet(page);
+  // A first guess names only occasions that are here: with Swimming deleted, a snorkel comes on every trip and swim
+  // trunks when it's hot, typed into My list or pasted.
+  await page.evaluate(() => window.carryOn.store.apply(d => window.carryOn.M.removeTag(d, 'swim')));
+  await page.reload();
+  for (const n of ['Snorkel', 'Swim trunks']) {
+    await page.fill('[data-key="add:s-clothes"]', n);
+    await page.press('[data-key="add:s-clothes"]', 'Enter');
+    await until(async () => (await page.locator('main .edit-row .name', { hasText: new RegExp(`^${n}$`) }).count()) === 1, n);
+  }
+  assert.equal(await said('Snorkel'), 'Snorkel');
+  assert.equal(await said('Swim trunks'), 'Swim trunks Only when 🌡️ it’s hot');
+  await page.click('text=Paste a list');
+  await page.fill('.sheet textarea', 'Beach things:\n- Fins\n- Swim goggles');
+  await page.click('.sheet .btn.primary');
+  await until(async () => /Your pasted list/i.test(await page.locator('.sheet').innerText()), 'the preview');
+  assert.match(await page.locator('.sheet').innerText(), /First guesses: Swim goggles only when it’s hot\. Change any of them in My list\./);
+  await page.click('text=Add it to my list');
+  await until(async () => (await page.locator('.bag.edit[data-bag="b-beach-things"]').count()) === 1, 'the pasted bag');
+  assert.equal(await page.locator('.bag.edit[data-bag="b-beach-things"] > .bag-note').count(), 0, 'the beach bag comes on every trip');
+  assert.equal(await said('Swim goggles'), 'Swim goggles Only when 🌡️ it’s hot');
   await ctx.close();
 }
 
