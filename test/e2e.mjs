@@ -467,6 +467,36 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await ctx.close();
 }
 
+// ================= Plan a trip: home, until it's set =================
+// What's abroad goes by where you live, guessed from the browser's languages until it's set. A Canadian with a phone
+// in US English sees the guess while planning, and changes it there.
+{
+  const { ctx, page } = await phone();
+  await page.click('text=Start with a starter list');
+  await page.click('text=Plan a trip');
+  assert.equal(await page.locator('.home-guess').innerText(), 'Home: United States (a guess) · Change');
+  await page.fill('#where', 'Chic');
+  await page.locator('.results button').first().click();
+  await page.click('.home-guess button');
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'homePick', 'Change goes to the picker');
+  await page.selectOption('#homePick', 'CA');
+  await until(async () => (await page.locator('#toast').innerText()).includes('Home is Canada now'), 'the toast');
+  assert.equal(await page.locator('.home-guess, .home-pick').count(), 0, 'set, the line goes');
+  assert.equal(await page.evaluate(() => window.carryOn.M.pref(window.carryOn.store.doc, 'home', '')), 'CA', 'saved as Settings saves it');
+  assert.equal(await page.locator('.picked b').innerText(), 'Chicago', 'the place picked stays');
+  await page.fill('#start', await day(page, 3));
+  await page.fill('#end', await day(page, 4));
+  await page.click('text=Make my list');
+  await page.waitForSelector('.pass h1');
+  assert.ok((await rowsText(page)).includes('Passport'), 'Chicago is abroad from Canada');
+  // Set, it's not there the next time.
+  await page.click('.crumb');
+  await page.click('text=Plan a trip');
+  await page.waitForSelector('#where');
+  assert.equal(await page.locator('.home-guess').count(), 0);
+  await ctx.close();
+}
+
 // ================= A trip with more than one stop =================
 {
   const { ctx, page } = await phone();

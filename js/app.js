@@ -916,6 +916,19 @@ function placeBox(fd, o) {
   return where;
 }
 
+// Until home is set, what's abroad goes by a guess at it from the browser's languages: the trip form says so under
+// Where to?, and Change picks home there and then, as Settings does. Once it's set, the line goes.
+function homeGuess(dr) {
+  if (M.pref(doc(), 'home', '')) return null;
+  const cc = R.home(doc());
+  if (!dr.homeOpen) {
+    return h('p', { class: 'home-guess small muted' }, `Home: ${countryName(cc)} (a guess) · `,
+      h('button', { type: 'button', class: 'linkish', 'data-key': 'home-guess', onclick: () => { dr.homeOpen = true; render(); } }, 'Change'));
+  }
+  return h('div', { class: 'home-pick' }, h('label', { for: 'homePick', class: 'small' }, 'You live in'),
+    homeSelect({ id: 'homePick', 'data-key': 'home-guess' }, cc, to => toast(`Home is ${countryName(to)} now. You can change it in Settings.`)));
+}
+
 function tripForm(t, again = false) {
   const editing = t && !again;
   const key = (editing ? 'edit/' : again ? 'again/' : 'new/') + (t ? t.id : '');
@@ -1031,7 +1044,7 @@ function tripForm(t, again = false) {
     h('h1', {}, editing ? 'Edit trip' : again ? `${title(t)} again` : 'Plan a trip'),
     h('section', { class: 'card form' },
       h('div', { class: 'field' }, h('label', { for: 'where' }, 'Where to?'), where,
-        h('small', { id: 'whereHelp', class: 'muted' }, 'For the forecast, and to know if it’s abroad.')),
+        h('small', { id: 'whereHelp', class: 'muted' }, 'For the forecast, and to know if it’s abroad.'), homeGuess(dr)),
       stopsBox,
       h('div', { class: 'two' },
         h('div', { class: 'field' }, h('label', { for: 'start' }, 'Leave'), startIn),
@@ -1416,12 +1429,28 @@ function restored(n) {
   return parts.length ? `Restored ${andList(parts)}.` : 'Nothing in it that isn’t here already.';
 }
 
+// The countries to pick home from, saved as it's picked. Typed into ("por" for Portugal), it waits for the typing to
+// stop before the page is drawn again (and then(cc) is told): a new picker wouldn't get the letters after the first.
 let homeKeyed = false, homeT = null;
+function homeSelect(attrs, cc, then = () => {}) {
+  const countries = Object.keys(PLUGS).map(c => [c, countryName(c)]).sort((a, b) => a[1].localeCompare(b[1]));
+  return h('select', {
+    ...attrs,
+    onpointerdown: () => { homeKeyed = false; },
+    onkeydown: e => { if (e.key.length === 1 || /^(Arrow|Home$|End$|Page)/.test(e.key)) homeKeyed = true; },
+    onchange: e => {
+      const to = e.target.value;
+      store.apply(x => M.setPref(x, 'home', to));
+      const done = () => { render(); then(to); };
+      clearTimeout(homeT);
+      if (homeKeyed) homeT = setTimeout(done, 1000); else done();
+    } }, countries.map(([c, n]) => h('option', { value: c, selected: c === cc }, n)));
+}
+
 function settingsView() {
   clearTimeout(homeT);
   const d = doc(), home = R.home(d), u = R.units(d), l = R.laundry(d);
   const homeSet = !!M.pref(d, 'home', '');
-  const countries = Object.keys(PLUGS).map(cc => [cc, countryName(cc)]).sort((a, b) => a[1].localeCompare(b[1]));
   const driveHost = h('section', { class: 'card drive' });
   const atDrive = toDrive;
   toDrive = false;
@@ -1465,17 +1494,7 @@ function settingsView() {
     h('section', { class: 'card' },
       h('h2', {}, 'Home'),
       h('label', { class: 'field' }, h('span', {}, 'You live in'),
-        h('select', {
-          'data-key': 'home',
-          onpointerdown: () => { homeKeyed = false; },
-          onkeydown: e => { if (e.key.length === 1 || /^(Arrow|Home$|End$|Page)/.test(e.key)) homeKeyed = true; },
-          onchange: e => {
-            store.apply(x => M.setPref(x, 'home', e.target.value));
-            // Typed into ("por" for Portugal), it waits for the typing to stop before the page is drawn again: a new
-            // picker wouldn't get the letters after the first.
-            clearTimeout(homeT);
-            if (homeKeyed) homeT = setTimeout(render, 1000); else render();
-          } }, countries.map(([cc, n]) => h('option', { value: cc, selected: cc === home }, n)))),
+        homeSelect({ 'data-key': 'home' }, home)),
       h('p', { class: 'muted small' }, homeSet ? '' : 'Guessed from this browser’s language settings. ',
         // The US and its territories count as home for each other, apart from American Samoa.
         R.sameHome(home, 'US') ? 'Trips outside the US and its territories count as abroad, and so does American Samoa.' : 'Trips anywhere else count as abroad.',

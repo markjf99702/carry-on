@@ -410,6 +410,11 @@ main > h1 + .card { margin-top: 14px; }
 @media (hover: hover) { .results button:hover { background: var(--chip); } }
 .where-status { margin: 4px 2px 0; }
 .where-status:empty { margin: 0; }
+/* Until home is set: the guess at it under Where to?, and its picker. */
+.home-guess { margin: 0; }
+.linkish { padding: 10px 2px; margin: -10px -2px; border: 0; background: none; color: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.home-pick { display: grid; gap: 4px; margin-top: 2px; }
+.home-pick label { color: var(--muted); }
 .picked { display: flex; align-items: center; gap: 8px; min-height: 46px; padding: 4px 4px 4px 12px; border: 1.5px solid var(--ok); border-radius: 10px; background: var(--ok-soft); }
 .picked > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 /* A trip's stops after its first place, each hung off a line, as on a route. */
