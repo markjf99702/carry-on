@@ -246,11 +246,14 @@ function tagCard(t) {
 
 // ---------- weather lookups ----------
 
+// A lookup that failed waits a minute before the next try, so a redraw doesn't ask again at once. One that worked
+// doesn't hold the next back: weather cleared since (the trip's dates changed on another phone, say) is looked up
+// again straight away.
 const wxBusy = {}, wxErr = {}, wxTried = {};
 function maybeWeather(t, force = false) {
   if (!t.place || t.place.lat === undefined || wxBusy[t.id]) return;
   if (!force && !W.stale(t.wx, t.start, t.end, today(), undefined, t.place)) return;
-  if (!force && Date.now() - (wxTried[t.id] || 0) < 60000) return;
+  if (!force && wxErr[t.id] && Date.now() - (wxTried[t.id] || 0) < 60000) return;
   wxTried[t.id] = Date.now();
   wxBusy[t.id] = W.tripWeather(t.place, t.start, t.end, today()).then(wx => {
     delete wxErr[t.id];
@@ -315,13 +318,17 @@ function weatherStrip(t, c) {
   const pct = fcPct.length && pctTy ? `Blue % is the chance of ${of}, or on the dashed days, how many recent years had rain that day.` : fcPct.length ? `Blue % is the chance of ${of}.` : pctTy ? 'Blue % is how many recent years had rain that day.' : '';
   // Unless typical weather is standing in for a forecast that didn't come back, why there's typical weather at all.
   const typNote = ty && !days.some(d => d.typ && d.d <= W.forecastEdge(today())) ? (fc ? 'Past the forecast, the days show what the same dates were like in recent years.' : 'Too far off for a forecast, so these are the same dates in recent years. It switches to the forecast about two weeks out.') : '';
+  // No days, nothing on its way and nothing gone wrong: a trip that's over isn't looked up (its dates were changed
+  // after it, say, which cleared its weather), and one still to come will be once there's a connection.
+  const empty = !days.length && !busy && !err, over = t.end < today();
   return h('section', { class: 'wx' },
     h('div', { class: 'wx-head' },
       h('h2', { id: 'wxHead' }, label),
       h('div', { class: 'wx-at' },
         h('span', { class: 'muted small' }, busy ? 'Looking it up…' : days.length ? 'Updated ' + ago(t.wx.at) : ''),
         // Not disabled while it looks: a disabled button can't keep the focus.
-        h('button', { type: 'button', class: 'icon-btn small' + (busy ? ' spin' : ''), 'data-key': 'wx', 'aria-label': 'Look up the weather again', title: 'Look up the weather again', html: ICONS.refresh, 'aria-disabled': busy ? 'true' : null, onclick: () => { if (wxBusy[t.id]) return; maybeWeather(t, true); render(); } }))),
+        empty && over ? null : h('button', { type: 'button', class: 'icon-btn small' + (busy ? ' spin' : ''), 'data-key': 'wx', 'aria-label': 'Look up the weather again', title: 'Look up the weather again', html: ICONS.refresh, 'aria-disabled': busy ? 'true' : null, onclick: () => { if (wxBusy[t.id]) return; maybeWeather(t, true); render(); } }))),
+    empty ? h('p', { class: 'muted small' }, over ? 'No weather was saved for these days.' : 'Looking it up when you’re online.') : null,
     // A lookup that failed. Offline, that's the reason whatever it said. With days to show it's a quiet line: the
     // days are still there, and it isn't something to fix.
     err ? h('p', { class: days.length ? 'muted small' : 'err small' }, navigator.onLine === false ? 'No connection right now. The forecast comes in when you’re back online.' : err, ' ', days.length ? 'Showing the last lookup.' : 'You can set the weather by hand under Change.') : null,

@@ -631,7 +631,29 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   assert.equal(await page.locator('.wx-days li').count(), 5);
   await offline(false);
   await until(async () => !/No connection/.test(await page.locator('.wx').innerText()), 'the line to go once back online');
-  assert.equal(id, 'off');
+  // Its weather cleared elsewhere (its dates changed on another phone, say) a moment after a lookup here: it's
+  // looked up again at once, rather than a minute later at the next tap.
+  await page.click('[aria-label="Look up the weather again"]');
+  await until(async () => /Updated just now/.test(await page.locator('.wx-head').innerText()), 'a lookup here');
+  await page.evaluate(id => { const { store, M, render } = window.carryOn; store.apply(d => M.clearWx(d, id)); render(); }, id);
+  assert.equal(await page.locator('.wx-days li').count(), 0);
+  await page.waitForSelector('.wx-days li', { timeout: 5000 });
+  await ctx.close();
+}
+
+// ================= Trips that are over =================
+{
+  const { ctx, page } = await phone();
+  await page.click('text=Start with a starter list');
+  await page.evaluate(() => {
+    const { store, M, D } = window.carryOn, t0 = D.today(), lis = { name: 'Lisbon', admin: 'Lisbon District', country: 'Portugal', cc: 'PT', lat: 38.7251, lon: -9.1498 };
+    store.apply(d => M.putTrip(d, { id: 'past', place: lis, start: D.add(t0, -9), end: D.add(t0, -5), travel: 'fly', name: '' }));
+  });
+  // Its dates are past, so its weather isn't looked up: the section says why it's empty, with nothing to tap.
+  await page.goto(base + '#/trip/past');
+  await page.waitForSelector('.pass h1');
+  assert.match(await page.locator('.wx').innerText(), /^WEATHER\n+No weather was saved for these days\.$/);
+  assert.equal(await page.locator('.wx button').count(), 0, 'no ↻ on a trip that’s over');
   await ctx.close();
 }
 
