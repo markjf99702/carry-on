@@ -706,6 +706,106 @@ test('another phone’s lookup of a trip’s old place doesn’t count for its n
   } finally { stub.restore(); }
 });
 
+// ---------- trips with more than one stop ----------
+
+const LISBON = { name: 'Lisbon', admin: 'Lisbon District', country: 'Portugal', cc: 'PT', lat: 38.7251, lon: -9.1498 };
+const PORTO = { name: 'Porto', admin: 'Porto', country: 'Portugal', cc: 'PT', lat: 41.1496, lon: -8.611 };
+const MADRID = { name: 'Madrid', admin: 'Madrid', country: 'Spain', cc: 'ES', lat: 40.4165, lon: -3.7026 };
+const LONDON = { name: 'London', admin: 'England', country: 'United Kingdom', cc: 'GB', lat: 51.5085, lon: -0.1257 };
+const PARIS = { name: 'Paris', admin: 'Île-de-France', country: 'France', cc: 'FR', lat: 48.8534, lon: 2.3488 };
+
+test('a trip with one place saves as it always has; its stops are kept, cleaned, and taken off one by one', () => {
+  // A trip saved before there were stops reads back, and saves, exactly as it was.
+  const saved = { id: 't1', name: '', place: LISBON, start: '2026-11-10', end: '2026-11-16', travel: 'fly', t: 5, set: {}, marks: { 'p:x': { v: 1, t: 6 } }, extras: {} };
+  assert.equal(M.canon(M.cleanTrip(saved)), M.canon(saved));
+  const raw = { ...M.blankDoc(), trips: { t1: saved } };
+  assert.equal(M.canon(M.cleanDoc(JSON.parse(JSON.stringify(raw)))), M.canon(raw));
+  let doc = M.putTrip(M.blankDoc(), { id: 't1', place: LISBON, start: '2026-11-10', end: '2026-11-16' });
+  assert.equal('stops' in doc.trips.t1, false);
+  doc = M.putStop(doc, 't1', { id: 's1', place: PORTO, from: '2026-11-13' });
+  doc = M.putStop(doc, 't1', { id: 's2', place: MADRID, from: '2026-11-15' });
+  assert.deepEqual(M.stops(doc.trips.t1).map(s => s.place.name), ['Porto', 'Madrid']);
+  // Through storage, a backup or Drive: kept, and junk dropped.
+  const junk = { bad1: { place: { name: ' ' }, from: '2026-11-12', t: 1 }, bad2: { place: PORTO, from: 'soon', t: 1 }, toString: { place: PORTO, from: '2026-11-12', t: 1 } };
+  const back = M.cleanDoc(JSON.parse(M.canon({ ...doc, trips: { t1: { ...doc.trips.t1, stops: { ...doc.trips.t1.stops, ...junk } } } })));
+  assert.equal(M.canon(back.trips.t1), M.canon(doc.trips.t1));
+  // Taken off, a stop is kept as a deletion, so it goes on every device.
+  const off = M.removeStop(doc, 't1', 's1');
+  assert.deepEqual(M.stops(off.trips.t1).map(s => s.id), ['s2']);
+  for (const m of [M.mergeDocs(off, doc), M.mergeDocs(doc, off)]) assert.deepEqual(M.stops(m.trips.t1).map(s => s.id), ['s2'], 'it stays off after a merge');
+  assert.throws(() => M.putStop(doc, 't1', { place: PORTO }), /night you get there/);
+  // A deleted trip's stops can't be changed, which would bring the trip back.
+  const gone = M.removeTrip(doc, 't1');
+  assert.equal(M.removeStop(gone, 't1', 's2'), gone);
+  assert.equal(M.putStop(gone, 't1', { place: PORTO, from: '2026-11-12' }), gone);
+});
+
+test('a copy of Carry On from before stops can’t take a trip’s stops away', () => {
+  // An older copy reads a trip without its stops (its cleanDoc doesn't know them), and saves it that way.
+  const older = d => JSON.parse(JSON.stringify(d), (k, v) => (k === 'stops' ? undefined : v));
+  let a = M.setPref(starter(), 'home', 'US');
+  a = M.putTrip(a, { id: 't1', place: LISBON, start: '2026-11-10', end: '2026-11-16', travel: 'fly' });
+  later();
+  a = M.putStop(a, 't1', { id: 's1', place: PORTO, from: '2026-11-13' });
+  const b = older(a);
+  assert.equal(b.trips.t1.stops, undefined);
+  const changes = [
+    ['saved as it was', d => d],
+    ['a tick', d => M.mark(d, 't1', 'p:s-clothes-belt', 1)],
+    ['a new name', d => M.putTrip(d, { id: 't1', name: 'Portugal' })],
+    ['a later Back', d => M.putTrip(d, { id: 't1', end: '2026-11-17' })],
+  ];
+  for (const [what, change] of changes) {
+    later();
+    const b2 = change(b);
+    for (const first of [false, true]) {
+      for (const m of [M.mergeDocs(a, b2, { first }), M.mergeDocs(b2, a, { first })]) {
+        assert.deepEqual(M.stops(m.trips.t1).map(s => s.place.name), ['Porto'], what);
+        assert.equal(m.trips.t1.name, b2.trips.t1.name, what);
+        assert.equal(m.trips.t1.end, b2.trips.t1.end, what);
+        assert.equal(m.trips.t1.marks['p:s-clothes-belt']?.v, b2.trips.t1.marks['p:s-clothes-belt']?.v, what);
+        // The older copy merges that in, drops the stops again, and saves: still there.
+        assert.deepEqual(M.stops(M.mergeDocs(m, older(m)).trips.t1).map(s => s.place.name), ['Porto'], what);
+      }
+    }
+  }
+  // Deleted on the older copy, the trip goes, stops and all.
+  later();
+  const del = M.removeTrip(b, 't1');
+  for (const m of [M.mergeDocs(a, del), M.mergeDocs(del, a)]) assert.ok(M.gone(m.trips.t1));
+});
+
+test('stops merge one by one, and each one’s newest weather lookup wins', () => {
+  const base = M.putTrip(M.blankDoc(), { id: 't1', place: LISBON, start: '2026-11-10', end: '2026-11-20' });
+  // Each phone adds a stop before they sync: both stay.
+  const a = M.putStop(base, 't1', { id: 'sa', place: PORTO, from: '2026-11-13' });
+  const b = M.putStop(base, 't1', { id: 'sb', place: MADRID, from: '2026-11-17' });
+  const m = M.mergeDocs(a, b);
+  assert.deepEqual(M.stops(m.trips.t1).map(s => s.id).sort(), ['sa', 'sb']);
+  assert.equal(M.canon(m), M.canon(M.mergeDocs(b, a)), 'order of merging does not matter');
+  assert.equal(M.canon(M.mergeDocs(m, m)), M.canon(m), 'merging again changes nothing');
+  const lookup = (place, at, hi) => ({ at, for: placeKey(place), days: range('2026-11-10', '2026-11-20').map(d => day(d, hi, 10)) });
+  let x = M.setStopWx(m, 't1', 'sa', lookup(PORTO, 100, 20));
+  const y = M.setStopWx(m, 't1', 'sa', lookup(PORTO, 200, 25));
+  later();
+  x = M.putStop(x, 't1', { id: 'sa', place: PORTO, from: '2026-11-14' }); // its night changed after the other's lookup
+  for (const mm of [M.mergeDocs(x, y), M.mergeDocs(y, x)]) {
+    assert.equal(mm.trips.t1.stops.sa.from, '2026-11-14', 'the newer change');
+    assert.equal(mm.trips.t1.stops.sa.wx.at, 200, 'and the newer lookup');
+  }
+  // Moved somewhere else, a stop loses its old place's weather on every device.
+  later();
+  const moved = M.putStop(y, 't1', { id: 'sa', place: PARIS, from: '2026-11-14' });
+  for (const mm of [moved, M.mergeDocs(moved, y), M.mergeDocs(y, moved)]) assert.deepEqual(mm.trips.t1.stops.sa.wx.days, []);
+  // As it does when the trip's dates change.
+  const cleared = M.clearWx(y, 't1', 'sa');
+  assert.deepEqual(cleared.trips.t1.stops.sa.wx.days, []);
+  assert.ok(cleared.trips.t1.stops.sa.wx.at > 200);
+  // A lookup that lands after its stop was taken off doesn't bring it back.
+  const off = M.removeStop(y, 't1', 'sa');
+  assert.equal(M.setStopWx(off, 't1', 'sa', lookup(PORTO, 300, 30)), off);
+});
+
 test('a first merge keeps everything, but untouched starter things give way to a real list', () => {
   // Phone A brought its own list in and deleted nothing; phone B started from the starter list.
   const pasted = parsePaste('Electronics:\n- Phone charger\n- Headphones\nToiletries:\n- Toothbrush');

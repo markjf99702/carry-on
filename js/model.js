@@ -9,7 +9,7 @@
 //           per 'day': one for each day of the trip, up to the laundry limit; otherwise qty of it.
 //   tag   { id, name, icon, order, t, del? }   an occasion a trip can have: work, the gym, a wedding
 // A trip:
-//   { id, name, place, start, end, travel, t, del?, set, marks, extras, wx }
+//   { id, name, place, start, end, travel, t, del?, set, marks, extras, wx, stops? }
 //   set     condition key → { v: true | false | null, t }. Occasions picked, and anything the person turned on
 //           or off by hand over what the weather and place say (null puts it back to automatic).
 //   marks   'p:ID' packed (1), 'r:ID' back in the bag coming home (1) or not coming back (2), 'x:ID' 'skip' or
@@ -17,6 +17,10 @@
 //   extras  things added for this trip only: { id: { name, bag, t, del? } }
 //   wx      the weather looked up for it (weather.js), the newest lookup wins. for: the place it was looked up
 //           for, so a lookup of a trip's old place, landing from another device, doesn't count for the new one
+//   stops   the places a trip goes on to after its first one (place): { id: { place, from, t, del?, wx? } }, from
+//           the night you get there. Each has its own wx, its place's weather for the trip's days. A trip with one
+//           place has none. A copy of Carry On from before stops drops them when it reads a trip, so they merge
+//           stop by stop, apart from the trip's details: that copy saving the trip doesn't take them away.
 //
 // t is when a record last changed, del when it was deleted. A deleted record keeps its details, so a deletion
 // on one device reaches the others instead of the record coming back from their copy, and a change made after
@@ -150,16 +154,26 @@ const cleanExtra = (x, id) => {
   return rec(x, id, { name, bag: x.bag });
 };
 
+const cleanStop = (x, id) => {
+  const place = cleanPlace(x?.place);
+  if (!place || !isDay(x.from)) return null;
+  const out = rec(x, id, { place, from: x.from }), wx = cleanWx(x.wx);
+  if (out && wx) out.wx = wx;
+  return out;
+};
+
 export function cleanTrip(x, id = x?.id) {
   if (!x || typeof x !== 'object' || !isDay(x.start) || !isDay(x.end)) return null;
   const out = rec(x, id, {
     name: str(x.name, 60), place: cleanPlace(x.place), start: x.start, end: x.end < x.start ? x.start : x.end,
     travel: TRAVEL.includes(x.travel) ? x.travel : 'fly',
     set: cleanMap(x.set, cleanMark), marks: cleanMap(x.marks, cleanMark, markKey), extras: cleanMap(x.extras, cleanExtra),
-    wx: cleanWx(x.wx),
+    wx: cleanWx(x.wx), stops: cleanMap(x.stops, cleanStop),
   });
   if (out && !out.place) delete out.place;
   if (out && !out.wx) delete out.wx;
+  // A trip with one place is saved just as it was before there were stops.
+  if (out && !Object.keys(out.stops).length) delete out.stops;
   return out;
 }
 
@@ -191,7 +205,7 @@ export function canon(x) {
 
 // ---------- reading ----------
 
-const NESTED = ['set', 'marks', 'extras'];
+const NESTED = ['set', 'marks', 'extras', 'stops'];
 // The last time anything about a record changed. For a trip that includes every tick and setting in it.
 export function touched(x) {
   let t = x.t;
@@ -222,6 +236,8 @@ export const items = (doc, bagId) => {
 export const tags = doc => Object.values(doc.tags).filter(x => !gone(x)).sort(byOrder);
 export const trips = doc => Object.values(doc.trips).filter(x => !gone(x));
 export const extras = trip => Object.values(trip.extras || {}).filter(x => !gone(x));
+// A trip's stops after its first place, whatever their nights (rules.js legs() says which count).
+export const stops = trip => Object.values(trip.stops || {}).filter(x => !gone(x));
 export const hasList = doc => bags(doc).length > 0;
 export const pref = (doc, k, fallback) => doc.prefs[k]?.v ?? fallback;
 
@@ -235,7 +251,7 @@ function mergeMap(a = {}, b = {}) {
   const out = {};
   for (const k of [...new Set([...Object.keys(a), ...Object.keys(b)])].sort()) {
     const x = own(a, k), y = own(b, k);
-    out[k] = !x ? y : !y ? x : x.del || y.del || x.name !== undefined ? mergeRec(x, y) : newer(x, y) ? x : y;
+    out[k] = !x ? y : !y ? x : x.del || y.del || x.name !== undefined || x.wx || y.wx ? mergeRec(x, y) : newer(x, y) ? x : y;
   }
   return out;
 }
@@ -479,11 +495,41 @@ export function setWx(doc, id, wx) {
   return { ...doc, trips: { ...doc.trips, [id]: { ...trip, wx: w } } };
 }
 // When a trip's place or dates change, its weather goes: as a lookup with no days, newer than the one before, so
-// a merge with a copy that still has the old place's weather keeps it gone on every device.
-export function clearWx(doc, id) {
+// a merge with a copy that still has the old place's weather keeps it gone on every device. With sid, a stop's.
+const cleared = wx => ({ at: Math.max(Date.now(), (wx?.at || 0) + 1), days: [] });
+export function clearWx(doc, id, sid) {
   const trip = doc.trips[id];
   if (!trip) return doc;
-  return { ...doc, trips: { ...doc.trips, [id]: { ...trip, wx: { at: Math.max(Date.now(), (trip.wx?.at || 0) + 1), days: [] } } } };
+  if (!sid) return { ...doc, trips: { ...doc.trips, [id]: { ...trip, wx: cleared(trip.wx) } } };
+  const s = own(trip.stops, sid);
+  return s ? withStop(doc, id, { ...s, wx: cleared(s.wx) }) : doc;
+}
+
+// ---------- a trip's stops ----------
+
+const withStop = (doc, id, x) => ({ ...doc, trips: { ...doc.trips, [id]: { ...doc.trips[id], stops: { ...doc.trips[id].stops, [x.id]: x } } } });
+const samePlace = (a, b) => a.name === b.name && a.lat === b.lat && a.lon === b.lon;
+// A stop added, or its place or night changed: { id?, place, from }. Somewhere else now, the weather looked up for
+// the old place goes, as a trip's does.
+export function putStop(doc, id, fields) {
+  const trip = doc.trips[id];
+  if (!trip || gone(trip)) return doc;
+  const sid = fields.id || newId('s');
+  const old = own(trip.stops, sid), base = old && !gone(old) ? old : {};
+  const x = cleanStop({ ...base, ...fields, t: stamp(old) }, sid);
+  if (!x) throw new Error('A stop needs a place and the night you get there.');
+  delete x.del;
+  if (old && !samePlace(old.place, x.place)) x.wx = cleared(old.wx);
+  return withStop(doc, id, x);
+}
+export function removeStop(doc, id, sid) {
+  const trip = doc.trips[id], old = own(trip?.stops, sid);
+  if (!old || gone(old) || gone(trip)) return doc;
+  return withStop(doc, id, { ...old, del: stamp(old) });
+}
+export function setStopWx(doc, id, sid, wx) {
+  const s = own(doc.trips[id]?.stops, sid), w = cleanWx(wx);
+  return s && !gone(s) && w ? withStop(doc, id, { ...s, wx: w }) : doc;
 }
 
 export function setPref(doc, k, v) {
