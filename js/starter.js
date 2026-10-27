@@ -74,6 +74,8 @@ const BAGS = [
     Take out the trash
     Set the thermostat
     Water the plants
+    Chargers out of the wall
+    Anything in the fridge
     Lock the windows and doors`],
   ['back', '🏨', 'Leaving the hotel', 'back', '', `
     Chargers out of the outlets

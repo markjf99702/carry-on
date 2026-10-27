@@ -32,7 +32,7 @@ test('the starter list goes in untouched, in order', () => {
   assert.equal(M.items(doc, 's-clothes')[0].name, 'Underwear');
 });
 
-test('the starter list has the keys, the tickets, glasses, a neck pillow, a sun hat, a car charger and the hotel fridge', () => {
+test('the starter list has the keys, the tickets, glasses, a neck pillow, a sun hat, a car charger, the hotel fridge and the one at home', () => {
   const doc = starter(), find = name => M.items(doc).find(x => x.name === name);
   const at = name => [doc.bags[find(name).bag].name, find(name).when];
   assert.deepEqual(at('Keys'), ['Documents and money', []]);
@@ -42,6 +42,8 @@ test('the starter list has the keys, the tickets, glasses, a neck pillow, a sun 
   assert.deepEqual(at('Sun hat'), ['Clothes', ['hot', 'sun']]);
   assert.deepEqual(at('Car charger'), ['Electronics', ['drive']]);
   assert.deepEqual(at('The fridge and the hooks on the doors'), ['Leaving the hotel', []]);
+  // What's still in use the night before, at home: the last jobs before locking up.
+  assert.deepEqual(M.items(doc, 's-leave').map(x => x.name).slice(-3), ['Chargers out of the wall', 'Anything in the fridge', 'Lock the windows and doors']);
   assert.equal(find('Power bank').note, 'Carry-on only when flying, never a checked bag');
   assert.equal(find('Prescriptions').note, 'In your carry-on when flying, in case a bag goes missing');
   // A driving trip at home brings the car charger and leaves the tickets and the neck pillow.
@@ -791,7 +793,7 @@ test('a single job left off one trip, or one its conditions leave off, waits und
   doc = M.mark(doc, 't1', 'x:cushions', 'add');
   doc = M.mark(doc, 't1', 'x:s-leave-take-out-the-trash', 0);
   p = plan(doc, doc.trips.t1);
-  assert.deepEqual(jobs(p), ['Take out the trash', 'Set the thermostat', 'Water the plants', 'Lock the windows and doors', 'Bring in the patio cushions']);
+  assert.deepEqual(jobs(p), ['Take out the trash', 'Set the thermostat', 'Water the plants', 'Chargers out of the wall', 'Anything in the fridge', 'Lock the windows and doors', 'Bring in the patio cushions']);
   assert.ok(p.tasks[0].rows.find(r => r.name === 'Bring in the patio cushions').added);
   assert.deepEqual(leftJobs(p), []);
   // Coming home, a hotel job the conditions leave off waits there too; the things in bags don't show there.
@@ -1506,10 +1508,10 @@ test('a backup brings back starter things deleted since it was saved, and says w
   later();
   store.apply(d => M.removeTrip(M.removeItem(M.removeItem(M.removeBag(d, 's-leave'), 's-clothes-socks'), 'i-mine'), 't1'));
   const deleted = store.doc;
-  assert.deepEqual(store.restoreBackup(backup), { ...none, things: 2, jobs: 4, lists: 1, trips: 1 });
+  assert.deepEqual(store.restoreBackup(backup), { ...none, things: 2, jobs: 6, lists: 1, trips: 1 });
   for (const d of [store.doc, M.mergeDocs(store.doc, deleted)]) {
     assert.ok(!M.gone(d.bags['s-leave']) && !M.gone(d.trips.t1));
-    assert.equal(M.items(d, 's-leave').length, 4, 'with its jobs');
+    assert.equal(M.items(d, 's-leave').length, 6, 'with its jobs');
     assert.ok(!M.gone(d.items['s-clothes-socks']) && !M.gone(d.items['i-mine']));
   }
   assert.deepEqual(store.restoreBackup(backup), none, 'nothing new the second time');
@@ -1605,7 +1607,7 @@ test('a list of jobs taken off on purpose is told from an untouched starter one 
   const off = M.removeBag(starter(), 's-leave');
   assert.ok(M.jobsTakenOff(off, 'leave') && !M.bags(off).some(b => b.id === 's-leave'));
   later();
-  assert.equal(M.items(M.restoreBag(off, 's-leave', M.items(starter(), 's-leave').map(x => x.id)), 's-leave').length, 4);
+  assert.equal(M.items(M.restoreBag(off, 's-leave', M.items(starter(), 's-leave').map(x => x.id)), 's-leave').length, 6);
   // Dropped by a first merge with a phone that has a list of its own: not.
   const merged = M.mergeDocs(starter(), M.replaceList(M.blankDoc(), pasted), { first: true });
   assert.ok(M.gone(merged.bags['s-back']) && !M.jobsTakenOff(merged, 'back'));

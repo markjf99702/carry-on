@@ -221,7 +221,7 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   assert.match(await page.locator('.left-head').innerText(), /Left off this trip/i);
   if ((await page.locator('.left-head').getAttribute('aria-expanded')) !== 'true') await page.click('.left-head');
   const leave = page.locator('.left .row', { hasText: 'Leaving the house' });
-  assert.match(await leave.innerText(), /4 jobs · You left it off this trip/);
+  assert.match(await leave.innerText(), /6 jobs · You left it off this trip/);
   await leave.locator('button', { hasText: 'Put back' }).click();
   assert.equal(await page.locator('.bag h2', { hasText: 'Leaving the house' }).count(), 1);
   // One job left off this trip waits there too, with its list's icon, and can be put back.
@@ -372,7 +372,7 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await page.evaluate(() => { const { store, M } = window.carryOn; store.apply(d => M.removeItem(M.removeBag(d, 's-leave'), 's-clothes-socks')); });
   await page.goto(base + '#/settings');
   await page.locator('input[type=file]').setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(backup) });
-  await until(async () => (await page.locator('#toast').innerText()) === 'Restored 1 thing, 4 jobs and 1 list of jobs.', 'the restore toast');
+  await until(async () => (await page.locator('#toast').innerText()) === 'Restored 1 thing, 6 jobs and 1 list of jobs.', 'the restore toast');
   await page.locator('input[type=file]').setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(backup) });
   await until(async () => (await page.locator('#toast').innerText()) === 'Nothing in it that isn’t here already.', 'nothing new');
 
@@ -1947,7 +1947,7 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   const chips = page.locator('main .jump .chip');
   const bar = await page.locator('.bar').evaluate(el => el.offsetHeight);
   const atTop = name => until(async () => Math.abs((await page.locator('main .bag', { has: page.locator('h2', { hasText: new RegExp(`^${name}$`, 'i') }) }).boundingBox()).y - bar - 8) <= 1, `${name} under the top bar`);
-  assert.deepEqual(await chips.evaluateAll(cs => cs.map(c => c.getAttribute('aria-label'))), ['Liquids bag, 0 of 6 packed', 'Toiletries bag, 0 of 9 packed', 'Electronics, 0 of 6 packed', 'Documents and money, 0 of 5 packed', 'Clothes, 0 of 8 packed', 'Day bag, 0 of 4 packed', 'Leaving the house, 0 of 4 done']);
+  assert.deepEqual(await chips.evaluateAll(cs => cs.map(c => c.getAttribute('aria-label'))), ['Liquids bag, 0 of 6 packed', 'Toiletries bag, 0 of 9 packed', 'Electronics, 0 of 6 packed', 'Documents and money, 0 of 5 packed', 'Clothes, 0 of 8 packed', 'Day bag, 0 of 4 packed', 'Leaving the house, 0 of 6 done']);
   assert.equal(await chips.first().textContent(), '🧴0/6');
   assert.equal(await page.locator('main .jump').evaluate(el => el.previousElementSibling.className), 'progress', 'under the progress line');
   await chips.filter({ hasText: '👕' }).click();
@@ -2610,7 +2610,7 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   await a.page.goto(base + '#/list');
   await a.page.click('[aria-label="Change Leaving the house"]');
   await a.page.click('.sheet .btn.danger-quiet');
-  assert.equal(await a.page.locator('.sheet .btn.danger-quiet').innerText(), 'Delete it and its 4 jobs?');
+  assert.equal(await a.page.locator('.sheet .btn.danger-quiet').innerText(), 'Delete it and its 6 jobs?');
   await a.page.click('.sheet .btn.danger-quiet');
   await until(() => inDrive().bags['s-leave'].del, 'the deletion in Drive');
   await b.page.goto(base + '#/list');
