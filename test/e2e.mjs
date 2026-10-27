@@ -1722,7 +1722,7 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   assert.ok(Math.abs(await switchAt() - bar - 8) <= 1, `something ticked: the switch under the top bar (${await switchAt()}, bar ${bar})`);
   assert.equal(await page.evaluate(() => document.activeElement.tagName), 'H1', 'the focus on the trip’s name, as on any screen');
   // Where it was left this visit.
-  await page.evaluate(() => window.scrollTo(0, 1500));
+  await page.evaluate(() => new Promise(r => { window.scrollTo(0, 1500); requestAnimationFrame(() => requestAnimationFrame(r)); })); // and its scroll event
   await page.goBack();
   await page.waitForSelector('.tag-card');
   await page.locator('.tag-card').first().click();
