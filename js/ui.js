@@ -52,12 +52,13 @@ function iconCopy(v) {
 // and the sheet's own while a sheet is open, since the rest of the page is hidden then; the words go in a moment
 // after it's emptied, so they're heard as new.
 let toastT = null, sayT = null, toastLeft = 0, toastEnd = 0, paused = false;
-// The last toast's action and when it came, for toastKeep.
-let last = { action: undefined, at: 0 };
+// The last toast's action and when it came, for toastKeep, and a toast waiting for one with an Undo to go (toastNext).
+let last = { action: undefined, at: 0 }, next = '';
 const lives = () => ['said', 'sheetSaid'].map(id => document.getElementById(id));
 function hideToast() {
   document.getElementById('toast').hidden = true;
   for (const live of lives()) live.textContent = '';
+  if (next) toast(next);
 }
 function hideIn(ms) {
   clearTimeout(toastT);
@@ -71,6 +72,7 @@ function pause(on) {
 }
 export function toast(msg, action) {
   last = { action, at: Date.now() };
+  next = '';
   const el = document.getElementById('toast');
   placeToast();
   el.replaceChildren(h('span', {}, msg));
@@ -94,6 +96,13 @@ export function toast(msg, action) {
   page.textContent = inSheet.textContent = '';
   clearTimeout(sayT);
   sayT = setTimeout(() => { live.textContent = msg; }, 50);
+}
+
+// A toast that would take an Undo away waits until it goes (its time is up, or Undo is tapped), unless something
+// else is said first: what an edit changed on a trip's list waits for "Socks needs more now… Undo".
+export function toastNext(msg) {
+  const el = document.getElementById('toast');
+  if (!el.hidden && el.querySelector('button')) next = msg; else toast(msg);
 }
 
 // A toast that follows straight on from another, in the same tap, keeps that one's action: when a whole bag packed

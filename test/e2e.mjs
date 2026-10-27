@@ -936,6 +936,67 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await ctx.close();
 }
 
+// ================= Changing a trip says what changed =================
+// After Save on Edit trip, once the new forecast is in, and on closing What this trip calls for: what's on the list
+// now and what's off, three names and "and 2 more" after that. Nothing changed, nothing's said.
+{
+  const { ctx, page } = await phone();
+  await page.click('text=Start with a starter list');
+  await planTrip(page, { where: 'Lisb', from: 3, to: 7 });
+  await page.waitForSelector('.wx-days:not(.wait) li');
+  const toasts = () => page.evaluate(() => window.toasts);
+  await page.evaluate(() => {
+    window.toasts = [];
+    const el = document.getElementById('toast');
+    new MutationObserver(() => { if (!el.hidden) window.toasts.push(el.firstChild?.textContent); }).observe(el, { childList: true, attributes: true });
+  });
+  const lookups = calls.length;
+  // Lisbon to Reykjavík: said once the forecast for Reykjavík is in, not before.
+  await page.click('[aria-label="Edit this trip"]');
+  await page.click('[aria-label="Pick another place"]');
+  await page.fill('#where', 'Reyk');
+  await page.locator('.results button').first().click();
+  await page.click('text=Save');
+  await page.waitForSelector('.pass h1');
+  await until(async () => (await toasts()).length, 'what changed');
+  assert.ok(calls.slice(lookups).some(c => c.startsWith('forecast')), 'after the new forecast');
+  assert.deepEqual(await toasts(), ['Reykjavík: Warm coat, Gloves and hat and Snow boots are on now; Sunscreen, Swimsuit, Sandals and 2 more are off.']);
+  assert.ok(await row(page, 'Snow boots').count() && !(await row(page, 'Sunscreen').count()), 'as the list says');
+  // From What this trip calls for, on closing it.
+  await page.click('.needs .btn');
+  await until(() => sheetOpen(page), 'the conditions sheet');
+  await page.locator('.sheet .chip', { hasText: /Working out$/ }).click();
+  await closeSheet(page);
+  assert.equal((await toasts()).at(-1), 'Reykjavík: Workout clothes is on now.');
+  // Nothing changed: nothing said.
+  const n = (await toasts()).length;
+  await page.click('[aria-label="Edit this trip"]');
+  await page.click('text=Save');
+  await page.waitForSelector('.pass h1');
+  await page.click('.needs .btn');
+  await until(() => sheetOpen(page), 'the conditions sheet');
+  await closeSheet(page);
+  await wait(500);
+  assert.equal((await toasts()).length, n, 'nothing said');
+  // Longer, and somewhere else: the socks ticked for the shorter trip come unticked, and what changed waits for that
+  // toast's Undo to go.
+  await row(page, 'Socks').locator('.tick').click();
+  await page.click('[aria-label="Edit this trip"]');
+  await page.click('[aria-label="Pick another place"]');
+  await page.fill('#where', 'Lisb');
+  await page.locator('.results button').first().click();
+  await page.fill('#end', await day(page, 8));
+  await page.click('text=Save');
+  await page.waitForSelector('.pass h1');
+  await until(async () => (await toasts()).at(-1) === 'Socks needs more now (×6), so it’s unticked.', 'the socks unticked');
+  await page.waitForSelector('.wx-days:not(.wait) li');
+  await wait(500);
+  assert.equal((await toasts()).at(-1), 'Socks needs more now (×6), so it’s unticked.', 'Undo stays');
+  await toastUndo(page);
+  await until(async () => /^Lisbon: .+ are on now; .+ are off\.$/.test((await toasts()).at(-1)), 'what changed, after Undo');
+  await ctx.close();
+}
+
 // ================= The last day: coming home =================
 {
   const { ctx, page } = await phone();

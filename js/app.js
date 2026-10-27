@@ -9,7 +9,7 @@ import { drive } from './sync.js';
 import { starterList } from './starter.js';
 import { parsePaste, encodeList, decodeList, guess, bagIcon } from './share.js';
 import { PLUGS, countryName } from './plugs.js';
-import { h, ICONS, toast, toastKeep, sheet, closeSheet, setupSheet, confirmBtn, pressedKey, byKey } from './ui.js';
+import { h, ICONS, toast, toastKeep, toastNext, sheet, closeSheet, setupSheet, confirmBtn, pressedKey, byKey } from './ui.js';
 
 export const SITE = 'https://carry-on.junkdrawer.works/';
 const main = document.getElementById('app');
@@ -79,6 +79,7 @@ function render() {
     if (caret && back.setSelectionRange) try { back.setSelectionRange(...caret); } catch { /* not a text box */ }
   } else focusFirst(near);
   document.body.dataset.page = page || 'home';
+  sayChange();
 }
 
 // Where a trip opens, the first time this visit: with anything ticked, going or coming home, at its list, with the
@@ -320,6 +321,36 @@ function maybeWeather(t, force = false) {
       if (cur && cur.start === t.start && cur.end === t.end && at?.place?.lat === l.place.lat) store.apply(d => (l.id ? M.setStopWx(d, t.id, l.id, wx) : M.setWx(d, t.id, wx)));
     }, e => { wxErr[k] = e.message; }).finally(() => { delete wxBusy[k]; redraw(); });
   }
+}
+
+// What changing a trip did to its list: after Save on Edit trip, or on closing What this trip calls for, a word on
+// what's on it now and what's off: "Reykjavík: Warm coat, Gloves and hat and Snow boots are on now; Sunscreen, Rain
+// jacket and Umbrella are off." When the change needs a new forecast (a new place or new dates), it waits for it, so
+// it says what the list settles on; leaving the trip meanwhile lets it go. Nothing changed, nothing's said.
+let change = null; // { id, before: [[thing's id, name], …] in the list's order }
+const onList = t => { const p = R.plan(doc(), t, 'go'); return [...p.groups, ...p.tasks].flatMap(g => g.rows.map(r => [r.id, r.name])); };
+// Before a change: what's on the list. A change still waiting for its forecast keeps what was on it before that one.
+function watchChange(id) {
+  const t = doc().trips[id];
+  if (change?.id !== id) change = t ? { id, before: onList(t) } : null;
+}
+function sayChange({ now = false } = {}) {
+  if (!change) return;
+  const t = doc().trips[change.id];
+  if (!t || M.gone(t)) { change = null; return; }
+  if (!now) {
+    const [, page = '', id = ''] = (location.hash || '#/').slice(1).split('/');
+    if (decodeURIComponent(id) !== change.id || page !== 'trip') { if (page !== 'edit') change = null; return; }
+  }
+  // Each place's forecast in, unless it isn't to be looked up (a place typed in, a trip that's over).
+  const waiting = R.legDays(t).some(l => l.place?.lat !== undefined && (wxBusy[wxKey(t, l)] || (!l.days.length && W.stale(l.wx, t.start, t.end, today(), undefined, l.place))));
+  if (waiting) return;
+  const before = new Map(change.before), after = onList(t), still = new Set(after.map(([id]) => id));
+  change = null;
+  const on = after.filter(([id]) => !before.has(id)).map(([, name]) => name), off = [...before].filter(([id]) => !still.has(id)).map(([, name]) => name);
+  const names = list => (list.length > 3 ? `${list.slice(0, 3).join(', ')} and ${list.length - 3} more` : andList(list));
+  const said = [on.length ? `${names(on)} ${on.length === 1 ? 'is' : 'are'} on now` : '', off.length ? `${names(off)} ${off.length === 1 ? 'is' : 'are'} off` : ''].filter(Boolean);
+  if (said.length) toastNext(`${title(t)}: ${said.join('; ')}.`);
 }
 
 // A redraw that comes on its own (a forecast arriving, a sync landing, another tab saving). On a trip scrolled down
@@ -857,6 +888,7 @@ function extraSheet(t, bagId, { home = false } = {}) {
 // What the trip calls for: the occasions, how you're getting there, and the weather and place by hand. Opened from
 // a chip, at that one's row (at: its key), with the focus on its choice.
 function condSheet(id, at = '') {
+  watchChange(id);
   const draw = () => {
     const t = doc().trips[id];
     const c = R.conditions(doc(), t);
@@ -890,7 +922,7 @@ function condSheet(id, at = '') {
             ['auto', 'on', 'off'].map(s => h('button', { type: 'button', 'data-key': `cond:${k}:${s}`, 'aria-pressed': String(state === s), onclick: () => pickState(s) }, s === 'auto' ? 'Auto' : s === 'on' ? 'Yes' : 'No'))));
       })),
       h('p', { class: 'small' }, h('a', { href: '#/list', onclick: closeSheet }, 'Change the occasions in My list')),
-    ], { wide: true });
+    ], { wide: true, done: () => sayChange({ now: true }) });
   };
   draw();
   const dlg = document.getElementById('sheet'), row = at && dlg.querySelector(`[data-k="${CSS.escape(at)}"]`);
@@ -1072,6 +1104,7 @@ function tripForm(t, again = false) {
     const twice = dr.stops.find((s, i) => dr.stops.findIndex(x => x.from === s.from) !== i);
     if (twice) { err(`Two stops start the same night. Pick another night for ${twice.place.name}.`); return; }
     const id = editing ? t.id : M.newId('t');
+    if (editing) watchChange(id);
     const datesMoved = editing && (t.start !== st.start || t.end !== st.end);
     const moved = datesMoved || (editing && (t.place?.lat !== st.place?.lat || t.place?.name !== st.place?.name));
     const before = new Map(dr.stops0.map(s => [s.id, s]));
