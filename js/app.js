@@ -928,7 +928,7 @@ function homeGuess(dr) {
       h('button', { type: 'button', class: 'linkish', 'data-key': 'home-guess', onclick: () => { dr.homeOpen = true; render(); } }, 'Change'));
   }
   return h('div', { class: 'home-pick' }, h('label', { for: 'homePick', class: 'small' }, 'You live in'),
-    homeSelect({ id: 'homePick', 'data-key': 'home-guess' }, cc, to => toast(`Home is ${countryName(to)} now. You can change it in Settings.`)));
+    homeSelect({ id: 'homePick', 'data-key': 'home-guess' }, cc, to => toast(`Home is ${countryName(to)} now. You can change it in Settings.`), true));
 }
 
 function tripForm(t, again = false) {
@@ -1433,8 +1433,10 @@ function restored(n) {
 
 // The countries to pick home from, saved as it's picked. Typed into ("por" for Portugal), it waits for the typing to
 // stop before the page is drawn again (and then(cc) is told): a new picker wouldn't get the letters after the first.
+// With guess, it starts on the guess at home as an option of its own, so picking that same country saves it too: a
+// picker only says when what's picked changes.
 let homeKeyed = false, homeT = null;
-function homeSelect(attrs, cc, then = () => {}) {
+function homeSelect(attrs, cc, then = () => {}, guess = false) {
   const countries = Object.keys(PLUGS).map(c => [c, countryName(c)]).sort((a, b) => a[1].localeCompare(b[1]));
   return h('select', {
     ...attrs,
@@ -1446,7 +1448,8 @@ function homeSelect(attrs, cc, then = () => {}) {
       const done = () => { render(); then(to); };
       clearTimeout(homeT);
       if (homeKeyed) homeT = setTimeout(done, 1000); else done();
-    } }, countries.map(([c, n]) => h('option', { value: c, selected: c === cc }, n)));
+    } }, guess ? h('option', { value: '', disabled: true, selected: true }, `${countryName(cc)} (a guess)`) : null,
+    countries.map(([c, n]) => h('option', { value: c, selected: !guess && c === cc }, n)));
 }
 
 function settingsView() {

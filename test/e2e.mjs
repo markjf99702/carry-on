@@ -509,6 +509,9 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await page.locator('.results button').first().click();
   await page.click('.home-guess button');
   assert.equal(await page.evaluate(() => document.activeElement.id), 'homePick', 'Change goes to the picker');
+  // It starts on the guess as an option of its own, so picking United States, if that's right, saves it too: a
+  // picker only says so when what's picked changes.
+  assert.deepEqual(await page.$eval('#homePick', s => [s.value, s.selectedOptions[0].text, s.selectedOptions[0].disabled]), ['', 'United States (a guess)', true]);
   await page.selectOption('#homePick', 'CA');
   await until(async () => (await page.locator('#toast').innerText()).includes('Home is Canada now'), 'the toast');
   assert.equal(await page.locator('.home-guess, .home-pick').count(), 0, 'set, the line goes');
