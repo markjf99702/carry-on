@@ -2377,6 +2377,12 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
     assert.ok(ics.split('\r\n').includes(line), line);
   }
   assert.match(await page.locator('#toast span').innerText(), /^Saved Lisbon\.ics\. Open it to add Lisbon to your calendar, with a reminder at 7 pm the evening before\.$/);
+  // The event's link, opened in a browser that never had the trip (an iPhone's Safari, while Carry On is on its Home
+  // Screen with storage of its own): it says so, rather than that the trip was deleted.
+  await page.goto(base + '#/trip/t-planned-elsewhere');
+  assert.equal(await page.locator('main .empty p').innerText(), 'It isn’t saved in this browser. If you planned it in Carry On on your home screen, open it from there.');
+  await page.goto(base + '#/trip/' + id);
+  await page.waitForSelector('.pass h1');
   // Under way: no button.
   await page.evaluate(() => { const { store, M, D, render } = window.carryOn, t = Object.values(store.doc.trips)[0]; store.apply(d => M.putTrip(d, { id: t.id, start: D.today() })); render(); });
   assert.deepEqual(await page.locator('main .trip-tools .btn').allInnerTexts(), ['Copy as text']);

@@ -112,12 +112,12 @@ function focusFirst(keys) {
 function view(page, id) {
   // With no list there's nothing to plan, but trips already made can still be opened.
   if (!M.hasList(doc()) && !['settings', 'trip', 'edit'].includes(page)) return welcome();
-  if (page === 'trip') { const t = doc().trips[id]; return t && !M.gone(t) ? tripView(t) : missing(); }
+  if (page === 'trip') { const t = doc().trips[id]; return t && !M.gone(t) ? tripView(t) : missing(id); }
   if (page === 'new') return tripForm(null);
   if (page === 'edit' || page === 'again') {
     const t = doc().trips[id];
     // Deleted, maybe on another device: saving the form would bring it back.
-    if (!t || (page === 'edit' && M.gone(t))) { draft = null; return missing(); }
+    if (!t || (page === 'edit' && M.gone(t))) { draft = null; return missing(id); }
     return tripForm(t, page === 'again');
   }
   if (page === 'list') return listView();
@@ -125,7 +125,15 @@ function view(page, id) {
   return homeView();
 }
 
-const missing = () => h('section', { class: 'card empty' }, h('h1', {}, 'That trip isn’t here'), h('p', {}, 'It may have been deleted on another device.'), h('a', { class: 'btn primary', href: '#/' }, 'All trips'));
+// A trip that isn't here: deleted, or never saved in this browser. A calendar alert's link (Add to my calendar) opens
+// the browser, and on an iPhone, Carry On on the Home Screen keeps its own storage, apart from Safari's ("Home Screen
+// web apps have ... separate cookies and storage from the browser": Apple, WWDC23, What's new in web apps).
+const missing = id => {
+  const known = !!id && Object.hasOwn(doc().trips, id), own = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  return h('section', { class: 'card empty' }, h('h1', {}, 'That trip isn’t here'),
+    h('p', {}, known || own ? 'It may have been deleted on another device.' : 'It isn’t saved in this browser. If you planned it in Carry On on your home screen, open it from there.'),
+    h('a', { class: 'btn primary', href: '#/' }, 'All trips'));
+};
 // go(hash, { replace: true }) takes the place of this screen in the history, keeping where it was opened from.
 function go(hash, { replace = false } = {}) {
   if (replace) {
