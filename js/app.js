@@ -1477,11 +1477,13 @@ function listBag(b) {
       h('button', { type: 'submit', class: 'btn small' }, 'Add')));
 }
 
-// Condition chips to pick from, grouped. picked is a Set, changed when tapped.
+// Condition chips to pick from, grouped. picked is a Set, changed when tapped. An occasion deleted since that's
+// picked shows too, "💍 Wedding (deleted)", to take off.
 function condPicker(picked, { travel = true } = {}) {
   const groups = {};
   for (const c of R.CONDITIONS) if (travel || !M.TRAVEL.includes(c.k)) (groups[c.group] ||= []).push(c);
   groups.Occasions = M.tags(doc()).map(g => ({ k: g.id, icon: g.icon, name: g.name }));
+  for (const k of picked) { const g = R.goneOccasion(doc(), k); if (g) groups.Occasions.push({ k, icon: g.icon, name: `${g.name} (deleted)` }); }
   return h('div', { class: 'cond-pick' }, Object.entries(groups).map(([name, list]) => [
     h('h4', {}, name),
     h('div', { class: 'chips pick' }, list.map(c => {

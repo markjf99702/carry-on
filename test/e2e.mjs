@@ -1099,7 +1099,7 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await page.locator('.sheet .chip', { hasText: /Working out$/ }).click();
   await wait(300);
   assert.equal((await toasts()).length, said, 'nothing said while the sheet is open');
-  await page.locator('.sheet .chip', { hasText: /Dressing up$/ }).click();
+  await page.locator('.sheet .chip', { hasText: /Dressing up$/ }).first().click();
   await closeSheet(page);
   // Said from the sheet's close event, which comes a moment after it's closed.
   await until(async () => (await toasts()).at(-1) === 'Reykjavík: Workout clothes and Something dressy are on now.', 'what changed in the sheet, on closing it');
@@ -1701,6 +1701,25 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   const left = name => page.locator('.left-row', { has: page.locator('.name', { hasText: new RegExp(`^${name}$`) }) }).locator('small').innerText();
   assert.equal(await left('Suit'), 'Only for wedding (deleted)');
   assert.equal(await left('⛳ Golf bag'), '1 thing · Only for wedding (deleted)');
+  // A thing's editor, and a bag's, show the occasion it came for, or stayed home for, to take off.
+  await page.goto(base + '#/list');
+  const picked = () => page.locator('.sheet .cond-pick .chip[aria-pressed="true"]').allInnerTexts();
+  await page.click('[data-key="item:i-jeans"]');
+  assert.equal(await page.locator('.sheet details.unless').getAttribute('open'), '');
+  assert.deepEqual(await picked(), ['💍 Wedding (deleted)']);
+  await closeSheet(page);
+  await page.click('[data-key="bagmore:b-golf"]');
+  assert.deepEqual(await picked(), ['💍 Wedding (deleted)']);
+  await closeSheet(page);
+  await page.click('[data-key="item:i-suit"]');
+  assert.equal(await page.locator('.sheet select >> nth=2').inputValue(), 'some', 'only when the trip calls for…');
+  assert.deepEqual(await picked(), ['💍 Wedding (deleted)']);
+  await fits(page, 'a thing’s editor with a deleted occasion');
+  await page.locator('.sheet .chip', { hasText: 'Wedding (deleted)' }).click();
+  await page.locator('.sheet .chip', { hasText: /Dressing up$/ }).first().click();
+  await page.click('.sheet .btn.primary');
+  assert.equal(await said('Suit'), 'Suit Only for 👔 dressing up');
+  assert.deepEqual(await page.evaluate(() => window.carryOn.store.doc.items['i-suit'].when), ['dressy']);
   await ctx.close();
 }
 
