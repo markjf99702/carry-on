@@ -249,13 +249,23 @@ export function whyNot(doc, rule, res) {
 // conditions say no ('add'), the same way a single thing can.
 // A thing goes in the bag it's in this trip: its own, or the one it was moved to ('b:ID'). It comes along when
 // either of those does, so moving it out of a bag that's left off brings it.
-// Returns { groups: [{ bag, rows }], tasks: [{ bag, rows }], left: [{ item, why, skipped }] (things, then jobs),
-//   leftBags: [{ bag, why, skipped, count, more }], done, total, cond }
+// Going, a thing packed last (My list's Pack it last, or 'l:ID' for this trip) waits in a group of its own, the last
+// things out the door, rather than in its bag, which counts without it.
+// Returns { groups: [{ bag, rows }], last: { bag: LAST, rows } or null, tasks: [{ bag, rows }], left: [{ item, why,
+//   skipped }] (things, then jobs), leftBags: [{ bag, why, skipped, count, more }], done, total, morning, cond }
 //   count: how many of the bag's things its line stands for. more: some things in it are on the list anyway (moved
 //   or added to it, or packed already), so those are more.
+//   morning: going, with everything in the bags packed, how many of the last things out the door and the jobs
+//   before leaving the house are still to do; otherwise 0.
 // A row: { id, name, note, qty, daily (how many a day, for one by the day), capped (stopped at the laundry limit),
 //   hits: [condition keys], key: the mark key, done, extra?, gone?, deleted? (coming home: packed going, deleted
-//   from My list since) }
+//   from My list since), last? and goes (the bag it goes in) for one packed last }
+export const LAST = { id: '_last', name: 'Last thing out the door', icon: '🚪', kind: 'bag', when: [], unless: [], note: '', order: 1e9 };
+// Whether a thing is packed last on this trip: as picked for this trip, or else as My list says.
+export const packedLast = (doc, trip, id) => {
+  const v = trip.marks?.['l:' + id]?.v;
+  return typeof v === 'boolean' ? v : !!(Object.hasOwn(doc.items, id) && doc.items[id].last?.v);
+};
 export function plan(doc, trip, mode = 'go') {
   const cond = conditions(doc, trip), on = cond.on;
   const marks = trip.marks || {};
@@ -265,8 +275,11 @@ export function plan(doc, trip, mode = 'go') {
   const anyPacked = Object.entries(marks).some(([k, m]) => k.startsWith('p:') && m.v === 1);
   const allBags = M.bags(doc);
   const coming = b => bagComing(trip, b, on);
-  const groups = new Map(), tasks = [], left = [], leftBags = [];
+  const groups = new Map(), tasks = [], left = [], leftBags = [], last = [];
   const groupOf = bag => { if (!groups.has(bag.id)) groups.set(bag.id, { bag, rows: [] }); return groups.get(bag.id); };
+  const going = mode === 'go';
+  // Going, a row packed last goes in its own group, saying which bag it goes in.
+  const put = (bag, row) => { if (going && packedLast(doc, trip, row.id)) last.push({ ...row, last: true, goes: bag }); else groupOf(bag).rows.push(row); };
   const fallback = { id: '_loose', name: 'Not in a bag', icon: '🧳', kind: 'bag', when: [], unless: [], order: 1e9 };
   const bagFor = id => allBags.find(b => b.id === id && b.kind === 'bag');
   const covered = {}; // bag id → how many of its things this trip wait under its line in Left off
@@ -285,7 +298,7 @@ export function plan(doc, trip, mode = 'go') {
       continue;
     }
     if (mode === 'back' && anyPacked && !packed) continue;
-    groupOf(bag).rows.push({
+    put(bag, {
       id: it.id, name: it.name, note: it.note, qty: qtyOf(doc, trip, it), daily: it.per === 'day' ? it.qty || 1 : 0, capped: it.per === 'day' && days(trip) > laundry(doc),
       hits: res.hits, key: (mode === 'go' ? 'p:' : 'r:') + it.id,
       added: p === 'add', moved: bag !== home, packedOnly: (!res.ok || !bagIn) && p !== 'add',
@@ -295,7 +308,7 @@ export function plan(doc, trip, mode = 'go') {
     const packed = isPacked(x.id);
     if (mode === 'back' && anyPacked && !packed) continue;
     const bag = bagFor(mv(x.id)) || bagFor(x.bag) || fallback;
-    groupOf(bag).rows.push({ id: x.id, name: x.name, note: '', qty: 1, hits: [], key: (mode === 'go' ? 'p:' : 'r:') + x.id, extra: true });
+    put(bag, { id: x.id, name: x.name, note: '', qty: 1, hits: [], key: (mode === 'go' ? 'p:' : 'r:') + x.id, extra: true });
   }
   // Coming home, what went comes back, though it's been deleted from My list since, alone or with its bag: in the
   // bag it went in this trip, or its own if that's still there, or else with the things not in a bag.
@@ -334,12 +347,16 @@ export function plan(doc, trip, mode = 'go') {
     if (rows.length) tasks.push({ bag: b, rows });
   }
   const list = [...groups.values()].filter(g => g.rows.length).sort((a, b) => a.bag.order - b.bag.order);
-  const all = [...list, ...tasks].flatMap(g => g.rows);
+  // The last things out the door in the order of their bags, each bag's in its own order.
+  const lastGroup = last.length ? { bag: LAST, rows: last.sort((a, b) => a.goes.order - b.goes.order) } : null;
+  const all = [...list, ...(lastGroup ? [lastGroup] : []), ...tasks].flatMap(g => g.rows);
   for (const r of all) r.done = (marks[r.key]?.v || 0) > 0;
   if (mode === 'back') for (const r of all) r.gone = marks[r.key]?.v === 2;
+  const inBags = list.flatMap(g => g.rows), later = [...last, ...tasks.flatMap(g => g.rows)].filter(r => !r.done).length;
   return {
-    groups: list, tasks, left: mode === 'go' ? [...left, ...leftJobs] : leftJobs, leftBags, cond,
+    groups: list, last: lastGroup, tasks, left: mode === 'go' ? [...left, ...leftJobs] : leftJobs, leftBags, cond,
     done: all.filter(r => r.done).length, total: all.length,
+    morning: going && inBags.length && inBags.every(r => r.done) ? later : 0,
   };
 }
 
@@ -348,7 +365,7 @@ export function plan(doc, trip, mode = 'go') {
 export function grown(before, after, tripId) {
   const a = before.trips[tripId], b = after.trips[tripId];
   if (!a || !b || M.gone(a) || M.gone(b)) return [];
-  const rows = (doc, trip) => plan(doc, trip, 'go').groups.flatMap(g => g.rows);
+  const rows = (doc, trip) => { const p = plan(doc, trip, 'go'); return [...p.groups, ...(p.last ? [p.last] : [])].flatMap(g => g.rows); };
   const was = new Map(rows(before, a).map(r => [r.key, r.qty]));
   return rows(after, b).filter(r => r.done && r.qty > (was.get(r.key) ?? Infinity)).map(r => r.key);
 }

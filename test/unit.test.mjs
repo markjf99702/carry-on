@@ -1030,6 +1030,117 @@ test('stops merge one by one, and each one’s newest weather lookup wins', () =
   assert.equal(M.setStopWx(off, 't1', 'sa', lookup(PORTO, 300, 30)), off);
 });
 
+test('a thing packed last waits with the last things out the door, and its bag counts without it', () => {
+  let doc = M.setPref(starter(), 'home', 'US');
+  doc = M.putItem(doc, { id: 's-electronics-phone-charger', last: true });
+  assert.deepEqual(doc.items['s-electronics-phone-charger'].last, { v: true, t: doc.items['s-electronics-phone-charger'].t });
+  doc = trip(doc, { place: { name: 'Denver', cc: 'US' } });
+  doc = M.putExtra(doc, 't1', { id: 'e1', name: 'Leftovers for the drive', bag: 's-daybag' });
+  doc = M.mark(doc, 't1', 'l:e1', true); // this trip only
+  doc = M.mark(doc, 't1', 'l:s-toiletries-toothbrush', true);
+  let p = plan(doc, doc.trips.t1);
+  assert.deepEqual(p.last.rows.map(r => [r.name, r.goes.name]), [['Toothbrush', 'Toiletries bag'], ['Phone charger', 'Electronics'], ['Leftovers for the drive', 'Day bag']], 'in the order of their bags');
+  assert.equal(p.last.bag.name, 'Last thing out the door');
+  assert.ok(!names(p, 'Electronics').includes('Phone charger'), 'not in its bag as well');
+  assert.ok(!names(p, 'Toiletries bag').includes('Toothbrush'));
+  const total = p.total;
+  // Everything in the bags packed: what's left is for the morning, the jobs before leaving the house too.
+  doc = M.markAll(doc, 't1', p.groups.flatMap(g => g.rows).map(r => r.key), 1);
+  p = plan(doc, doc.trips.t1);
+  const jobs = p.tasks.flatMap(g => g.rows).length;
+  assert.equal(p.morning, 3 + jobs);
+  assert.equal(p.total, total, 'they still count towards everything');
+  doc = M.mark(doc, 't1', 'p:s-electronics-phone-charger', 1);
+  assert.equal(plan(doc, doc.trips.t1).morning, 2 + jobs);
+  // Not before the bags are done.
+  const unpacked = M.mark(doc, 't1', 'p:s-clothes-belt', 0);
+  assert.equal(plan(unpacked, unpacked.trips.t1).morning, 0);
+  // With the rest this trip, though My list says last.
+  doc = M.mark(doc, 't1', 'l:s-electronics-phone-charger', false);
+  p = plan(doc, doc.trips.t1);
+  assert.ok(names(p, 'Electronics').includes('Phone charger'));
+  assert.deepEqual(p.last.rows.map(r => r.name), ['Toothbrush', 'Leftovers for the drive']);
+  // Back to what My list says.
+  doc = M.mark(doc, 't1', 'l:s-electronics-phone-charger', null);
+  assert.ok(plan(doc, doc.trips.t1).last.rows.some(r => r.name === 'Phone charger'));
+  // Coming home, it's back in its bag.
+  const back = plan(doc, doc.trips.t1, 'back');
+  assert.equal(back.last, null);
+  assert.ok(names(back, 'Electronics').includes('Phone charger'));
+  assert.equal(back.morning, 0);
+  // A longer trip unticks socks packed last as it does any others.
+  doc = M.putItem(doc, { id: 's-clothes-socks', last: true });
+  doc = M.mark(doc, 't1', 'p:s-clothes-socks', 1);
+  assert.ok(grown(doc, M.putTrip(doc, { id: 't1', end: add(T, 6) }), 't1').includes('p:s-clothes-socks'));
+});
+
+test('packed last saves, merges, and survives a copy of Carry On from before it', () => {
+  // A thing saved before reads back, and saves, exactly as it was; junk reads as nothing.
+  const saved = { id: 'i1', name: 'Charger', bag: 'b1', order: 0, when: [], unless: [], qty: 1, per: '', note: '', t: 5 };
+  assert.equal(M.canon(M.cleanItem(saved)), M.canon(saved));
+  for (const junk of ['yes', 1, { v: 'yes' }, null, []]) assert.equal('last' in M.cleanItem({ ...saved, last: junk }), false);
+  assert.deepEqual(M.cleanItem({ ...saved, last: { v: false, t: 9 } }).last, { v: false, t: 9 });
+  // A trip's 'l:' marks keep, and junk keys go.
+  const tr = M.cleanTrip({ id: 't1', start: T, end: T, marks: { 'l:i1': { v: true, t: 3 }, 'q:i1': { v: true, t: 3 } } });
+  assert.deepEqual(Object.keys(tr.marks), ['l:i1']);
+  let a = starter();
+  a = M.putItem(a, { id: 's-electronics-phone-charger', last: true });
+  // An older copy reads things without it, and saves them that way.
+  const older = d => JSON.parse(JSON.stringify(d), (k, v) => (k === 'last' ? undefined : v));
+  const b = older(a);
+  const changes = [
+    ['saved as it was', d => d],
+    ['a new name', d => M.putItem(d, { id: 's-electronics-phone-charger', name: 'Phone charger and cable' })],
+    ['a note', d => M.putItem(d, { id: 's-electronics-phone-charger', note: 'the long cable' })],
+  ];
+  for (const [what, change] of changes) {
+    later();
+    const b2 = change(b);
+    for (const first of [false, true]) {
+      for (const m of [M.mergeDocs(a, b2, { first }), M.mergeDocs(b2, a, { first })]) {
+        const x = m.items['s-electronics-phone-charger'];
+        assert.equal(x.last?.v, true, what);
+        assert.equal(x.name, b2.items['s-electronics-phone-charger'].name, what);
+        assert.equal(M.mergeDocs(m, older(m)).items['s-electronics-phone-charger'].last?.v, true, what);
+      }
+    }
+  }
+  // Turned off on one phone after it was turned on on the other: off, whichever way they merge.
+  later();
+  const off = M.putItem(a, { id: 's-electronics-phone-charger', last: false });
+  for (const m of [M.mergeDocs(a, off), M.mergeDocs(off, a)]) assert.equal(m.items['s-electronics-phone-charger'].last.v, false);
+  assert.equal(M.canon(M.mergeDocs(a, off)), M.canon(M.mergeDocs(off, a)), 'order of merging does not matter');
+  // Changing something else keeps it.
+  assert.equal(M.putItem(a, { id: 's-electronics-phone-charger', note: 'x' }).items['s-electronics-phone-charger'].last.v, true);
+});
+
+test('packed last goes with a list: links, adding, using it instead, and Undo', async () => {
+  let doc = M.putItem(starter(), { id: 's-electronics-phone-charger', last: true });
+  const list = M.listOf(doc);
+  assert.equal(list.items.find(x => x.id === 's-electronics-phone-charger').last, true);
+  assert.equal('last' in list.items.find(x => x.id === 's-electronics-headphones'), false, 'only where it is');
+  const back = await decodeList(await encodeList(list));
+  assert.equal(back.items.find(x => x.id === 's-electronics-phone-charger').last, true);
+  // Someone else's list with it, added to one without.
+  const added = M.addList(M.blankDoc(), back);
+  assert.equal(M.items(added).find(x => x.name === 'Phone charger').last.v, true);
+  // Used instead, it stays packed last, and using the same list again changes nothing.
+  const once = M.replaceList(doc, back);
+  assert.equal(once.items['s-electronics-phone-charger'].last.v, true);
+  later();
+  assert.equal(M.canon(M.replaceList(once, back)), M.canon(once));
+  // A list without it, used instead: packed with the rest now, and Undo puts it back, both newer than before.
+  later();
+  const plain = { ...back, items: back.items.map(({ last, ...x }) => x) };
+  const after = M.replaceList(doc, plain);
+  assert.equal(after.items['s-electronics-phone-charger'].last.v, false);
+  assert.ok(after.items['s-electronics-phone-charger'].last.t > doc.items['s-electronics-phone-charger'].last.t);
+  later();
+  const undone = M.undoReplace(after, doc, after);
+  assert.equal(undone.items['s-electronics-phone-charger'].last.v, true);
+  assert.equal(M.mergeDocs(undone, after).items['s-electronics-phone-charger'].last.v, true, 'and it reaches the other phone');
+});
+
 test('recent places: the latest trips’ places, each once, stops too, up to four', () => {
   const place = (name, lat, lon) => ({ name, cc: 'US', country: 'United States', lat, lon });
   const lake = place('Lake Placid', 44.28, -73.98), boston = place('Boston', 42.36, -71.06), nyc = place('New York', 40.71, -74.01);

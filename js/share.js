@@ -34,7 +34,7 @@ const list = x => (Array.isArray(x) ? x : []);
 export function cleanList(raw) {
   const bags = list(raw.bags).map(b => cleanBag({ ...b, t: 0 })).filter(Boolean).map(({ t, order, ...b }) => b);
   const ids = new Set(bags.map(b => b.id));
-  const items = list(raw.items).map(x => cleanItem({ ...x, t: 0 })).filter(x => x && ids.has(x.bag)).map(({ t, order, ...x }) => x);
+  const items = list(raw.items).map(x => cleanItem({ ...x, t: 0 })).filter(x => x && ids.has(x.bag)).map(({ t, order, ...x }) => (x.last ? { ...x, last: x.last.v } : x));
   const tags = list(raw.tags).map(g => cleanTag({ ...g, t: 0 })).filter(Boolean).map(({ t, order, ...g }) => g);
   return { bags, items, tags };
 }

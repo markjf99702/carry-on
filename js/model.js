@@ -5,16 +5,21 @@
 //           kind 'bag' holds things to pack; 'leave' holds jobs before leaving the house; 'back' jobs before
 //           leaving the hotel. when/unless are condition keys (rules.js): the bag comes along only when one of
 //           `when` applies (or always, when it's empty) and none of `unless` does.
-//   item  { id, name, bag, order, when, unless, qty, per, note, t, del? }
+//   item  { id, name, bag, order, when, unless, qty, per, note, t, del?, last? }
 //           per 'day': qty for each day of the trip (one, two or three), up to the laundry limit's days; otherwise
 //           qty of it. A copy of Carry On from before two or three a day reads per 'day' as one a day.
+//           last: packed last, in the morning, with the last things out the door (a charger still in the wall):
+//           { v: true | false, t }, with its own change time. A thing that never had it has none. A copy of Carry On
+//           from before it drops it when it reads a thing, so it merges on its own, as stops do: that copy saving the
+//           thing doesn't take it away.
 //   tag   { id, name, icon, order, t, del? }   an occasion a trip can have: work, the gym, a wedding
 // A trip:
 //   { id, name, place, start, end, travel, t, del?, set, marks, extras, wx, stops? }
 //   set     condition key → { v: true | false | null, t }. Occasions picked, and anything the person turned on
 //           or off by hand over what the weather and place say (null puts it back to automatic).
 //   marks   'p:ID' packed (1), 'r:ID' back in the bag coming home (1) or not coming back (2), 'x:ID' 'skip' or
-//           'add' for this trip only, 'b:ID' the bag it goes in this trip → { v, t }
+//           'add' for this trip only, 'b:ID' the bag it goes in this trip, 'l:ID' packed last this trip (true) or
+//           with the rest (false) over what My list says → { v, t }
 //   extras  things added for this trip only: { id: { name, bag, t, del? } }
 //   wx      the weather looked up for it (weather.js), the newest lookup wins. for: the place it was looked up
 //           for, so a lookup of a trip's old place, landing from another device, doesn't count for the new one.
@@ -88,13 +93,18 @@ export function cleanBag(x, id = x?.id) {
   });
 }
 
+// Packed last: { v, t } as saved, or true or false as a list or a change gives it, which takes the thing's own time.
+const cleanLast = (v, t) => (typeof v === 'boolean' ? { v, t } : v && typeof v === 'object' && typeof v.v === 'boolean' ? { v: v.v, t: tOk(v.t) } : null);
 export function cleanItem(x, id = x?.id) {
   const name = str(x?.name, 80);
   if (!name || !idOk(x.bag)) return null;
-  return rec(x, id, {
+  const out = rec(x, id, {
     name, bag: x.bag, order: numOk(x.order, -1e9, 1e9) ?? 0, when: keys(x.when), unless: keys(x.unless),
     qty: Math.round(numOk(x.qty, 1, 20) ?? 1), per: x.per === 'day' ? 'day' : '', note: str(x.note, 140),
   });
+  const last = out && cleanLast(x.last, out.t);
+  if (last) out.last = last;
+  return out;
 }
 
 export function cleanTag(x, id = x?.id) {
@@ -152,7 +162,7 @@ function cleanMap(x, clean, keyOk = idOk) {
   for (const [k, v] of Object.entries(obj(x))) { const c = keyOk(k) && clean(v, k); if (c) out[k] = c; }
   return out;
 }
-const markKey = k => /^[prxb]:/.test(k) && idOk(k.slice(2));
+const markKey = k => /^[prxbl]:/.test(k) && idOk(k.slice(2));
 const cleanExtra = (x, id) => {
   const name = str(x?.name, 80);
   if (!name || !idOk(x.bag)) return null;
@@ -250,7 +260,7 @@ export const pref = (doc, k, fallback) => doc.prefs[k]?.v ?? fallback;
 
 // Of two versions, the newer; on a tie, the one that sorts last, so every device picks the same.
 const newer = (x, y) => x.t > y.t || (x.t === y.t && canon(x) > canon(y));
-const details = x => { const o = { ...x }; delete o.del; for (const n of NESTED) delete o[n]; delete o.wx; return o; };
+const details = x => { const o = { ...x }; delete o.del; for (const n of NESTED) delete o[n]; delete o.wx; delete o.last; return o; };
 
 function mergeMap(a = {}, b = {}) {
   const out = {};
@@ -266,6 +276,8 @@ function mergeRec(x, y) {
   const out = { ...details(base) };
   for (const n of NESTED) if (x[n] || y[n]) out[n] = mergeMap(x[n], y[n]);
   if (x.wx || y.wx) out.wx = !x.wx ? y.wx : !y.wx ? x.wx : x.wx.at > y.wx.at || (x.wx.at === y.wx.at && canon(x.wx) > canon(y.wx)) ? x.wx : y.wx;
+  // A thing's packed last goes by its own time: a side without it (a copy from before it) doesn't take it away.
+  if (x.last || y.last) out.last = !x.last ? y.last : !y.last ? x.last : newer(x.last, y.last) ? x.last : y.last;
   const del = Math.max(x.del || 0, y.del || 0);
   if (del) out.del = del;
   return out;
@@ -561,7 +573,7 @@ function listDoc(list, t) {
   (list.items || []).forEach(it => {
     if (!doc.bags[it.bag]) return;
     counts[it.bag] = (counts[it.bag] || 0) + 1;
-    const x = cleanItem({ ...it, order: counts[it.bag], t }, it.id);
+    const x = cleanItem({ ...it, last: typeof it.last === 'object' ? it.last?.v : it.last, order: counts[it.bag], t }, it.id);
     if (x) doc.items[x.id] = x;
   });
   (list.tags || []).forEach((g, i) => { const x = cleanTag({ ...g, order: DEFAULT_TAGS.length + i, t }, g.id); if (x) doc.tags[x.id] = x; });
@@ -611,7 +623,11 @@ export function replaceList(doc, list) {
   let next = doc;
   for (const b of bags(doc)) if (!fresh.bags[b.id]) next = remove(next, 'bags', b.id);
   for (const x of items(doc)) if (!fresh.items[x.id]) next = remove(next, 'items', x.id);
-  const same = (old, x) => old && !gone(old) && old.t > 0 && canon({ ...old, t: 0 }) === canon({ ...x, t: 0 });
+  // A thing packed last here (or once) that the list coming in doesn't say so for is packed with the rest now, on
+  // every device: without a time of its own, another device's would stay.
+  for (const [id, x] of Object.entries(fresh.items)) if (!x.last && doc.items[id]?.last) fresh.items[id] = { ...x, last: { v: false, t: now } };
+  const flat = x => canon({ ...x, t: 0, last: !!x.last?.v });
+  const same = (old, x) => old && !gone(old) && old.t > 0 && flat(old) === flat(x);
   const take = (coll, from) => {
     const out = { ...next[coll] };
     for (const [id, x] of Object.entries(from)) if (!same(out[id], x)) out[id] = { ...x, t: Math.max(stamp(out[id]), now) };
@@ -633,7 +649,12 @@ export function undoReplace(doc, before, after) {
       const was = before[coll][id], cur = doc[coll][id];
       if (canon(was) === canon(after[coll][id]) || !cur) continue;
       const t = stamp(cur);
-      if (shown(coll, was)) { out[coll][id] = { ...was, t }; delete out[coll][id].del; } else out[coll][id] = { ...(was || cur), del: t };
+      if (shown(coll, was)) {
+        out[coll][id] = { ...was, t };
+        delete out[coll][id].del;
+        // Packed last as it was, newer than what the replace said.
+        if (was.last || cur.last) out[coll][id].last = { v: !!was.last?.v, t };
+      } else out[coll][id] = { ...(was || cur), del: t };
     }
   }
   return out;
@@ -656,7 +677,7 @@ export function addList(doc, list) {
     for (const it of its) {
       if (onList(it, b.kind)) continue;
       if (!bag) make();
-      next = putItem(next, { ...it, id: free('items', it.id, 'i'), bag, order: undefined });
+      next = putItem(next, { ...it, id: free('items', it.id, 'i'), bag, order: undefined, last: it.last?.v });
     }
     if (!its.length && !bag) make();
   }
@@ -673,7 +694,7 @@ export function listOf(doc) {
   const pick = (x, f) => Object.fromEntries(f.map(k => [k, x[k]]).filter(([, v]) => v !== '' && !(Array.isArray(v) && !v.length) && !(v === 1 && f.includes('qty'))));
   return {
     bags: bs.map(b => pick(b, ['id', 'name', 'icon', 'kind', 'when', 'unless', 'note'])),
-    items: bs.flatMap(b => items(doc, b.id)).filter(x => ids.has(x.bag)).map(x => pick(x, ['id', 'name', 'bag', 'when', 'unless', 'qty', 'per', 'note'])),
+    items: bs.flatMap(b => items(doc, b.id)).filter(x => ids.has(x.bag)).map(x => ({ ...pick(x, ['id', 'name', 'bag', 'when', 'unless', 'qty', 'per', 'note']), ...(x.last?.v ? { last: true } : {}) })),
     tags: tags(doc).filter(g => !DEFAULT_TAGS.some(d => d.id === g.id) || g.t > 0).map(g => pick(g, ['id', 'name', 'icon'])),
   };
 }
