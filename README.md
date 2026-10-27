@@ -5,11 +5,11 @@
 **A packing list that knows the trip.** Keep everything you might pack in one list, sorted by the bag it goes in. Each trip gets its own fresh copy, matched to the forecast, where you're going and what you'll be doing, so there's nothing to uncheck afterwards. When it's time to come home, a second pass makes sure nothing stays behind at the hotel.
 
 <p align="center">
-  <img src="docs/phone-trips.png" alt="The trips screen: luggage tags for Lisbon in 3 days, 7 of 50 packed, and Reykjavík in 46 days, with the temperatures and rain for each" width="200">
+  <img src="docs/phone-trips.png" alt="The trips screen: luggage tags for Lisbon in 3 days, 7 of 55 packed, and Reykjavík in 46 days, with the temperatures and rain for each" width="200">
   &nbsp;
   <img src="docs/phone-trip.png" alt="A trip to Lisbon in 3 days: the dates and nights on a boarding pass, five days of forecast with rain on Friday, and what the trip calls for: flying, abroad, different plugs, hot, rain, strong sun and work" width="200">
   &nbsp;
-  <img src="docs/phone-bags.png" alt="Packing the Electronics bag: phone charger and headphones ticked, and a plug adapter on the list because Portugal's sockets are type C and F at 230 volts" width="200">
+  <img src="docs/phone-bags.png" alt="Packing the Electronics bag: phone charger and headphones ticked, the power bank's note saying it goes in a carry-on, never a checked bag, and a plug adapter on the list because Portugal's sockets are type C and F at 230 volts" width="200">
   &nbsp;
   <img src="docs/phone-item.png" alt="Changing Sunscreen in My list: just one, in the Liquids bag, and only when the trip calls for hot weather, strong sun or swimming" width="200">
 </p>

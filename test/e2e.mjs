@@ -900,7 +900,7 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await tick('Floss').click();
   await page.locator('.bag', { hasText: 'Toiletries bag' }).locator('.bag-head .icon-btn').click();
   await page.click('text=It’s all packed already');
-  assert.equal(await said(), 'All 8 in the Toiletries bag are packed.');
+  assert.equal(await said(), 'All 9 in the Toiletries bag are packed.');
   await toastUndo(page);
   assert.deepEqual([await tick('Floss').getAttribute('aria-checked'), await tick('Razor').getAttribute('aria-checked')], ['true', 'false'], 'Undo puts back the ticks there were');
 
@@ -931,8 +931,8 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   assert.equal(await page.locator('.progress p').innerText(), 'All packed');
   await toastUndo(page);
   const [done, of] = (await page.locator('.progress p').innerText()).match(/^(\d+) of (\d+)/).slice(1).map(Number);
-  assert.equal(of - done, 7, 'all but Floss in the Toiletries bag unticked again, and nothing else');
-  assert.equal(await page.locator('.bag', { hasText: 'Toiletries bag' }).locator('.count .sr-only').textContent(), '1 of 8 packed');
+  assert.equal(of - done, 8, 'all but Floss in the Toiletries bag unticked again, and nothing else');
+  assert.equal(await page.locator('.bag', { hasText: 'Toiletries bag' }).locator('.count .sr-only').textContent(), '1 of 9 packed');
   await ctx.close();
 }
 
@@ -960,7 +960,7 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await page.waitForSelector('.pass h1');
   await until(async () => (await toasts()).length, 'what changed');
   assert.ok(calls.slice(lookups).some(c => c.startsWith('forecast')), 'after the new forecast');
-  assert.deepEqual(await toasts(), ['Reykjavík: Warm coat, Gloves and hat and Snow boots are on now; Sunscreen, Swimsuit, Sandals and 2 more are off.']);
+  assert.deepEqual(await toasts(), ['Reykjavík: Warm coat, Gloves and hat and Snow boots are on now; Sunscreen, Swimsuit, Sandals and 3 more are off.']);
   assert.ok(await row(page, 'Snow boots').count() && !(await row(page, 'Sunscreen').count()), 'as the list says');
   // Twenty words take longer to read than a short toast's three seconds.
   await wait(3500);
@@ -1613,17 +1613,17 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
 
   // The last thing in a bag: the tick shows where it was tapped, then the bag folds and the next one stays put.
   const docs = bag('Documents and money');
-  for (const n of ['Wallet', 'ID', 'Credit cards']) await row(page, n).locator('.tick').click();
+  for (const n of ['Wallet', 'Keys', 'ID', 'Credit cards']) await row(page, n).locator('.tick').click();
   await row(page, 'Health insurance card').evaluate(el => el.scrollIntoView({ block: 'center' }));
   const next = await top('Underwear');
   await tap('Health insurance card');
   assert.equal(await row(page, 'Health insurance card').locator('.tick').getAttribute('aria-checked'), 'true', 'ticked, and still there');
-  assert.match(await docs.locator('.count').innerText(), /4\/4/);
+  assert.match(await docs.locator('.count').innerText(), /5\/5/);
   assert.equal(await top('Underwear'), next, 'nothing moved yet');
-  await until(async () => /All 4 packed/.test(await docs.innerText()), 'the bag to fold', 3000);
+  await until(async () => /All 5 packed/.test(await docs.innerText()), 'the bag to fold', 3000);
   assert.ok(Math.abs((await top('Underwear')) - next) <= 2, `the next bag stayed put (${next} → ${await top('Underwear')})`);
   // Changing your mind in that moment: the bag waits for the last tap.
-  for (const n of ['Toothbrush', 'Hairbrush or comb', 'Nail clippers', 'Lip balm', 'Prescriptions']) await row(page, n).locator('.tick').click();
+  for (const n of ['Toothbrush', 'Hairbrush or comb', 'Nail clippers', 'Lip balm', 'Glasses or contacts', 'Prescriptions']) await row(page, n).locator('.tick').click();
   await row(page, 'Pain reliever').evaluate(el => el.scrollIntoView({ block: 'center' }));
   await tap('Pain reliever');
   await wait(300);
@@ -1632,15 +1632,15 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   await tap('Pain reliever');
   await wait(400);
   assert.equal(await row(page, 'Pain reliever').locator('.tick').getAttribute('aria-checked'), 'true');
-  assert.doesNotMatch(await bag('Toiletries bag').innerText(), /All 8 packed/, 'still open after the first tap’s moment');
-  await until(async () => /All 8 packed/.test(await bag('Toiletries bag').innerText()), 'the bag to fold');
+  assert.doesNotMatch(await bag('Toiletries bag').innerText(), /All 9 packed/, 'still open after the first tap’s moment');
+  await until(async () => /All 9 packed/.test(await bag('Toiletries bag').innerText()), 'the bag to fold');
   // From the keyboard, the bag's fold button takes the focus once it folds.
-  for (const n of ['Phone charger', 'Headphones', 'Laptop and charger', 'Watch charger']) await row(page, n).locator('.tick').click();
-  await row(page, 'Power bank').locator('.tick').focus();
+  for (const n of ['Phone charger', 'Headphones', 'Laptop and charger', 'Watch charger', 'Power bank']) await row(page, n).locator('.tick').click();
+  await row(page, 'Car charger').locator('.tick').focus();
   await page.keyboard.press('Space');
-  assert.equal(await page.evaluate(() => document.activeElement.closest('li')?.textContent), 'Power bank');
-  await until(async () => /All 5 packed/.test(await bag('Electronics').innerText()), 'the bag to fold');
-  assert.match(await page.evaluate(() => document.activeElement.textContent), /All 5 packed/, 'focus on the folded bag');
+  assert.equal(await page.evaluate(() => document.activeElement.closest('li')?.querySelector('.name').textContent), 'Car charger');
+  await until(async () => /All 6 packed/.test(await bag('Electronics').innerText()), 'the bag to fold');
+  assert.match(await page.evaluate(() => document.activeElement.textContent), /All 6 packed/, 'focus on the folded bag');
   // Everything packed: said once, when it happens.
   const toasts = () => page.evaluate(() => window.toasts);
   await page.evaluate(() => {
@@ -1685,7 +1685,7 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   const chips = page.locator('main .jump .chip');
   const bar = await page.locator('.bar').evaluate(el => el.offsetHeight);
   const atTop = name => until(async () => Math.abs((await page.locator('main .bag', { has: page.locator('h2', { hasText: new RegExp(`^${name}$`, 'i') }) }).boundingBox()).y - bar - 8) <= 1, `${name} under the top bar`);
-  assert.deepEqual(await chips.evaluateAll(cs => cs.map(c => c.getAttribute('aria-label'))), ['Liquids bag, 0 of 6 packed', 'Toiletries bag, 0 of 8 packed', 'Electronics, 0 of 5 packed', 'Documents and money, 0 of 4 packed', 'Clothes, 0 of 8 packed', 'Day bag, 0 of 4 packed', 'Leaving the house, 0 of 4 done']);
+  assert.deepEqual(await chips.evaluateAll(cs => cs.map(c => c.getAttribute('aria-label'))), ['Liquids bag, 0 of 6 packed', 'Toiletries bag, 0 of 9 packed', 'Electronics, 0 of 6 packed', 'Documents and money, 0 of 5 packed', 'Clothes, 0 of 8 packed', 'Day bag, 0 of 4 packed', 'Leaving the house, 0 of 4 done']);
   assert.equal(await chips.first().textContent(), '🧴0/6');
   assert.equal(await page.locator('main .jump').evaluate(el => el.previousElementSibling.className), 'progress', 'under the progress line');
   await chips.filter({ hasText: '👕' }).click();
@@ -1697,12 +1697,12 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   await page.locator('.bag', { hasText: 'Electronics' }).locator('.bag-head .icon-btn').click();
   await page.click('text=It’s all packed already');
   const electronics = chips.filter({ hasText: '🔌' });
-  assert.equal(await electronics.textContent(), '🔌5/5');
+  assert.equal(await electronics.textContent(), '🔌6/6');
   assert.equal(await electronics.locator('svg').count(), 1, 'with a check');
   await fits(page, 'the trip with its bag chips');
   // Coming home, in the order the bags come: the hotel checklist first.
   await page.click('text=Coming home');
-  assert.match(await chips.first().getAttribute('aria-label'), /^Leaving the hotel, 0 of 4 done$/);
+  assert.match(await chips.first().getAttribute('aria-label'), /^Leaving the hotel, 0 of 5 done$/);
   // My list: icons alone, named for a screen reader.
   await page.goto(base + '#/list');
   await page.waitForSelector('.bag.edit');

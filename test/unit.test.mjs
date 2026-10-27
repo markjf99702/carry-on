@@ -32,6 +32,27 @@ test('the starter list goes in untouched, in order', () => {
   assert.equal(M.items(doc, 's-clothes')[0].name, 'Underwear');
 });
 
+test('the starter list has the keys, the tickets, glasses, a neck pillow, a sun hat, a car charger and the hotel fridge', () => {
+  const doc = starter(), find = name => M.items(doc).find(x => x.name === name);
+  const at = name => [doc.bags[find(name).bag].name, find(name).when];
+  assert.deepEqual(at('Keys'), ['Documents and money', []]);
+  assert.deepEqual(at('Boarding pass or tickets'), ['Documents and money', ['fly', 'train']]);
+  assert.deepEqual(at('Glasses or contacts'), ['Toiletries bag', []]);
+  assert.deepEqual(at('Neck pillow'), ['Day bag', ['fly']]);
+  assert.deepEqual(at('Sun hat'), ['Clothes', ['hot', 'sun']]);
+  assert.deepEqual(at('Car charger'), ['Electronics', ['drive']]);
+  assert.deepEqual(at('The fridge and the hooks on the doors'), ['Leaving the hotel', []]);
+  assert.equal(find('Power bank').note, 'Carry-on only when flying, never a checked bag');
+  assert.equal(find('Prescriptions').note, 'In your carry-on when flying, in case a bag goes missing');
+  // A driving trip at home brings the car charger and leaves the tickets and the neck pillow.
+  let d = M.setPref(doc, 'home', 'US');
+  d = trip(d, { travel: 'drive', place: { name: 'Chicago', cc: 'US', country: 'United States' } });
+  const p = plan(d, d.trips.t1), all = allNames(p);
+  assert.ok(all.includes('Car charger') && all.includes('Keys'));
+  assert.ok(!all.includes('Boarding pass or tickets') && !all.includes('Neck pillow'));
+  assert.equal(p.groups.flatMap(g => g.rows).find(r => r.name === 'Power bank').note, 'Carry-on only when flying, never a checked bag');
+});
+
 test('a trip with no weather: always-things, the travel mode, and per-day counts', () => {
   let doc = starter();
   doc = M.setPref(doc, 'home', 'US');
