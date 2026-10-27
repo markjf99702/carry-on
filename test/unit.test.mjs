@@ -63,6 +63,36 @@ test('abroad: passport, and an adapter only where the plugs differ', () => {
   assert.ok(!allNames(p).includes('Plug adapter'), 'US plugs fit in Japan');
 });
 
+test('Puerto Rico, Guam, the US Virgin Islands and the Northern Mariana Islands count as home from the US, and the other way round', () => {
+  const go = (home, ...places) => {
+    let doc = trip(M.setPref(starter(), 'home', home), { place: places[0] });
+    if (places[1]) doc = M.putStop(doc, 't1', { place: places[1], from: add(T, 2) });
+    return plan(doc, doc.trips.t1);
+  };
+  const sanJuan = { name: 'San Juan', cc: 'PR', country: 'Puerto Rico' }, guam = { name: 'Hagåtña', cc: 'GU', country: 'Guam' };
+  const chicago = { name: 'Chicago', cc: 'US', country: 'United States' }, pagoPago = { name: 'Pago Pago', cc: 'AS', country: 'American Samoa' };
+  let p = go('US', sanJuan);
+  assert.equal(p.cond.auto.abroad, false);
+  assert.ok(!allNames(p).includes('Passport'), 'no passport for Puerto Rico');
+  assert.equal(p.cond.no.abroad, 'Puerto Rico counts as home');
+  // Its plugs are still its own country's, and they're the same.
+  assert.equal(p.cond.auto.plug, false);
+  assert.equal(p.cond.no.plug, 'Your plugs fit there');
+  for (const [home, place] of [['PR', chicago], ['GU', chicago], ['VI', sanJuan], ['MP', guam], ['US', { name: 'Charlotte Amalie', cc: 'VI', country: 'U.S. Virgin Islands' }]]) {
+    assert.equal(go(home, place).cond.auto.abroad, false, `${home} to ${place.cc}`);
+  }
+  // American Samoa runs its own entry checks.
+  p = go('US', pagoPago);
+  assert.equal(p.cond.auto.abroad, true);
+  assert.ok(allNames(p).includes('Passport'));
+  assert.equal(go('AS', chicago).cond.auto.abroad, true);
+  // Anywhere else is still abroad from them, and two places that both count as home say so.
+  assert.equal(go('PR', { name: 'Lisbon', cc: 'PT', country: 'Portugal' }).cond.auto.abroad, true);
+  assert.equal(go('DE', sanJuan).cond.auto.abroad, true);
+  assert.equal(go('US', sanJuan, guam).cond.no.abroad, 'Puerto Rico and Guam count as home');
+  assert.equal(go('US', chicago).cond.no.abroad, 'In your home country');
+});
+
 test('the first guess at home, from the browser’s languages', () => {
   const cases = [
     [['de'], 'DE'], [['fr'], 'FR'], [['ja'], 'JP'], [['zh-Hant-TW'], 'TW'], [['sr-Latn-RS'], 'RS'],

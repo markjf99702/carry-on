@@ -31,6 +31,13 @@ export function condInfo(doc, k) {
 }
 
 export const home = doc => M.pref(doc, 'home', '') || localCountry();
+// Places that count as home for each other, though each has its own country code. US citizens need no passport
+// between the US and Puerto Rico, Guam, the US Virgin Islands and the Northern Mariana Islands (USA.gov, "Do you
+// need a passport to travel to or from U.S. territories", updated 31 March 2026), and the minor outlying islands go
+// with them. American Samoa runs its own entry checks (a passport or a birth certificate), so it stays abroad.
+// Their plugs still go by their own country.
+const ONE_HOME = [['US', 'PR', 'GU', 'VI', 'MP', 'UM']];
+export const sameHome = (a, b) => a === b || ONE_HOME.some(g => g.includes(a) && g.includes(b));
 // °F at home where the weather is reported in it: the US and its territories, Palau, Micronesia, the Marshall
 // Islands and the Cayman Islands (Wikipedia, "Fahrenheit"), and Liberia.
 const FAHRENHEIT = ['US', 'PR', 'GU', 'VI', 'AS', 'MP', 'PW', 'FM', 'MH', 'KY', 'LR'];
@@ -91,12 +98,15 @@ export function conditions(doc, trip) {
   const u = units(doc), from = home(doc), ls = legDays(trip), multi = ls.length > 1;
   const auto = { [trip.travel]: true }, why = {}, no = {};
   why[trip.travel] = BY_KEY[trip.travel].name;
-  // At home only when every place is known to be.
-  const known = ls.filter(l => l.place?.cc), away = known.filter(l => l.place.cc !== from);
+  // At home only when every place is known to be. A place in another country that counts as home (Puerto Rico from
+  // the US) isn't abroad, but its plugs are its own.
+  const known = ls.filter(l => l.place?.cc), away = known.filter(l => !sameHome(from, l.place.cc));
   if (away.length || (known.length && known.length === ls.length)) {
     auto.abroad = away.length > 0;
-    const countries = [...new Map(away.map(l => [l.place.cc, l.place.country || countryName(l.place.cc)]))];
-    if (auto.abroad) why.abroad = and(countries.map(([, name]) => name));
+    const byCountry = list => [...new Map(list.map(l => [l.place.cc, l.place.country || countryName(l.place.cc)]))];
+    const countries = byCountry(known.filter(l => l.place.cc !== from));
+    if (auto.abroad) why.abroad = and(byCountry(away).map(([, name]) => name));
+    else if (countries.length) no.abroad = `${and(countries.map(([, name]) => name))} ${countries.length > 1 ? 'count' : 'counts'} as home`;
     else no.abroad = no.plug = 'In your home country';
     // An adapter for each country whose sockets your plugs don't fit, named when the trip goes to more than one.
     const plugs = countries.map(([cc, name]) => ({ name, p: plugsFor(from, cc) })).filter(x => x.p);

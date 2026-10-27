@@ -1473,7 +1473,10 @@ function settingsView() {
             clearTimeout(homeT);
             if (homeKeyed) homeT = setTimeout(render, 1000); else render();
           } }, countries.map(([cc, n]) => h('option', { value: cc, selected: cc === home }, n)))),
-      h('p', { class: 'muted small' }, homeSet ? 'Trips anywhere else count as abroad, and plug adapters are worked out from home’s plugs.' : 'Guessed from this browser’s language settings. Trips anywhere else count as abroad.')),
+      h('p', { class: 'muted small' }, homeSet ? '' : 'Guessed from this browser’s language settings. ',
+        // The US and its territories count as home for each other, apart from American Samoa.
+        R.sameHome(home, 'US') ? 'Trips outside the US and its territories count as abroad, and so does American Samoa.' : 'Trips anywhere else count as abroad.',
+        homeSet ? ' Plug adapters are worked out from home’s plugs.' : '')),
     h('section', { class: 'card' },
       h('h2', {}, 'Temperatures'),
       h('div', { class: 'seg', role: 'group', 'aria-label': 'Temperatures' },
