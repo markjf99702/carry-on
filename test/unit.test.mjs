@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as M from '../js/model.js';
-import { plan, conditions, qtyOf, units, grown, whyNot, passes, whenWords, bagComing, legs, legDays, occasionThings, recentPlaces, lastAdded } from '../js/rules.js';
+import { plan, conditions, qtyOf, units, grown, whyNot, passes, whenWords, bagComing, legs, legDays, occasionThings, recentPlaces, lastAdded, usedUp } from '../js/rules.js';
 import { summarize, stale, tripWeather, tripDays, placeKey, forecastEdge, dayIcon, dayWords, searchPlaces, uvEstimate } from '../js/weather.js';
 import { plugsFor, plugText, localCountry } from '../js/plugs.js';
 import { parsePaste, encodeList, decodeList, guess, bagIcon, bagKind, sortLoose } from '../js/share.js';
@@ -651,7 +651,7 @@ test('skipping, adding, moving, extras, and what shows coming home', () => {
   assert.ok(p.groups.flatMap(g => g.rows).find(r => r.name === 'Umbrella').packedOnly);
 });
 
-test('bought there: on a list of its own that isn’t packing', () => {
+test('bought there: on a list of its own that isn’t packing, and what a trip used up', () => {
   let doc = M.setPref(starter(), 'home', 'US');
   doc = trip(doc, { place: { name: 'Denver', cc: 'US' } });
   doc = M.putExtra(doc, 't1', { id: 'e1', name: 'Flowers for the hosts', bag: 's-daybag' });
@@ -676,6 +676,13 @@ test('bought there: on a list of its own that isn’t packing', () => {
   assert.deepEqual(p.buy.map(x => x.name), ['Flowers for the hosts']);
   // A copy of Carry On from before reads 'buy' as neither skip nor add, so the thing is on its list as usual.
   assert.equal(M.cleanTrip(doc.trips.t1).marks['x:e1'].v, 'buy');
+  // Coming home, what was used up: the things on My list marked Not bringing it back, in My list's order.
+  doc = M.mark(doc, 't1', 'r:s-toiletries-toothbrush', 2);
+  doc = M.mark(doc, 't1', 'r:s-liquids-toothpaste', 2);
+  doc = M.mark(doc, 't1', 'r:s-clothes-shoes', 1);
+  doc = M.mark(doc, 't1', 'r:e1', 2); // one trip only: nothing to buy again
+  assert.deepEqual(usedUp(doc, doc.trips.t1).map(x => x.name), ['Toothpaste', 'Toothbrush']);
+  assert.deepEqual(usedUp(M.removeItem(doc, 's-liquids-toothpaste'), doc.trips.t1).map(x => x.name), ['Toothbrush'], 'not what’s off My list since');
 });
 
 test('coming home lists what went, though it was deleted from My list since, alone or with its bag', () => {

@@ -364,6 +364,13 @@ export function plan(doc, trip, mode = 'go') {
   };
 }
 
+// What a trip used up: the things on My list marked Not bringing it back coming home, in My list's order, to buy
+// again before the next trip. [{ id, name, bag }], each with its bag.
+export function usedUp(doc, trip) {
+  const marks = trip.marks || {};
+  return M.bags(doc).filter(b => b.kind === 'bag').flatMap(b => M.items(doc, b.id).filter(x => marks['r:' + x.id]?.v === 2).map(x => ({ id: x.id, name: x.name, bag: b })));
+}
+
 // Ticks on too few: the mark keys of things ticked going whose count is higher in after than in before (a longer
 // trip, a higher laundry limit, a higher How many), so the tick stands for fewer than the list now asks for.
 export function grown(before, after, tripId) {

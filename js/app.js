@@ -579,6 +579,7 @@ function tripView(t) {
     p.last && !oneLine ? bagCard(t, p.last, mode, hide, c.why) : null,
     mode === 'go' && !oneLine ? jobs : null,
     p.buy.length ? buyThere(t, p.buy) : null,
+    usedUpList(t),
     p.left.length || p.leftBags.length ? leftOff(t, p.left, p.leftBags, mode) : null,
   ];
 }
@@ -604,6 +605,16 @@ function buyThere(t, list) {
         apply(d => M.mark(d, t.id, 'x:' + x.id, 0));
         saidWhere(t, x.id, x.name, 'go', () => apply(d => M.mark(d, t.id, 'x:' + x.id, 'buy')));
       } }, 'Pack it')))));
+}
+
+// A trip that's over: what it used up (Not bringing it back, coming home), to buy before the next one.
+function usedUpList(t) {
+  const list = t.end < today() ? R.usedUp(doc(), t) : [];
+  if (!list.length) return null;
+  return h('section', { class: 'aside' },
+    h('h2', {}, 'Used up: buy more before next time'),
+    h('ul', { class: 'rows' }, list.map(x => h('li', { class: 'row left-row' },
+      h('div', { class: 'what' }, h('span', { class: 'name' }, x.name), h('small', {}, `${x.bag.icon} ${x.bag.name}`))))));
 }
 
 // Packing keeps both hands busy, and a phone that locks itself between ticks wants Face ID or a passcode for the

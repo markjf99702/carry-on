@@ -2207,9 +2207,9 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   await ctx.close();
 }
 
-// ================= Buy it there =================
+// ================= Buy it there, and what a trip used up =================
 // From a thing's ⋯, Buy it there moves it to a short list at the foot of the trip that isn't packing; Pack it puts it
-// back.
+// back. A trip that's over lists what it used up, coming home, to buy before next time.
 {
   const { ctx, page } = await phone();
   await page.click('text=Start with a starter list');
@@ -2242,6 +2242,31 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   await page.click('#sheet >> text=Buy it there');
   assert.deepEqual(await buy.locator('.name').allInnerTexts(), ['Flowers for the hosts']);
   await fits(page, 'the trip with things to buy there');
+  // A trip that's over: what it used up.
+  await page.evaluate(() => {
+    const { store, M, D } = window.carryOn, t0 = D.today();
+    store.apply(d => {
+      let n = M.putTrip(d, { id: 'past1', place: { name: 'Denver', cc: 'US', country: 'United States' }, start: D.add(t0, -10), end: D.add(t0, -6), travel: 'fly' });
+      for (const k of ['s-toiletries-toothbrush', 's-liquids-toothpaste', 's-clothes-shoes']) n = M.mark(n, 'past1', 'p:' + k, 1);
+      n = M.mark(n, 'past1', 'r:s-toiletries-toothbrush', 1);
+      return M.mark(n, 'past1', 'r:s-clothes-shoes', 1);
+    });
+  });
+  await page.goto(base + '#/trip/past1');
+  await page.waitForSelector('.pass h1');
+  const used = page.locator('main .aside', { has: page.locator('h2', { hasText: 'Used up' }) });
+  assert.equal(await used.count(), 0, 'nothing used up yet');
+  await more(page, 'Toothpaste');
+  await page.click('#sheet >> text=Not bringing it back');
+  await page.locator('main .bag', { has: page.locator('h2', { hasText: 'Clothes' }) }).locator('.bag-done').click();
+  await more(page, 'Shoes');
+  await page.click('#sheet >> text=Not bringing it back');
+  assert.equal(await used.locator('h2').innerText(), 'USED UP: BUY MORE BEFORE NEXT TIME');
+  assert.deepEqual(await used.locator('.name').allInnerTexts(), ['Toothpaste', 'Shoes']);
+  assert.deepEqual(await used.locator('small').allInnerTexts(), ['🧴 Liquids bag', '👕 Clothes']);
+  // Going, too, on the same trip.
+  await page.click('text=Going');
+  assert.deepEqual(await used.locator('.name').allInnerTexts(), ['Toothpaste', 'Shoes']);
   await ctx.close();
 }
 
