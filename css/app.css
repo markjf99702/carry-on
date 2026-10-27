@@ -214,8 +214,9 @@ ul.chips .chip small { font-weight: 500; color: var(--muted); font-size: 13px; }
 .crumb svg { flex: none; width: 18px; height: 18px; }
 /* A long trip name on the way back from Edit trip stays on one line. */
 .crumb-name { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-/* The trip form's heading ("Lisbon again"), however long the name. */
+/* The trip form's heading ("Lisbon again"), however long the name, a little apart from the form. */
 main > h1 { overflow-wrap: anywhere; }
+main > h1 + .card { margin-top: 14px; }
 .lede { font-size: 17px; }
 .hint { margin: -4px 0 12px; }
 .danger-zone { margin: 26px 0 0; text-align: center; }
@@ -253,6 +254,10 @@ main > h1 { overflow-wrap: anywhere; }
 .tag-card .dates { font-weight: 600; }
 .tag-card .meter { margin: 10px 0 4px; background: color-mix(in srgb, var(--kraft-ink) 14%, transparent); }
 .tag-card .packed { font-size: 14px; font-weight: 600; }
+/* With nothing coming up: a blank tag, fainter, for the next trip. */
+.tag-card.blank { background: color-mix(in srgb, var(--kraft) 40%, transparent); box-shadow: none; }
+.tag-card.blank .where { font-weight: 600; }
+.tag-card .blurb { font-size: 15px; opacity: .8; }
 .meter { display: block; height: 6px; border-radius: 99px; background: var(--chip); overflow: hidden; }
 .meter i { display: block; height: 100%; border-radius: inherit; background: var(--ok); transition: width .25s; }
 

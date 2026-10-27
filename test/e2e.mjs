@@ -986,6 +986,41 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await ctx.close();
 }
 
+// ================= Empty states =================
+// With nothing coming up, Trips shows a blank luggage tag to plan the next trip from, under the one Plan a trip at
+// the top. Plan a trip's heading stands clear of its form, and a new bag in My list says it's empty.
+{
+  const { ctx, page } = await phone();
+  await page.click('text=Start with a starter list');
+  const blank = page.locator('.tag-card.blank');
+  await blank.waitFor();
+  assert.equal(await blank.getAttribute('href'), '#/new');
+  assert.equal(await blank.locator('h2').innerText(), 'WHERE TO?');
+  assert.match(await blank.innerText(), /^YOUR NEXT TRIP\nWHERE TO\?\nNo trips yet\.\nPlan one and Carry On makes its list/);
+  assert.equal(await page.locator('main a', { hasText: 'Plan a trip' }).count(), 1, 'one Plan a trip, at the top');
+  // Only trips that are over: nothing coming up.
+  await page.evaluate(() => { const { store, M, D, render } = window.carryOn; store.apply(d => M.putTrip(d, { id: 'old', place: null, start: D.add(D.today(), -9), end: D.add(D.today(), -5), travel: 'fly', name: 'Last time' })); render(); });
+  assert.match(await blank.innerText(), /Nothing coming up\./);
+  await blank.click();
+  await page.waitForSelector('#where');
+  const gap = await page.evaluate(() => document.querySelector('main > .card').getBoundingClientRect().top - document.querySelector('main > h1').getBoundingClientRect().bottom);
+  assert.ok(gap >= 12, `the heading and the form apart (${gap} px)`);
+  // A new bag, with nothing in it yet.
+  await page.goto(base + '#/list');
+  await page.click('text=Add a bag or a list of jobs');
+  await page.fill('.sheet input[type="text"]', 'Camera bag');
+  await page.click('.sheet .btn.primary');
+  const bag = page.locator('.bag.edit', { hasText: 'Camera bag' });
+  await bag.waitFor();
+  assert.equal(await bag.locator('.rows').count(), 0);
+  assert.equal(await bag.locator('.bag-empty').innerText(), 'Nothing in it yet.');
+  await bag.locator('.add-row input').fill('Spare battery');
+  await bag.locator('.add-row button').click();
+  await bag.locator('.rows .name', { hasText: 'Spare battery' }).waitFor();
+  assert.equal(await bag.locator('.bag-empty').count(), 0);
+  await ctx.close();
+}
+
 // ================= A pasted list =================
 {
   const { ctx, page } = await phone();
