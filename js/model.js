@@ -479,6 +479,7 @@ export function putTag(doc, fields) {
   return put(doc, 'tags', cleanTag, { ...fields, order: fields.order ?? order, id });
 }
 export const removeTag = (doc, id) => remove(doc, 'tags', id);
+export const restoreTag = (doc, id) => restore(doc, 'tags', id);
 
 export function putTrip(doc, fields) {
   const id = fields.id || newId('t');

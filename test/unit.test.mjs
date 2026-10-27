@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as M from '../js/model.js';
-import { plan, conditions, qtyOf, units, grown, whyNot, passes, whenWords, bagComing, legs, legDays, occasionThings, recentPlaces, lastAdded, usedUp, textGroups } from '../js/rules.js';
+import { plan, conditions, qtyOf, units, grown, whyNot, passes, whenWords, bagComing, legs, legDays, occasionThings, onlyFor, recentPlaces, lastAdded, usedUp, textGroups } from '../js/rules.js';
 import { summarize, stale, tripWeather, tripDays, placeKey, forecastEdge, dayIcon, dayWords, searchPlaces, uvEstimate } from '../js/weather.js';
 import { plugsFor, plugText, localCountry } from '../js/plugs.js';
 import { parsePaste, encodeList, decodeList, guess, bagIcon, bagKind, sortLoose, listText } from '../js/share.js';
@@ -326,6 +326,18 @@ test('what came only for an occasion deleted since stays home, on every trip, an
   assert.deepEqual(p.leftBags.filter(l => l.bag.id === 'b-golf').map(l => [l.count, l.why]), [[1, 'Only for wedding (deleted)']]);
   assert.equal(whenWords(gone, ['o-wed', 'hot']), 'when it’s hot');
   assert.equal(whenWords(gone, ['o-wed', 'o-gone']), 'for wedding (deleted)', 'a key with nothing here isn’t named');
+  // What deleting it would keep home, as Delete asks: not what has another way in, nor what's in a bag that does.
+  const names = x => (x.bag ? x.bag.name : x.item.name);
+  let more = M.putItem(doc, { id: 'i-ring', name: 'Ring', bag: 'b-golf', when: ['o-wed'] });
+  more = M.putItem(more, { id: 'i-shoes', name: 'Dress shoes', bag: 's-clothes', when: ['o-wed', 'o-old'] });
+  more = M.removeTag(M.putTag(more, { id: 'o-old', name: 'Gala' }), 'o-old');
+  assert.deepEqual(onlyFor(more, 'o-wed').map(names), ['Suit', 'Dress shoes', 'Golf bag']);
+  assert.deepEqual(onlyFor(more, 'swim'), []);
+  // Undo brings the occasion back, picked on the trip as it was, on every device.
+  later();
+  const back = M.restoreTag(gone, 'o-wed');
+  assert.ok(['Suit', 'Tie', 'Clubs'].every(n => allNames(plan(back, back.trips.t1)).includes(n)));
+  for (const m of [M.mergeDocs(gone, back), M.mergeDocs(back, gone)]) assert.ok(!M.gone(m.tags['o-wed']));
 });
 
 test('each day’s picture has words for a screen reader', () => {

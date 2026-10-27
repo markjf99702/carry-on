@@ -1608,6 +1608,18 @@ function bagEditor(b, { then = null } = {}) {
   }, { wide: true });
 }
 
+// What Delete asks on its first tap: what comes only for the occasion, which stays home once it's gone. "Delete it?
+// 2 things and the Golf bag only come for it"
+function occasionAsk(g) {
+  const only = R.onlyFor(doc(), g.id);
+  if (!only.length) return 'Tap again to delete';
+  const things = only.filter(x => x.item).length, bs = only.filter(x => x.bag).map(x => x.bag), jobs = bs.filter(b => b.kind !== 'bag').length;
+  const parts = [[things, 'thing'], ...(bs.length > 2 ? [[bs.length - jobs, 'bag'], [jobs, 'list of jobs', 'lists of jobs']] : [])]
+    .filter(([n]) => n).map(([n, one, many]) => plural(n, one, many));
+  if (bs.length <= 2) parts.push(...bs.map(theBag));
+  return `Delete it? ${cap(andList(parts))} only ${only.length === 1 ? 'comes' : 'come'} for it`;
+}
+
 // An occasion: its name and icon, and what comes along for it and stays home for it, each to tap and change, with a
 // way to add a thing that comes only for it. Just added (added), it opens again saying so, ready for those things.
 // focus: the key of the thing to put the focus on, coming back from it.
@@ -1646,7 +1658,11 @@ function tagEditor(g, { added = false, focus = '' } = {}) {
         stays.length ? [h('h3', {}, 'Stays home for it'), things(stays)] : null,
       ],
       h('div', { class: 'sheet-actions' },
-        isNew ? null : h('button', { type: 'button', class: 'btn danger-quiet', onclick: () => { close(); apply(d => M.removeTag(d, g.id)); toast(`${g.name} deleted.`); } }, 'Delete'),
+        isNew ? null : confirmBtn('Delete', occasionAsk(g), () => {
+          close();
+          apply(d => M.removeTag(d, g.id));
+          toast(`${g.name} deleted.`, { label: 'Undo', run: () => apply(d => M.restoreTag(d, g.id)) });
+        }, 'btn danger-quiet'),
         h('button', { type: 'button', class: 'btn primary', onclick: save }, isNew ? 'Add it' : 'Save')),
     ];
   }, { wide: !isNew });

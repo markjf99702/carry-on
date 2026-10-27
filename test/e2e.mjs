@@ -1669,9 +1669,24 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   await page.goto(base + '#/trip/wed');
   await page.waitForSelector('.pass h1');
   for (const n of ['Suit', 'Tie', 'Clubs']) assert.equal(await row(page, n).count(), 1, `picked, it brings ${n}`);
-  await page.evaluate(() => { const { store, M } = window.carryOn; store.apply(d => M.removeTag(d, 'o-wed')); });
+  // Delete asks first, saying what comes only for it, and can be undone.
   await page.goto(base + '#/list');
   const said = async name => (await page.locator('main .edit-row', { has: page.locator('.name', { hasText: new RegExp(`^${name}$`) }) }).innerText()).replace(/\s+/g, ' ');
+  const del = async () => {
+    await page.click('[data-key="occ:o-wed"]');
+    await until(() => sheetOpen(page), 'the occasion');
+    await page.click('.sheet .btn.danger-quiet');
+    assert.equal(await page.locator('.sheet .btn.danger-quiet').innerText(), 'Delete it? 1 thing and the Golf bag only come for it');
+    await page.click('.sheet .btn.danger-quiet');
+    await until(async () => !(await sheetOpen(page)), 'the sheet to close');
+    assert.equal(await page.locator('main .chip', { hasText: 'Wedding' }).count(), 0);
+    assert.equal(await page.locator('#toast span').innerText(), 'Wedding deleted.');
+  };
+  await del();
+  await toastUndo(page);
+  assert.equal(await page.locator('main .chip', { hasText: 'Wedding' }).count(), 1, 'Undo brings it back');
+  assert.equal(await said('Suit'), 'Suit Only for 💍 wedding');
+  await del();
   assert.equal(await said('Suit'), 'Suit Only for 💍 wedding (deleted)');
   assert.equal(await said('Tie'), 'Tie Only for 👔 dressing up', 'what has another way in says that one');
   assert.equal(await said('Jeans'), 'Jeans', 'it no longer stays home for anything');

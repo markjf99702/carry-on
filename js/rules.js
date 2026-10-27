@@ -89,6 +89,18 @@ export function occasionThings(doc, k) {
   return out;
 }
 
+// What comes only for an occasion, so stays home on every trip once it's deleted: no other condition or occasion
+// brings it. A bag's things go with it, as in occasionThings. Each is { bag } or { item }.
+export function onlyFor(doc, k) {
+  const only = x => x.when.includes(k) && x.when.every(w => w === k || !condInfo(doc, w));
+  const out = [];
+  for (const b of M.bags(doc)) {
+    if (only(b)) out.push({ bag: b });
+    else for (const it of M.items(doc, b.id)) if (only(it)) out.push({ item: it });
+  }
+  return out;
+}
+
 // "about 5 days in 10", from a share of days (0 to 1); '' when it rounds to none.
 function inTen(share) {
   const n = Math.round(share * 10);
