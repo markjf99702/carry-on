@@ -601,3 +601,47 @@ main > h1 + .card { margin-top: 14px; }
   .sheet-top, .sheet-actions { position: static; }
   .sheet { scroll-padding: 8px; }
 }
+
+/* ---------- printed ----------
+   A trip on paper (app.js draws it with every bag and Left off open): black on white whatever the look on screen, no
+   buttons, the boarding pass as its heading, and the bags in two columns, none split across pages. A tick prints as a
+   check in its ring, as a printer leaves out the green fill behind it. The selector has the weight of the dark look's
+   in the one-file copy, which comes before it. */
+@media print {
+  @page { margin: 14mm; }
+  :root:not([data-theme="print"]) {
+    color-scheme: light;
+    --bg: #fff; --paper: #fff; --ink: #000; --muted: #444; --line: #999; --chip: #fff;
+    --accent-text: #000; --ok: #000; --ok-soft: #fff; --sky: #333; --shadow: none;
+  }
+  body { display: block; min-height: 0; font-size: 11pt; }
+  main { max-width: none; padding: 0; }
+  .bar, .jd-foot, .crumb, .toast, .sheet, .icon-btn, .seg, .switch, .jump, .wx, .needs, .hint, .add-extra, .trip-tools,
+  .bag-done, .progress .meter, .left-row .btn, .aside .btn, .left-head .small { display: none !important; }
+  .pass { margin: 0 0 8px; border-color: #000; break-inside: avoid; }
+  .pass-top { padding: 8px 12px 6px; }
+  .pass h1, .pass h1.wordy { font-size: 30px; }
+  .pass-row { padding: 6px 12px 8px; }
+  .pass-row::before, .pass-row::after { display: none; }
+  .stamp { font-size: 20px; }
+  .progress { display: block; margin: 0 0 8px; }
+  .trip-list { columns: 2; column-gap: 16px; }
+  .bag, .aside { break-inside: avoid; margin: 0 0 10px; border-radius: 8px; }
+  .bag.all { background: #fff; }
+  .bag-head { padding: 5px 10px; gap: 6px; }
+  .bag-head h2 { font-size: 15px; }
+  .bag-icon { font-size: 15px; }
+  .bag-note { padding: 4px 10px 0; font-size: 9pt; }
+  .rows { padding: 2px 0; }
+  .row { min-height: 0; break-inside: avoid; }
+  .tick { min-height: 0; padding: 3px 10px; gap: 8px; }
+  .tick .box { width: 15px; height: 15px; border: 1.5px solid #000; }
+  .tick .box svg { width: 11px; height: 11px; }
+  .row.done .box, .row.gone .box { background: none; border-color: #000; color: #000; }
+  .what small { font-size: 8.5pt; }
+  .left { margin: 0; border: 0; }
+  .left-title, .aside h2 { font-size: 14px; color: #000; }
+  .left-head { padding: 4px 0 6px; }
+  .left .rows, .aside .rows { border-radius: 8px; }
+  .left-row { min-height: 0; padding: 3px 10px; }
+}

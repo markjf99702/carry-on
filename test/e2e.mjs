@@ -2301,6 +2301,48 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   await ctx.close();
 }
 
+// ================= Print a trip =================
+// Printed, a trip has no buttons, every bag open whatever Hide done says, ticks that print as checks, Left off open,
+// and its bags in two columns; afterwards it's as it was.
+{
+  const { ctx, page } = await phone();
+  await page.click('text=Start with a starter list');
+  await planTrip(page, { where: 'Lisb', from: 3, to: 7 });
+  await page.evaluate(() => {
+    const { store, M, R, render } = window.carryOn, t = Object.values(store.doc.trips)[0], p = R.plan(store.doc, t, 'go');
+    store.apply(d => M.markAll(d, t.id, p.groups.find(g => g.bag.name === 'Liquids bag').rows.map(r => r.key), 1));
+    store.apply(d => M.mark(d, t.id, 'p:s-clothes-shoes', 1));
+    store.hide = true;
+    render();
+  });
+  const liquids = page.locator('main .bag', { has: page.locator('h2', { hasText: 'Liquids bag' }) });
+  await until(async () => (await liquids.locator('.bag-done').count()) === 1, 'the Liquids bag to fold');
+  assert.equal(await row(page, 'Shoes').count(), 0, 'Hide done hides the shoes');
+  assert.equal(await page.locator('main .left .row').count(), 0, 'Left off closed');
+  await page.emulateMedia({ media: 'print' });
+  await page.evaluate(() => dispatchEvent(new Event('beforeprint')));
+  assert.equal(await liquids.locator('li.row.done').count(), await liquids.locator('li.row').count(), 'a bag all packed prints open');
+  assert.ok(await liquids.locator('li.row').count() > 5);
+  assert.equal(await row(page, 'Shoes').count(), 1, 'what Hide done hides prints');
+  assert.ok(await page.locator('main .left .row').count() > 0, 'Left off prints open');
+  assert.equal(await page.locator('main .bag-done').count(), 0);
+  for (const sel of ['.bar', 'main .icon-btn', 'main .seg', 'main .switch', 'main .jump', 'main .add-extra', 'main .trip-tools', 'main .wx', 'main .needs', '.jd-foot']) {
+    assert.equal(await page.locator(sel).evaluateAll(els => els.filter(e => e.checkVisibility()).length), 0, `${sel} doesn't print`);
+  }
+  assert.equal(await page.locator('main .trip-list').evaluate(el => getComputedStyle(el).columnCount), '2');
+  assert.equal(await liquids.evaluate(el => getComputedStyle(el).breakInside), 'avoid');
+  // A tick prints as a black check in its ring, with nothing behind it for the printer to leave out.
+  assert.deepEqual(await row(page, 'Shoes').locator('.box').evaluate(el => { const c = getComputedStyle(el); return [c.color, c.backgroundColor]; }), ['rgb(0, 0, 0)', 'rgba(0, 0, 0, 0)']);
+  await page.evaluate(() => dispatchEvent(new Event('afterprint')));
+  await page.emulateMedia({ media: 'screen' });
+  assert.equal(await liquids.locator('.bag-done').count(), 1, 'folded again');
+  assert.equal(await row(page, 'Shoes').count(), 0);
+  // The dark look prints black on white too.
+  await page.emulateMedia({ media: 'print', colorScheme: 'dark' });
+  assert.deepEqual(await page.evaluate(() => [getComputedStyle(document.body).backgroundColor, getComputedStyle(document.body).color]), ['rgb(255, 255, 255)', 'rgb(0, 0, 0)']);
+  await ctx.close();
+}
+
 // ================= From the keyboard =================
 {
   const { ctx, page } = await phone();

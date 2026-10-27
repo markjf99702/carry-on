@@ -305,6 +305,13 @@ function tagCard(t) {
     h('span', { class: 'packed' }, packedWords(p, mode).join('')));
 }
 
+// Printing (the browser's Print, or Share then Print on a phone): a trip is drawn for the paper first, every bag open
+// whatever Hide done says and Left off open, and drawn as it was afterwards. css/app.css has the rest: no buttons, two
+// columns, ticks that print. beforeprint and afterprint: Chrome 63, Safari 13, Firefox 6 (MDN browser compat data).
+let printing = false;
+addEventListener('beforeprint', () => { printing = true; render(); });
+addEventListener('afterprint', () => { printing = false; render(); });
+
 // ---------- weather lookups ----------
 
 // A lookup that failed waits a minute before the next try, so a redraw doesn't ask again at once. One that worked
@@ -512,14 +519,15 @@ function tripView(t) {
   // tapped. Unticking something opens them again, and Hide done goes while there's nothing left to hide.
   const allKey = `${t.id}:bags:${mode}`;
   if (!complete && store.isOpen(allKey)) store.setOpen(allKey, false);
-  const oneLine = complete && !linger.size && !store.isOpen(allKey);
+  // Printed, every bag shows.
+  const oneLine = !printing && complete && !linger.size && !store.isOpen(allKey);
   const n = D.nights(t.start, t.end);
   const onKeys = Object.keys(c.on).filter(k => c.on[k] && R.condInfo(doc(), k));
   const order = k => { const i = R.CONDITIONS.findIndex(x => x.k === k); return i < 0 ? 100 : i; };
   onKeys.sort((a, b) => order(a) - order(b));
   // Hide done hides nothing while everything is packed, once the moment after the last tick has passed: its switch
   // has gone, so the bags shown from the one line show what's in them, and anything can be unticked.
-  const hide = store.hide && !(complete && !linger.size);
+  const hide = !printing && store.hide && !(complete && !linger.size);
   const jobs = p.tasks.map(g => bagCard(t, g, mode, hide, c.why, true));
   return [
     h('a', { class: 'crumb', href: '#/' }, h('span', { html: ICONS.back }), 'Trips'),
@@ -572,15 +580,17 @@ function tripView(t) {
       render();
       main.querySelector('.bag [data-key]')?.focus({ preventScroll: true });
     } }, h('span', { html: ICONS.check }), h('span', {}, mode === 'go' ? `All ${p.total} packed` : 'All back in the bags', h('span', { class: 'muted' }, mode === 'go' ? ' · show the bags' : ' · show'))) : null,
-    mode === 'back' && !oneLine ? jobs : null,
-    oneLine ? null : p.groups.map(g => bagCard(t, g, mode, hide, c.why)),
-    M.bags(doc()).some(b => b.kind === 'bag') ? h('button', { type: 'button', class: 'btn add-extra', 'data-key': 'add-extra', onclick: () => extraSheet(t, null, { home: mode === 'back' }) }, h('span', { html: ICONS.plus }), mode === 'go' ? 'Add something for this trip' : 'Add something to bring home') : null,
-    // Going, what's still in use the night before, to pack on the way out, then the jobs before leaving the house.
-    p.last && !oneLine ? bagCard(t, p.last, mode, hide, c.why) : null,
-    mode === 'go' && !oneLine ? jobs : null,
-    p.buy.length ? buyThere(t, p.buy) : null,
-    usedUpList(t),
-    p.left.length || p.leftBags.length ? leftOff(t, p.left, p.leftBags, mode) : null,
+    // The list itself, which prints in two columns.
+    h('div', { class: 'trip-list' },
+      mode === 'back' && !oneLine ? jobs : null,
+      oneLine ? null : p.groups.map(g => bagCard(t, g, mode, hide, c.why)),
+      M.bags(doc()).some(b => b.kind === 'bag') ? h('button', { type: 'button', class: 'btn add-extra', 'data-key': 'add-extra', onclick: () => extraSheet(t, null, { home: mode === 'back' }) }, h('span', { html: ICONS.plus }), mode === 'go' ? 'Add something for this trip' : 'Add something to bring home') : null,
+      // Going, what's still in use the night before, to pack on the way out, then the jobs before leaving the house.
+      p.last && !oneLine ? bagCard(t, p.last, mode, hide, c.why) : null,
+      mode === 'go' && !oneLine ? jobs : null,
+      p.buy.length ? buyThere(t, p.buy) : null,
+      usedUpList(t),
+      p.left.length || p.leftBags.length ? leftOff(t, p.left, p.leftBags, mode) : null),
     // The whole trip, somewhere else.
     h('div', { class: 'trip-tools' },
       h('button', { type: 'button', class: 'btn small', 'data-key': 'copy-text', onclick: () => copyText(t, mode) }, 'Copy as text')),
@@ -733,7 +743,7 @@ function jumpTo(id) {
 function bagCard(t, g, mode, hide, why, jobs = false) {
   const b = g.bag, done = g.rows.filter(r => r.done).length, all = done === g.rows.length;
   const held = linger.has(mode + ':' + b.id);
-  const open = !all || held || store.isOpen(t.id + ':' + b.id);
+  const open = printing || !all || held || store.isOpen(t.id + ':' + b.id);
   const rows = g.rows.filter(r => !hide || !r.done || linger.has(r.key));
   const head = h('header', { class: 'bag-head' },
     h('span', { class: 'bag-icon', 'aria-hidden': 'true' }, b.icon),
@@ -748,7 +758,7 @@ function bagCard(t, g, mode, hide, why, jobs = false) {
     all && !open
       ? h('button', { type: 'button', class: 'bag-done', 'data-key': 'fold:' + b.id, onclick: () => { store.setOpen(t.id + ':' + b.id, true); render(); } }, jobs ? `All ${plural(g.rows.length, 'job')} done` : mode === 'go' ? `All ${g.rows.length} packed` : `All ${g.rows.length} back in`, h('span', { class: 'muted' }, ' · show'))
       : rows.length ? h('ul', { class: 'rows' }, rows.map(r => itemRow(t, g, r, mode, why, jobs, hide))) : h('p', { class: 'muted small pad' }, 'All done here.'),
-    all && open && !held ? h('button', { type: 'button', class: 'bag-done', 'data-key': 'fold:' + b.id, onclick: () => { store.setOpen(t.id + ':' + b.id, false); render(); } }, 'Fold it up') : null);
+    all && open && !held && !printing ? h('button', { type: 'button', class: 'bag-done', 'data-key': 'fold:' + b.id, onclick: () => { store.setOpen(t.id + ':' + b.id, false); render(); } }, 'Fold it up') : null);
 }
 
 function itemRow(t, g, r, mode, whyMap, jobs, hide) {
@@ -802,7 +812,7 @@ function itemRow(t, g, r, mode, whyMap, jobs, hide) {
 }
 
 function leftOff(t, left, leftBags, mode) {
-  const open = store.isOpen(t.id + ':left');
+  const open = printing || store.isOpen(t.id + ':left');
   // Packed, brought or put back: it says where on the list it went, since that's usually off screen.
   const put = (id, skipped, name) => {
     const was = t.marks?.['x:' + id]?.v;
