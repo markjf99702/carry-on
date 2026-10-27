@@ -7,7 +7,7 @@ import * as D from './days.js';
 import { store } from './store.js';
 import { drive } from './sync.js';
 import { starterList } from './starter.js';
-import { parsePaste, encodeList, decodeList, guess, bagIcon } from './share.js';
+import { parsePaste, encodeList, decodeList, guess, bagIcon, sortLoose } from './share.js';
 import { PLUGS, countryName } from './plugs.js';
 import { h, ICONS, toast, toastKeep, toastNext, sheet, closeSheet, setupSheet, confirmBtn, pressedKey, byKey } from './ui.js';
 
@@ -1499,12 +1499,16 @@ function added(was, now) {
 
 // Use a list that came in: add it to this one, or put it in this one's place (which Undo takes back).
 // back: from a paste, a way back to the pasted text. link: closing without choosing says the list wasn't added.
-function offerList(list, title, { back = null, link = false } = {}) {
+// A pasted list with things not in a bag can have them sorted into bags first (share.js sortLoose): the sheet is drawn
+// again with them sorted, so the preview shows where each one lands before anything comes in.
+function offerList(pasted, title, { back = null, link = false } = {}) {
   const has = M.hasList(doc());
-  let chose = false;
+  const sort = back ? sortLoose(pasted) : { placed: 0 };
+  const allLoose = !pasted.bags.some(b => b.kind === 'bag' && !isLoose(b));
+  let chose = false, sorted = false;
   // With no trips yet, the toast leads on to planning one. Undo comes first, after using a list instead of one.
   const onward = () => (M.trips(doc()).length ? undefined : { label: 'Plan a trip', run: () => go('#/new') });
-  const replace = close => {
+  const replace = (close, list) => {
     chose = true;
     close();
     let before = null;
@@ -1512,7 +1516,7 @@ function offerList(list, title, { back = null, link = false } = {}) {
     toast('Your list is in.', has ? { label: 'Undo', run: () => apply(d => M.undoReplace(d, before, done)) } : onward());
     go('#/list');
   };
-  const add = close => {
+  const add = (close, list) => {
     chose = true;
     close();
     let was = null;
@@ -1520,20 +1524,32 @@ function offerList(list, title, { back = null, link = false } = {}) {
     toast(added(was, now), onward());
     go('#/list');
   };
-  const occasions = list.tags.map(g => g.name);
-  sheet(title, close => [
-    link ? h('p', { class: 'muted small' }, 'It becomes your own copy on this phone. Change anything; theirs stays as it is. Their trips don’t come with it.') : null,
-    h('p', {}, listSummary(list)),
-    list.bags.length ? h('ul', { class: 'preview' }, list.bags.map(b => h('li', {}, h('span', { 'aria-hidden': 'true' }, b.icon), ' ', h('b', {}, b.name), ' ',
-      h('span', { class: 'muted' }, list.items.filter(x => x.bag === b.id).map(x => x.name).slice(0, 6).join(', ') + (list.items.filter(x => x.bag === b.id).length > 6 ? '…' : ''))))) : null,
-    occasions.length ? h('p', { class: 'small' }, occasions.length === 1 ? `With the occasion ${occasions[0]}` : `With ${occasions.length} occasions: ${occasions.join(', ')}`) : null,
-    back ? guessLine(list) : null,
-    h('div', { class: 'stack' },
-      has ? h('button', { type: 'button', class: 'btn primary', onclick: () => add(close) }, 'Add it to my list') : null,
-      h('button', { type: 'button', class: has ? 'btn' : 'btn primary', onclick: () => replace(close) }, has ? 'Use it instead of my list' : 'Use this list'),
-      has ? h('p', { class: 'muted small' }, 'Using it instead keeps your trips. Their ticks still count for things on both lists.') : null,
-      back ? h('button', { type: 'button', class: 'btn quiet', onclick: () => { chose = true; close(); back(); } }, 'Back') : null),
-  ], { wide: true, done: link ? () => { if (!chose) toast('That list wasn’t added. Open the link again to see it.'); } : undefined });
+  const draw = () => sheet(title, close => {
+    const list = sorted ? sort.list : pasted;
+    const occasions = list.tags.map(g => g.name);
+    return [
+      link ? h('p', { class: 'muted small' }, 'It becomes your own copy on this phone. Change anything; theirs stays as it is. Their trips don’t come with it.') : null,
+      h('p', {}, listSummary(list)),
+      // Only when the words can place something.
+      sort.placed ? [
+        h('label', { class: 'check sort' }, h('input', { type: 'checkbox', 'data-key': 'sort-loose', checked: sorted, onchange: e => { sorted = e.target.checked; draw(); } }),
+          h('span', {}, allLoose ? 'Sort them into bags for me' : 'Sort the things not in a bag into bags for me')),
+        sorted ? h('p', { class: 'muted small sort-said', role: 'status' }, sort.left
+          ? `${plural(sort.placed, 'thing')} sorted into bags. ${sort.left === 1 ? 'The other one stays' : `The other ${sort.left} stay`} in “Not in a bag”.`
+          : `All ${plural(sort.placed, 'thing')} sorted into bags.`) : null,
+      ] : null,
+      list.bags.length ? h('ul', { class: 'preview' }, list.bags.map(b => h('li', {}, h('span', { 'aria-hidden': 'true' }, b.icon), ' ', h('b', {}, b.name), ' ',
+        h('span', { class: 'muted' }, list.items.filter(x => x.bag === b.id).map(x => x.name).slice(0, 6).join(', ') + (list.items.filter(x => x.bag === b.id).length > 6 ? '…' : ''))))) : null,
+      occasions.length ? h('p', { class: 'small' }, occasions.length === 1 ? `With the occasion ${occasions[0]}` : `With ${occasions.length} occasions: ${occasions.join(', ')}`) : null,
+      back ? guessLine(list) : null,
+      h('div', { class: 'stack' },
+        has ? h('button', { type: 'button', class: 'btn primary', onclick: () => add(close, list) }, 'Add it to my list') : null,
+        h('button', { type: 'button', class: has ? 'btn' : 'btn primary', onclick: () => replace(close, list) }, has ? 'Use it instead of my list' : 'Use this list'),
+        has ? h('p', { class: 'muted small' }, 'Using it instead keeps your trips. Their ticks still count for things on both lists.') : null,
+        back ? h('button', { type: 'button', class: 'btn quiet', onclick: () => { chose = true; close(); back(); } }, 'Back') : null),
+    ];
+  }, { wide: true, done: link ? () => { if (!chose) toast('That list wasn’t added. Open the link again to see it.'); } : undefined });
+  draw();
 }
 
 async function takeLink(code) {

@@ -267,3 +267,53 @@ export function parsePaste(text) {
   full.sort((a, b) => rank(a) - rank(b));
   return { bags: full, items, tags: [] };
 }
+
+// ---------- sorting what's not in a bag ----------
+// A Google Keep checklist is usually one flat list, so it comes in as "Not in a bag". A small list of words can sort
+// it into the starter list's own bags, by their names and icons, so it lines up with the starter list, or with
+// another phone's, when the two meet. Each bag with the words that put a thing in it; the first that fits wins, so
+// contact lens solution goes in the Liquids bag before contacts go in the Toiletries bag, and hair ties in the
+// Toiletries bag before ties go in Clothes. (No lookbehind: see GUESSES.)
+const SORT = [
+  ['Liquids bag', '🧴', /shampoo|conditioner|toothpaste|sunscreen|sun ?block|\bspf\b|after.?sun|aloe|deodorant|face ?wash|cleanser|moisturi[sz]er|lotion|lens solution|saline|mouthwash|body ?wash|shower gel|\bsoap\b|hand sanitizer|perfume|cologne|hair ?(gel|spray|oil)|\bserum\b|makeup remover/i],
+  ['Toiletries bag', '🪥', /toothbrush|floss|razor|shaver|shaving|hair ?brush|\bcombs?\b|nail (clippers?|file)|tweezers|lip ?balm|chapstick|\bglasses\b|contacts\b|contact lenses|prescriptions?|medicines?|medications?|\bmeds\b|\bpills?\b|vitamins|pain reliever|ibuprofen|tylenol|advil|aspirin|retainer|band-?aids?|plasters|first aid|hair (ties?|clips?|bands?)|scrunchies?|bobby pins|makeup|tampons|\bpads\b|q-?tips|cotton (buds|swabs)/i],
+  ['Electronics', '🔌', /charger|charging|cables?\b|\bcords?\b|headphones|earbuds|airpods|laptop|tablet|\bipads?\b|\bphone\b|power ?bank|batter(y|ies)|adapter|converter|camera|\bgopro\b|speaker|hotspot|\busb\b/i],
+  ['Documents and money', '🛂', /passport|wallet|\bids?\b|driver.?s licen[cs]e|\bkeys?\b|credit cards?|debit cards?|bank cards?|\bcash\b|money|currency|tickets?|boarding pass|insurance card|\bvisa\b|itinerary|travel doc|reservations?/i],
+  ['Clothes', '👕', /socks?\b|underwear|boxers|briefs|\bbras?\b|undershirts?|t-?shirts?|\bshirts?\b|\btops?\b|blouses?|\bpants\b|trousers|jeans|shorts|leggings|skirts?|\bdress(es)?\b|pajamas|pyjamas|\bpjs\b|nightgown|shoes|sneakers|trainers|boots|sandals|flip.?flops|slippers|\bbelts?\b|swimsuit|swim ?trunks|bathing suit|bikini|jacket|\bcoats?\b|sweaters?|jumpers?|hoodies?|sweatshirts?|fleece|cardigans?|\bhats?\b|\bcaps?\b|beanie|gloves|mittens|scarf|scarves|\bsuits?\b|blazer|\bties?\b|heels|\bvests?\b|workout clothes|outfits?|clothes/i],
+  ['Day bag', '🎒', /sunglasses|snacks?\b|\bbooks?\b|e-?reader|kindle|water bottle|umbrella|eye ?mask|ear ?plugs|(neck|travel) pillow|\bgum\b|tissues|magazines?|crossword|puzzles?|journal|\bpens?\b|playing cards|bug spray|insect repellent|mints/i],
+];
+
+// Sorts a list's things not in a bag into those bags: one of the list's own with the same name ("Toiletries" is the
+// Toiletries bag) or, failing that, its only one with the same icon ("Attire" has the clothes' icon), or else a new
+// bag after the list's own. What none of the words fit stays in "Not in a bag", which goes once it's empty.
+// Returns { list, placed: how many were sorted, left: how many stay }.
+export function sortLoose(list) {
+  const loose = list.bags.find(b => b.kind === 'bag' && b.name.toLowerCase() === 'not in a bag');
+  const mine = loose ? list.items.filter(x => x.bag === loose.id) : [];
+  if (!mine.length) return { list, placed: 0, left: 0 };
+  const key = name => name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim().replace(/ (bag|kit|pouch|case)$/, '');
+  const own = list.bags.filter(b => b.kind === 'bag' && b !== loose);
+  const ids = new Set(list.bags.map(b => b.id));
+  const made = [], to = new Map();
+  const bagFor = (name, icon) => {
+    const same = own.find(b => key(b.name) === key(name)), icons = own.filter(b => b.icon === icon);
+    let bag = same || (icons.length === 1 ? icons[0] : made.find(b => b.name === name));
+    if (!bag) {
+      let id = 'b-' + slug(name), n = 2;
+      while (ids.has(id)) id = `b-${slug(name)}-${n++}`;
+      ids.add(id);
+      made.push(bag = { id, name, icon, kind: 'bag', when: [], unless: [], note: '' });
+    }
+    return bag;
+  };
+  for (const x of mine) {
+    const fit = SORT.find(([, , re]) => re.test(x.name));
+    if (fit) to.set(x.id, bagFor(fit[0], fit[1]).id);
+  }
+  const left = mine.length - to.size;
+  // The new bags in the starter list's order, where "Not in a bag" was.
+  made.sort((a, b) => SORT.findIndex(s => s[0] === a.name) - SORT.findIndex(s => s[0] === b.name));
+  const at = list.bags.indexOf(loose);
+  const bags = [...list.bags.slice(0, at), ...made, ...(left ? [loose] : []), ...list.bags.slice(at + 1)];
+  return { list: { ...list, bags, items: list.items.map(x => (to.has(x.id) ? { ...x, bag: to.get(x.id) } : x)) }, placed: to.size, left };
+}

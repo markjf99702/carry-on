@@ -1420,6 +1420,39 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   await ctx.close();
 }
 
+// ================= A flat pasted list, sorted into bags =================
+// A Google Keep checklist is one flat list. The offer can sort it into the starter list's bags; the preview shows where
+// each thing lands, and unticking puts it back as it was.
+{
+  const { ctx, page } = await phone();
+  await page.click('text=Paste my own list');
+  await page.fill('.sheet textarea', 'Toothbrush\nShampoo\nPhone charger\nPassport\nKeys\nSocks\nSunglasses\nKayak paddles');
+  await page.click('.sheet .btn.primary');
+  await until(async () => /Your pasted list/i.test(await page.locator('.sheet').innerText()), 'the preview');
+  const preview = () => page.locator('.sheet .preview li').allInnerTexts();
+  assert.deepEqual(await preview(), ['🧳 Not in a bag Toothbrush, Shampoo, Phone charger, Passport, Keys, Socks…']);
+  const box = page.locator('.sheet label.check', { hasText: 'Sort them into bags for me' }).locator('input');
+  await box.check();
+  assert.deepEqual(await preview(), ['🧴 Liquids bag Shampoo', '🪥 Toiletries bag Toothbrush', '🔌 Electronics Phone charger', '🛂 Documents and money Passport, Keys', '👕 Clothes Socks', '🎒 Day bag Sunglasses', '🧳 Not in a bag Kayak paddles']);
+  assert.equal(await page.locator('.sheet .sort-said').innerText(), '7 things sorted into bags. The other one stays in “Not in a bag”.');
+  assert.match(await page.locator('.sheet').innerText(), /6 bags and 8 things/);
+  assert.equal(await page.evaluate(() => document.activeElement.dataset.key), 'sort-loose', 'the focus stays on the box');
+  await fits(page, 'the sorted preview');
+  await box.uncheck();
+  assert.equal((await preview()).length, 1, 'unticked, as it was');
+  await box.check();
+  await page.click('text=Use this list');
+  await page.waitForSelector('.bag.edit');
+  assert.deepEqual(await page.locator('.bag.edit h2').allInnerTexts(), ['LIQUIDS BAG', 'TOILETRIES BAG', 'ELECTRONICS', 'DOCUMENTS AND MONEY', 'CLOTHES', 'DAY BAG', 'NOT IN A BAG']);
+  // A list already in bags has nothing to sort, so no box.
+  await page.click('text=Paste a list');
+  await page.fill('.sheet textarea', 'Toiletries:\n- Floss');
+  await page.click('.sheet .btn.primary');
+  await until(async () => /Your pasted list/i.test(await page.locator('.sheet').innerText()), 'the second preview');
+  assert.equal(await page.locator('.sheet label.check').count(), 0);
+  await ctx.close();
+}
+
 // ================= A link on a new phone =================
 {
   const { ctx, page } = await phone();

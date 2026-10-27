@@ -441,6 +441,9 @@ main > h1 + .card { margin-top: 14px; }
 .icon-pick { display: flex; flex-wrap: wrap; gap: 4px; }
 .icon-pick button { width: 42px; height: 42px; border: 1.5px solid transparent; border-radius: 10px; background: var(--chip); font-size: 22px; cursor: pointer; }
 .icon-pick button[aria-pressed="true"] { border-color: var(--ink); background: var(--paper); }
+/* A pasted list's choice to sort what's not in a bag, and what sorting did, over the preview. */
+.check.sort { margin: -4px 0 8px; }
+.sort-said { margin: -4px 0 12px; }
 .preview { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 6px; font-size: 14px; max-height: 40vh; overflow: auto; }
 
 /* ---------- the trip form ---------- */

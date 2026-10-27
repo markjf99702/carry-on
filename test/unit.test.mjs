@@ -7,7 +7,7 @@ import * as M from '../js/model.js';
 import { plan, conditions, qtyOf, units, grown, whyNot, passes, whenWords, bagComing, legs, legDays } from '../js/rules.js';
 import { summarize, stale, tripWeather, tripDays, placeKey, forecastEdge, dayIcon, dayWords, searchPlaces, uvEstimate } from '../js/weather.js';
 import { plugsFor, plugText, localCountry } from '../js/plugs.js';
-import { parsePaste, encodeList, decodeList, guess, bagIcon, bagKind } from '../js/share.js';
+import { parsePaste, encodeList, decodeList, guess, bagIcon, bagKind, sortLoose } from '../js/share.js';
 import { starterList } from '../js/starter.js';
 import { store } from '../js/store.js'; // in Node there's no localStorage, so it keeps the doc in memory only
 import { add, span, yearsBack, range, weekday, short, long, dayLong } from '../js/days.js';
@@ -1696,6 +1696,39 @@ test('pasted lists: blank-line blocks and ALL-CAPS headings, when nothing else m
   // The same text gives the same ids.
   const text = 'TOILETRIES\nToothbrush\n\nELECTRONICS\nCharger';
   assert.deepEqual(parsePaste(text), parsePaste(text));
+});
+
+test('a flat pasted list sorted into the starter list’s bags, by name and icon, and what fits none stays loose', () => {
+  const keep = parsePaste('Toothbrush\nFloss\nRazor\nShampoo\nToothpaste\nSunscreen\nPhone charger\nCables\nHeadphones\nPassport\nWallet\nID\nKeys\nSocks\nShirts\nShoes\nSunglasses\nSnacks\nBook\nKayak paddles\nContact lens solution\nContacts\nHair ties\nAddress book\niPads');
+  const { list, placed, left } = sortLoose(keep);
+  const inBags = l => l.bags.map(b => [b.icon, b.name, l.items.filter(x => x.bag === b.id).map(x => x.name)]);
+  assert.deepEqual(inBags(list), [
+    ['🧴', 'Liquids bag', ['Shampoo', 'Toothpaste', 'Sunscreen', 'Contact lens solution']],
+    ['🪥', 'Toiletries bag', ['Toothbrush', 'Floss', 'Razor', 'Contacts', 'Hair ties']],
+    ['🔌', 'Electronics', ['Phone charger', 'Cables', 'Headphones', 'iPads']],
+    ['🛂', 'Documents and money', ['Passport', 'Wallet', 'ID', 'Keys']],
+    ['👕', 'Clothes', ['Socks', 'Shirts', 'Shoes']],
+    ['🎒', 'Day bag', ['Sunglasses', 'Snacks', 'Book', 'Address book']],
+    ['🧳', 'Not in a bag', ['Kayak paddles']],
+  ]);
+  assert.deepEqual([placed, left], [24, 1]);
+  // The same names and icons as the starter list's bags, so it lines up with it: added to the starter list, the
+  // bags are its own, and only what's new comes in.
+  const starterBags = starterList().bags;
+  for (const b of list.bags.slice(0, -1)) assert.ok(starterBags.some(s => s.name === b.name && s.icon === b.icon), b.name);
+  const both = M.addList(starter(), list);
+  assert.equal(M.bags(both).length, M.bags(starter()).length + 1, 'only Not in a bag is new');
+  assert.ok(M.items(both, 's-electronics').some(x => x.name === 'Cables'));
+  // Guesses and counts stay with each thing; ids stay too.
+  assert.deepEqual(list.items.map(x => [x.id, x.when, x.per]), keep.items.map(x => [x.id, x.when, x.per]));
+  // A list with bags of its own: the things go in its bag of the same name, or its only one with the same icon.
+  const own = sortLoose(parsePaste('Toiletries:\n- Floss\nAttire:\n- Belt\n\nToothbrush\nSocks\nHeadphones'));
+  assert.deepEqual(inBags(own.list).map(([, n, its]) => [n, its]), [['Toiletries', ['Floss', 'Toothbrush']], ['Attire', ['Belt', 'Socks']], ['Electronics', ['Headphones']]]);
+  assert.equal(own.left, 0, 'Not in a bag goes once it’s empty');
+  // Nothing to sort, or nothing it knows: the list as it was.
+  const bagged = parsePaste('Toiletries:\n- Floss');
+  assert.equal(sortLoose(bagged).list, bagged);
+  assert.deepEqual([sortLoose(parsePaste('Kayak paddles\nFishing rod')).placed, sortLoose(parsePaste('Kayak paddles\nFishing rod')).left], [0, 2]);
 });
 
 test('guesses', () => {
