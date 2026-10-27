@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as M from '../js/model.js';
-import { plan, conditions, qtyOf, units, grown, whyNot, passes, whenWords, bagComing, legs, legDays, occasionThings } from '../js/rules.js';
+import { plan, conditions, qtyOf, units, grown, whyNot, passes, whenWords, bagComing, legs, legDays, occasionThings, recentPlaces } from '../js/rules.js';
 import { summarize, stale, tripWeather, tripDays, placeKey, forecastEdge, dayIcon, dayWords, searchPlaces, uvEstimate } from '../js/weather.js';
 import { plugsFor, plugText, localCountry } from '../js/plugs.js';
 import { parsePaste, encodeList, decodeList, guess, bagIcon, bagKind, sortLoose } from '../js/share.js';
@@ -1028,6 +1028,25 @@ test('stops merge one by one, and each one’s newest weather lookup wins', () =
   // A lookup that lands after its stop was taken off doesn't bring it back.
   const off = M.removeStop(y, 't1', 'sa');
   assert.equal(M.setStopWx(off, 't1', 'sa', lookup(PORTO, 300, 30)), off);
+});
+
+test('recent places: the latest trips’ places, each once, stops too, up to four', () => {
+  const place = (name, lat, lon) => ({ name, cc: 'US', country: 'United States', lat, lon });
+  const lake = place('Lake Placid', 44.28, -73.98), boston = place('Boston', 42.36, -71.06), nyc = place('New York', 40.71, -74.01);
+  let doc = starter();
+  assert.deepEqual(recentPlaces(doc), [], 'no trips, none');
+  doc = M.putTrip(doc, { id: 'a', start: '2025-07-01', end: '2025-07-08', place: lake });
+  doc = M.putTrip(doc, { id: 'b', start: '2026-03-02', end: '2026-03-06', place: boston });
+  doc = M.putStop(doc, 'b', { place: nyc, from: '2026-03-04' });
+  doc = M.putTrip(doc, { id: 'c', start: '2026-07-01', end: '2026-07-08', place: lake });
+  doc = M.putTrip(doc, { id: 'd', start: '2026-01-10', end: '2026-01-12', place: { name: 'Grandma’s', cc: '' } });
+  doc = M.putTrip(doc, { id: 'e', start: '2026-02-10', end: '2026-02-12' });
+  assert.deepEqual(recentPlaces(doc).map(p => p.name), ['Lake Placid', 'Boston', 'New York', 'Grandma’s'], 'the latest first, each once, a place typed in too, a trip with none skipped');
+  assert.deepEqual(recentPlaces(doc, 2).map(p => p.name), ['Lake Placid', 'Boston']);
+  assert.deepEqual(recentPlaces(M.removeTrip(doc, 'c')).map(p => p.name), ['Boston', 'New York', 'Grandma’s', 'Lake Placid'], 'a deleted trip’s go back to the order of the rest');
+  doc = M.putTrip(doc, { id: 'f', start: '2026-05-01', end: '2026-05-03', place: { ...lake, name: 'Lake Placid' } });
+  assert.equal(recentPlaces(doc, 9).filter(p => p.name === 'Lake Placid').length, 1, 'the same place on two trips, once');
+  assert.deepEqual(recentPlaces(doc)[0], M.cleanPlace(lake), 'the place as saved, ready to pick');
 });
 
 test('a trip’s days, place by place: from the night you get there to the day before the next stop', () => {

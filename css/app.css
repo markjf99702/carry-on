@@ -220,6 +220,9 @@ main > h1 { overflow-wrap: anywhere; }
 main > h1 + .card { margin-top: 14px; }
 .lede { font-size: 17px; }
 .hint { margin: -4px 0 12px; }
+/* Edit trip: another trip like this one. */
+.again-zone { margin: 22px 0 0; text-align: center; }
+.again-zone p { margin: 8px 0 0; }
 .danger-zone { margin: 26px 0 0; text-align: center; }
 .danger-zone p { margin: 8px 0 0; }
 
@@ -457,6 +460,9 @@ main > h1 + .card { margin-top: 14px; }
 .results li + li { border-top: 1px solid var(--line); }
 .results button { display: block; width: 100%; padding: 11px 12px; border: 0; background: var(--paper); text-align: left; cursor: pointer; overflow-wrap: anywhere; }
 @media (hover: hover) { .results button:hover { background: var(--chip); } }
+/* The latest trips' places, to pick with one tap while nothing's typed. */
+.recent { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+.recent[hidden] { display: none; }
 .where-status { margin: 4px 2px 0; }
 .where-status:empty { margin: 0; }
 /* Until home is set: the guess at it under Where to?, and its picker. */

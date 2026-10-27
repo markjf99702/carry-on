@@ -991,9 +991,13 @@ const NO_PLACES = 'No places by that name.';
 // q: what the search last answered for, searchErr), and a search that answers after a redraw shows on the box
 // that's on the page then (fd.draw).
 //   o: { id, help: the id of the line under it, another: the name of its Pick another place button, get(): the
-//        place picked, pick(place), asked(): whether a tap on Make my list has asked something }
+//        place picked, pick(place), asked(): whether a tap on Make my list has asked something, recent: places to
+//        pick with one tap while nothing's typed (the latest trips') }
 function placeBox(fd, o) {
   const where = h('div', { class: 'where-field' });
+  const recent = h('div', { class: 'recent' }, h('span', { class: 'small muted', id: o.id + '-recent' }, 'Recent:'),
+    h('ul', { class: 'chips', 'aria-labelledby': o.id + '-recent' }, (o.recent || []).map(p => h('li', {},
+      h('button', { type: 'button', class: 'chip', 'data-key': `recent:${o.id}:${p.lat ?? ''},${p.lon ?? ''}:${p.name}`, onclick: () => choose(p) }, W.placeLabel(p))))));
   const input = h('input', { type: 'search', id: o.id, value: fd.typed || '', placeholder: 'A city or town', autocomplete: 'off', enterkeyhint: 'search', 'aria-describedby': o.help || null });
   // A plain list of buttons, and a line under the box that says what the search found, which a screen reader reads out.
   const list = h('ul', { class: 'results', 'aria-label': 'Places' });
@@ -1010,6 +1014,7 @@ function placeBox(fd, o) {
     list.replaceChildren(...results.map(r => h('li', {}, h('button', { type: 'button', onclick: () => choose(r) },
       h('b', {}, r.name), ' ', h('span', { class: 'muted' }, [r.admin, r.country].filter(Boolean).join(', '))))));
     const typed = input.value.trim();
+    recent.hidden = !!input.value || !o.recent?.length;
     const failed = fd.searchErr && typed && fd.searchErr !== NO_PLACES;
     status.className = 'where-status small ' + (failed ? 'err' : 'muted');
     status.textContent = !typed ? '' : failed && single ? 'This copy can’t reach the weather service. Use what you typed and set the weather and abroad by hand, or open carry-on.junkdrawer.works for the forecast.'
@@ -1019,7 +1024,7 @@ function placeBox(fd, o) {
     if (typed && ((typed.length > 1 && fd.q === input.value) || o.asked())) list.append(h('li', {}, h('button', { type: 'button', onclick: () => choose({ name: input.value.trim(), admin: '', country: '', cc: '' }) }, `Use “${typed}” without looking it up`)));
     // Put back only when coming back from a picked place: taking the box out of the page, even to put it straight
     // back, takes the cursor out of it.
-    if (input.parentNode !== where) where.replaceChildren(input, status, list);
+    if (input.parentNode !== where) where.replaceChildren(input, recent, status, list);
   };
   const choose = r => { o.pick(r); fd.results = []; draw(); };
   fd.draw = draw;
@@ -1107,7 +1112,7 @@ function tripForm(t, again = false) {
   const changed = () => { if (dr.err) err(''); };
   const set = (k, v) => { st[k] = dr[k] = v; changed(); };
   const asked = () => !!dr.err;
-  const where = placeBox(dr.main, { id: 'where', help: 'whereHelp', another: 'Pick another place', get: () => st.place, pick: p => { set('place', p); addStop.hidden = !p; }, asked });
+  const where = placeBox(dr.main, { id: 'where', help: 'whereHelp', another: 'Pick another place', get: () => st.place, pick: p => { set('place', p); addStop.hidden = !p; }, asked, recent: R.recentPlaces(doc()) });
   // The stops after the first place: each a place and the night you get there, which comes after leaving and
   // before coming back.
   const stopsBox = h('div', { class: 'stops' });
@@ -1226,6 +1231,10 @@ function tripForm(t, again = false) {
       h('div', { class: 'field' }, h('label', { for: 'name' }, 'Name it ', h('span', { class: 'muted' }, '(if you like)')), nameIn),
       errBox,
       h('div', { class: 'actions' }, h('button', { type: 'button', class: 'btn primary big', onclick: save }, editing ? 'Save' : 'Make my list'))),
+    // A trip planned again from this one, now or later: Go again, as a past trip has on Trips.
+    editing ? h('div', { class: 'again-zone' },
+      h('a', { class: 'btn', href: `#/again/${t.id}` }, h('span', { html: ICONS.plus }), 'Plan another like this'),
+      h('p', { class: 'muted small' }, 'A new trip with the same place, getting there and occasions, on new dates.')) : null,
     editing ? h('div', { class: 'danger-zone' }, confirmBtn('Delete this trip', 'Tap again to delete it', () => {
       draft = null;
       store.apply(d => M.removeTrip(d, t.id));

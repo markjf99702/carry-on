@@ -536,6 +536,64 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await ctx.close();
 }
 
+// ================= Plan the next trip faster =================
+// Plan a trip offers the latest trips' places to pick with one tap, and a trip's Edit page plans another like it:
+// Go again, with the place, getting there and the occasions, and new dates.
+{
+  const { ctx, page } = await phone();
+  await page.click('text=Start with a starter list');
+  await page.click('text=Plan a trip');
+  await page.waitForSelector('#where');
+  assert.equal(await page.locator('.recent').isHidden(), true, 'no trips yet, no recent places');
+  await page.click('.crumb');
+  await planTrip(page, { where: 'Lisb', from: 3, to: 6, by: 'Train', on: ['Work'] });
+  const lisbon = page.url();
+  await page.click('.crumb');
+  await planTrip(page, { where: 'Chic', from: 20, to: 22, by: 'Driving' });
+  await page.click('.crumb');
+  await page.click('text=Plan a trip');
+  await page.waitForSelector('#where');
+  const recent = page.locator('.recent .chip');
+  assert.deepEqual(await recent.allInnerTexts(), ['Chicago, Illinois', 'Lisbon, Portugal'], 'the latest first');
+  assert.equal(await page.locator('.recent').evaluate(el => el.previousElementSibling.id), 'where', 'just under the box');
+  // Typing hides them; emptied, they're back.
+  await page.fill('#where', 'Tok');
+  assert.equal(await page.locator('.recent').isHidden(), true);
+  await page.fill('#where', '');
+  assert.equal(await page.locator('.recent').isHidden(), false);
+  await recent.filter({ hasText: 'Lisbon' }).click();
+  assert.equal(await page.locator('.picked').innerText(), 'Lisbon Lisbon District, Portugal');
+  // How you're getting there isn't remembered for a new trip: Flying, as always.
+  assert.equal(await page.locator('.form .seg button[aria-pressed="true"]').innerText(), '✈️ Flying');
+  await page.fill('#start', await day(page, 40));
+  await page.fill('#end', await day(page, 42));
+  await page.click('text=Make my list');
+  await page.waitForSelector('.pass h1');
+  assert.match(await page.locator('.needs').innerText(), /Abroad\s+Portugal/, 'the place as looked up, with its country');
+  // Plan another like this, from an upcoming trip's Edit page.
+  await page.goto(lisbon);
+  await page.waitForSelector('.pass h1');
+  await page.click('[aria-label="Edit this trip"]');
+  await page.click('text=Plan another like this');
+  await page.waitForSelector('h1:text-is("Lisbon again")');
+  assert.equal(await page.locator('.picked b').innerText(), 'Lisbon');
+  assert.equal(await page.locator('.form .seg button[aria-pressed="true"]').innerText(), '🚆 Train');
+  assert.deepEqual(await page.locator('.form .chip[aria-pressed="true"]').allInnerTexts(), ['💼 Work']);
+  assert.deepEqual([await page.inputValue('#start'), await page.inputValue('#end')], ['', ''], 'new dates');
+  await page.fill('#start', await day(page, 60));
+  await page.fill('#end', await day(page, 63));
+  await page.click('text=Make my list');
+  await page.waitForSelector('.pass h1');
+  assert.equal(await page.evaluate(() => window.carryOn.M.trips(window.carryOn.store.doc).filter(t => t.place?.name === 'Lisbon').length), 3);
+  // Not on a new trip's form, which has nothing to plan another of.
+  await page.click('.crumb');
+  await page.click('text=Plan a trip');
+  await page.waitForSelector('#where');
+  assert.equal(await page.locator('text=Plan another like this').count(), 0);
+  await fits(page, 'Plan a trip with recent places');
+  await ctx.close();
+}
+
 // ================= A trip with more than one stop =================
 {
   const { ctx, page } = await phone();

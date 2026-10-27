@@ -101,6 +101,23 @@ export function legs(trip) {
   for (const s of list) if (s.from !== out.at(-1).from) out.push({ id: s.id, place: s.place, from: s.from, wx: s.wx });
   return out.map((l, i) => ({ ...l, to: i + 1 < out.length ? add(out[i + 1].from, -1) : trip.end }));
 }
+// The places of the latest trips, the latest first, each once: a trip's own place, then its stops. Plan a trip offers
+// them to pick with one tap.
+export function recentPlaces(doc, n = 4) {
+  const out = [], seen = new Set();
+  const list = M.trips(doc).sort((a, b) => b.start.localeCompare(a.start) || b.t - a.t || a.id.localeCompare(b.id));
+  for (const t of list) {
+    for (const { place: p } of legs(t)) {
+      const k = !p ? '' : p.lat !== undefined ? `${p.lat},${p.lon}` : 'name:' + p.name.toLowerCase();
+      if (!k || seen.has(k)) continue;
+      seen.add(k);
+      out.push(p);
+      if (out.length === n) return out;
+    }
+  }
+  return out;
+}
+
 // Each leg with its saved days. Together they're the trip's weather.
 export const legDays = trip => legs(trip).map(l => ({ ...l, days: tripDays(l.wx, l.from, l.to, l.place) }));
 
