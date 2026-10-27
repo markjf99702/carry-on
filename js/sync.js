@@ -265,15 +265,17 @@ function card(host) {
   loadGis();
   host.hidden = false;
   let armed = false;
+  // A problem gets a red line of its own under the paragraph, as it does with Drive off, so it stands out.
   const line = () => status === 'busy' ? 'Syncing now.'
     : status === 'tap' ? 'Google signs you out after an hour. Tap <b>Sync now</b> to sign back in; your changes are safe here meanwhile.'
-      : status === 'error' ? esc(note)
+      : status === 'error' ? ''
         : st.last ? `Last synced ${ago(st.last)}.` : '';
   function draw() {
     if (!host.isConnected) return false; // the screen it was on has gone
     host.innerHTML = st.on
       ? `<h2>Saved to Google Drive</h2>
         <p>Your list and trips are saved to <b>${esc(st.email || 'your Google Drive')}</b>, in a folder called “Carry On”, and show up on every device where you turn this on. ${line()}</p>
+        ${status === 'error' && note ? `<p class="err">${esc(note)}</p>` : ''}
         <div class="row"><button class="btn" type="button" data-a="now"${status === 'busy' ? ' disabled' : ''}>Sync now</button>
         <button class="btn quiet" type="button" data-a="off">${armed ? 'Tap again to stop' : 'Stop saving on this device'}</button></div>`
       : `<h2>Save across devices</h2>

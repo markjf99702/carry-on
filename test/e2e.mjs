@@ -1689,6 +1689,26 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   await ctx.close();
 }
 
+// ================= A Google Drive problem stands out =================
+// A file in Drive that can't be read: the card says so in its own red line, not at the end of the paragraph about
+// where things are saved.
+{
+  const g = fakeGoogle();
+  const { ctx, page } = await phone({ google: g });
+  await page.click('text=Start with a starter list');
+  await page.goto(base + '#/settings');
+  await page.click('text=Save to Google Drive');
+  await until(async () => g.files().some(f => f.appProperties?.carryon === 'sync' && f.body), 'the file in Drive');
+  await until(async () => /Last synced/.test(await page.locator('.drive p').first().innerText()), 'Last synced');
+  assert.equal(await page.locator('.drive .err').count(), 0);
+  g.drive.files[g.files().find(f => f.appProperties?.carryon === 'sync').id].body = '{"not":"a list"}';
+  await page.click('text=Sync now');
+  await page.waitForSelector('#cloud[data-s="error"]');
+  assert.match(await page.locator('.drive p.err').innerText(), /^The file in your Drive isn’t readable, so it was left alone\./);
+  assert.doesNotMatch(await page.locator('.drive p').first().innerText(), /readable/, 'not in the paragraph above');
+  await ctx.close();
+}
+
 // ================= Two phones, one Google Drive =================
 {
   const g = fakeGoogle();
