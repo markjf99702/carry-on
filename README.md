@@ -33,7 +33,7 @@
 - **On every device, if you like.** Turn on Google Drive in Settings and the list, the trips, their ticks and your settings (home, °F or °C, laundry) are kept in a "Carry On" folder in your own Drive, merged thing by thing, so two phones can pack the same trip. Something deleted on one device goes from all of them, including one that turns Drive on later. A bag deleted on one while something new went into it on another stays, holding only that. Hide done, folded bags and whether a trip is showing Going or Coming home stay on each device, the last of those for the day it's picked: from its last day on, a trip opens on Coming home. Without Drive, everything stays in this browser.
 - No account and no server. It works offline once opened and installs to a phone's home screen.
 
-Weather and place search come from [Open-Meteo](https://open-meteo.com/). Looking up a trip sends each of its places, and its dates, there and nothing else. **Open in Google Calendar**, when tapped, sends Google the trip's name, its dates and its link. Plug types are from the IEC's list of world plugs. To stop Drive saving everywhere, remove junkdrawer.works under **Third-party apps & services** in your Google Account.
+Weather and place search come from [Open-Meteo](https://open-meteo.com/). Looking up a trip sends each of its places, and its dates, there and nothing else. **Open in Google Calendar**, when tapped, sends Google the trip's name (for a trip you didn't name, its first place, like Lisbon), its dates and its link. Plug types are from the IEC's list of world plugs. To stop Drive saving everywhere, remove junkdrawer.works under **Third-party apps & services** in your Google Account.
 
 ## Running it
 
