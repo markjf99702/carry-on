@@ -513,6 +513,12 @@ test('a forecast that can’t be updated keeps the last one for up to a day, and
     assert.equal(wx.err, `Couldn’t update the forecast; this one is from ${time(was)}.`);
     assert.deepEqual(stub.calls, ['forecast 2026-11-12 2026-11-15']);
   } finally { stub.restore(); }
+  // Too many lookups for the archive as well, on a trip that goes past the forecast: what's kept doesn't cover the
+  // trip, so the lookup fails as a whole and the last one stays, its typical days and all.
+  stub = weatherStub(now, () => ({ status: 429, reason: 'Daily API request limit exceeded. Please try again tomorrow.' }));
+  try {
+    await assert.rejects(tripWeather(PLACE, '2026-11-12', '2026-11-22', today, { now, prev: last(was) }), { message: 'The weather service has had too many lookups today. It tries again later.' });
+  } finally { stub.restore(); }
   // No connection at all: nothing new came back, so the lookup fails as a whole and the last one stays as it was.
   stub = weatherStub(now, () => new TypeError('Failed to fetch'));
   try {

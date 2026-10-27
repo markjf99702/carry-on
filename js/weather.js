@@ -195,13 +195,14 @@ export async function tripWeather(place, start, end, today, { signal, now = Date
   const gaps = fc.filter(k => !out[k]);
   if (gaps.length && !signal?.aborted) Object.assign(out, await typical(place, gaps, today, signal, errors));
   if (signal?.aborted) throw new DOMException('Stopped', 'AbortError');
-  const list = days.map(k => out[k]).filter(Boolean);
-  // Nothing new, and the weather service couldn't be reached at all (no connection, say): the last lookup stays as it
-  // is, and the page says why. One that answered with an error (busy, or a day's lookups used up) keeps its days.
-  if (!list.length || (list.length === kept && !fcErr.status)) throw fcErr || errors[0] || new Error('No weather came back for those days.');
+  const list = days.map(k => out[k]).filter(Boolean), missing = days.some(k => k >= first && !out[k]);
+  // Nothing new, and the weather service couldn't be reached at all (no connection, say), or what's kept doesn't
+  // cover the trip (typical weather past the forecast couldn't come either): the last lookup stays as it is, and the
+  // page says why. One that answered with an error (busy, or a day's lookups used up) keeps its days.
+  if (!list.length || (list.length === kept && (!fcErr.status || missing))) throw fcErr || errors[0] || new Error('No weather came back for those days.');
   const wx = { at: now, for: placeKey(place), days: list };
   if (kept) wx.fcAt = was;
-  const err = days.some(k => k >= first && !out[k]) ? SHORT.missing
+  const err = missing ? SHORT.missing
     : kept ? SHORT.kept(was, now) + (gaps.length ? SHORT.keptGaps : '')
       : fcErr ? SHORT.forecast : gaps.length ? SHORT.gaps : errors.length ? SHORT.years : '';
   if (err) wx.err = err;
