@@ -1036,6 +1036,8 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
     trip('mon', at('Mönchengladbach', 'DE'), 31);
     trip('cha', at('Charlottesville', 'US'), 32);
     trip('super', at('Lisbon', 'PT'), -20, 'Supercalifragilisticexpialidocious');
+    // A stop with a longer name still, which the route under the name, the tag and the reasons for the list all say.
+    store.apply(d => M.putStop(d, 'llan', { place: at('Llanfairpwllgwyngyllgogerychwyrndrobwllllantysiliogogogoch', 'GB'), from: D.add(t0, 31) }));
     render();
   });
   // How many lines a heading takes, and its size.
@@ -1060,8 +1062,17 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await page.setViewportSize({ width: 320, height: 640 });
   await page.goto(base + '#/');
   await page.waitForSelector('.past li');
-  await fits(page, 'Trips with a long name in Past trips');
+  await fits(page, 'Trips with a long name in Past trips and a long stop on a tag');
   assert.equal(await page.locator('.past .again').evaluate(el => el.getClientRects().length), 1, 'Go again on one line');
+  await page.goto(base + '#/trip/llan');
+  await page.waitForSelector('.pass h1');
+  await until(async () => (await page.locator('.wx-days:not(.wait) li').count()) > 0, 'the weather');
+  assert.match(await page.locator('.pass .sub').innerText(), /→ Llanfairpwllgwyngyllgogerychwyrndrobwllllantysiliogogogoch/);
+  await fits(page, 'A trip with a long stop');
+  await page.click('.needs .btn');
+  await until(() => sheetOpen(page), 'the sheet');
+  await fits(page, 'What this trip calls for, with a long stop');
+  await closeSheet(page);
   await page.goto(base + '#/again/super');
   await page.waitForSelector('main > h1');
   await fits(page, 'Go again with a long name');

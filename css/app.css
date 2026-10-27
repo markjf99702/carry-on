@@ -184,7 +184,7 @@ input:not([type="checkbox"]):focus, select:focus, textarea:focus { outline: none
 ul.chips li { display: flex; }
 ul.chips .chip.on { background: var(--paper); color: var(--ink); border-color: var(--line); align-items: flex-start; padding: 6px 12px; border-radius: 14px; text-align: left; }
 ul.chips .chip.on > span:last-child { display: grid; line-height: 1.2; }
-ul.chips .chip small { font-weight: 500; color: var(--muted); font-size: 13px; }
+ul.chips .chip small { font-weight: 500; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
 
 .seg { display: flex; padding: 3px; gap: 3px; border-radius: 12px; background: var(--chip); }
 .seg button {
@@ -252,6 +252,9 @@ main > h1 + .card { margin-top: 14px; }
 .tag-card h2 { font-size: 34px; font-size: clamp(20px, 100cqi / (var(--w, 8) * .5), 34px); line-height: 1; margin: 2px 0; overflow-wrap: anywhere; }
 .tag-card h2.wordy { font-size: 28px; font-size: clamp(20px, 100cqi / (var(--w, 8) * .5), 28px); }
 .tag-card .where:empty { display: none; }
+/* A route can hold a place name longer than the tag is wide (Llanfairpwllgwyngyll...): it breaks rather than
+   widening the page. */
+.tag-card .where { overflow-wrap: anywhere; }
 .tag-card .where, .tag-card .dates, .tag-card .glance { font-size: 15px; }
 .tag-card .dates { font-weight: 600; }
 .tag-card .meter { margin: 10px 0 4px; background: color-mix(in srgb, var(--kraft-ink) 14%, transparent); }
@@ -278,7 +281,7 @@ main > h1 + .card { margin-top: 14px; }
 /* Sized to its longest word, as on the tag: 46px for most names, down to 26px for the longest. */
 .pass h1 { font-size: 46px; font-size: clamp(26px, 100cqi / (var(--w, 8) * .5), 46px); line-height: .95; overflow-wrap: anywhere; }
 .pass h1.wordy { font-size: 34px; font-size: clamp(26px, 100cqi / (var(--w, 8) * .5), 34px); }
-.pass .sub { margin: 4px 0 0; color: var(--muted); font-weight: 600; }
+.pass .sub { margin: 4px 0 0; color: var(--muted); font-weight: 600; overflow-wrap: anywhere; }
 /* The notches either side of the tear line. */
 .pass-row { position: relative; display: grid; grid-template-columns: 1.3fr 1.3fr .7fr 1fr; gap: 8px; margin: 0; padding: 12px 18px 14px; }
 .pass-row::before, .pass-row::after { content: ''; position: absolute; top: -11px; width: 20px; height: 20px; border-radius: 50%; background: var(--bg); border: 1px solid var(--line); }
@@ -403,12 +406,12 @@ main > h1 + .card { margin-top: 14px; }
 .results { list-style: none; margin: 4px 0 0; padding: 0; border-radius: 10px; overflow: hidden; }
 .results:not(:empty) { border: 1px solid var(--line); }
 .results li + li { border-top: 1px solid var(--line); }
-.results button { display: block; width: 100%; padding: 11px 12px; border: 0; background: var(--paper); text-align: left; cursor: pointer; }
+.results button { display: block; width: 100%; padding: 11px 12px; border: 0; background: var(--paper); text-align: left; cursor: pointer; overflow-wrap: anywhere; }
 @media (hover: hover) { .results button:hover { background: var(--chip); } }
 .where-status { margin: 4px 2px 0; }
 .where-status:empty { margin: 0; }
 .picked { display: flex; align-items: center; gap: 8px; min-height: 46px; padding: 4px 4px 4px 12px; border: 1.5px solid var(--ok); border-radius: 10px; background: var(--ok-soft); }
-.picked > span { flex: 1; min-width: 0; }
+.picked > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 /* A trip's stops after its first place, each hung off a line, as on a route. */
 .stops { margin: -6px 0 16px; }
 .stop { margin: 0 0 12px 6px; padding: 2px 0 2px 14px; border-left: 3px solid var(--line); }
@@ -426,7 +429,7 @@ main > h1 + .card { margin-top: 14px; }
 /* The name and its reason take what's left, so every Auto/Yes/No stays in one column at the right. */
 .auto-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .auto-name { display: block; min-width: 0; }
-.auto-name small { display: block; color: var(--muted); font-size: 13px; }
+.auto-name small { display: block; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
 
 /* ---------- footer, toast and sheet ---------- */
 .jd-foot { padding: 0 16px calc(20px + env(safe-area-inset-bottom)); text-align: center; font-size: 14px; color: var(--muted); }
