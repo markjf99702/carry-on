@@ -1618,11 +1618,15 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
     store.apply(d => M.markAll(d, t.id, p.groups.concat(p.tasks).flatMap(g => g.rows).filter(r => r.name !== name).map(r => r.key), v));
     render();
   }, [mode, name, v]);
-  const line = page.locator('main .all-bags');
+  const line = page.locator('main .all-bags'), stamp = page.locator('.pass .stamp');
   await allBut('go', 'Shoes');
   assert.equal(await line.count(), 0);
   assert.equal(await page.locator('main .switch').count(), 1);
+  assert.equal(await stamp.count(), 0, 'not packed yet: no stamp');
   await row(page, 'Shoes').locator('.tick').click();
+  // A rubber stamp across the boarding pass, which a screen reader skips: "All packed" says it.
+  assert.equal(await stamp.innerText(), 'PACKED');
+  assert.equal(await stamp.getAttribute('aria-hidden'), 'true');
   const total = +(await page.locator('main .count .sr-only').allTextContents()).reduce((n, x) => n + +x.match(/of (\d+)/)[1], 0);
   assert.equal(await row(page, 'Shoes').count(), 1, 'the last tick shows where it was tapped');
   assert.equal(await page.locator('main .switch').count(), 0, 'nothing left to hide');
@@ -1641,12 +1645,19 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   await page.evaluate(() => { const { store, M, render } = window.carryOn, t = Object.values(store.doc.trips)[0]; store.apply(d => M.mark(d, t.id, Object.keys(t.marks).find(k => k.startsWith('p:')), 0)); render(); });
   assert.equal(await page.locator('main .switch').count(), 1);
   assert.ok(await page.locator('main .bag').count() > 1);
+  assert.equal(await stamp.count(), 0, 'no stamp once something is unticked');
   await allBut('go', '');
   assert.equal(await line.count(), 1, 'one line again');
+  // The luggage tag is stamped too.
+  await page.click('.crumb');
+  assert.equal(await page.locator('.tag-card .stamp').innerText(), 'PACKED');
+  await page.goBack();
+  await page.waitForSelector('.pass h1');
   // Coming home too.
   await page.click('text=Coming home');
   await allBut('back', '');
   assert.equal(await line.innerText(), 'All back in the bags · show');
+  assert.equal(await stamp.innerText(), 'HOME');
   await line.click();
   assert.equal(await page.locator('main .bag h2').first().innerText(), 'LEAVING THE HOTEL');
   await fits(page, 'the trip, all packed');
@@ -1907,7 +1918,11 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
     render();
   }, [rest, shoes]);
   await ticks(1, 0);
-  assert.deepEqual((await moves(shoes)).filter(m => m.startsWith('tick-pop')), ['tick-pop progress', 'tick-pop row done just']);
+  const finish = await moves(shoes);
+  assert.deepEqual(finish.filter(m => m.startsWith('tick-pop')), ['tick-pop progress', 'tick-pop row done just']);
+  // And thumps the stamp down on the boarding pass, once: a redraw after leaves it still.
+  assert.ok(finish.includes('stamp-thump'), `the stamp thumps down (${finish})`);
+  assert.deepEqual(await moves('() => window.carryOn.render()'), []);
   // With less motion asked for, nothing moves at all.
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await ticks(0, 0);

@@ -257,6 +257,10 @@ function whenText(t) {
   return t.start === D.add(t0, 1) ? 'Tomorrow' : `In ${plural(D.num(t.start) - D.num(t0), 'day')}`;
 }
 
+// A rubber stamp across a trip that's all packed, on its boarding pass and its luggage tag: PACKED, or coming home,
+// HOME. It's a picture of what the words beside it say, so a screen reader skips it.
+const stamp = (mode, thump = false) => h('span', { class: 'stamp' + (thump ? ' thump' : ''), 'aria-hidden': 'true' }, mode === 'go' ? 'Packed' : 'Home');
+
 function tagCard(t) {
   const t0 = today(), n = D.nights(t.start, t.end);
   const mode = tripMode(t), p = R.plan(doc(), t, mode), c = p.cond;
@@ -275,6 +279,7 @@ function tagCard(t) {
     h('span', { class: 'dates' }, `${D.span(t.start, t.end, t0.slice(0, 4))} · ${n ? plural(n, 'night') : 'day trip'} · ${R.CONDITIONS.find(x => x.k === t.travel).icon}`),
     w ? h('span', { class: 'glance' }, `${W.dayIcon(R.legDays(t).flatMap(l => l.days)[0])} ${W.temp(w.minLo, c.units)}–${W.temp(w.maxHi, c.units)}${w.rain ? ' · rain' + (w.rainDays.length ? ' likely' : ' some days') : ''}${w.snow ? ' · snow' : ''}`) : null,
     h('span', { class: 'meter', 'aria-hidden': 'true' }, meter(t.id + ':tag', p.done, p.total)),
+    p.done === p.total && p.total ? stamp(mode) : null,
     h('span', { class: 'packed' }, p.done === p.total && p.total ? (mode === 'go' ? 'All packed' : 'All back in the bags') : `${p.done} of ${p.total} ${mode === 'go' ? 'packed' : 'back in the bags'}`));
 }
 
@@ -467,11 +472,13 @@ function tripView(t) {
           fitted('h1', t),
           h('p', { class: 'sub' }, R.legs(t).length > 1 ? route(t) : t.place ? (t.name ? W.placeLabel(t.place) : W.placeLabel(t.place).split(', ').slice(1).join(', ')) || '\u00a0' : 'No place set')),
         h('a', { class: 'icon-btn', href: `#/edit/${t.id}`, 'aria-label': 'Edit this trip', title: 'Edit this trip', html: ICONS.edit })),
-      h('dl', { class: 'pass-row' },
+      // All packed, it's stamped across the tear line, and the stamp thumps down as the last thing is ticked.
+      h('div', { class: 'pass-foot' }, h('dl', { class: 'pass-row' },
         h('div', {}, h('dt', {}, 'Leave'), h('dd', {}, D.long(t.start))),
         h('div', {}, h('dt', {}, 'Back'), h('dd', {}, D.long(t.end))),
         h('div', {}, h('dt', {}, 'Nights'), h('dd', {}, String(n))),
-        h('div', {}, h('dt', {}, 'By'), h('dd', {}, R.CONDITIONS.find(x => x.k === t.travel).name)))),
+        h('div', {}, h('dt', {}, 'By'), h('dd', {}, R.CONDITIONS.find(x => x.k === t.travel).name))),
+      complete ? stamp(mode, finished) : null)),
     weatherStrip(t, c),
     h('section', { class: 'needs' },
       h('div', { class: 'needs-head' },

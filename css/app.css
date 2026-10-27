@@ -289,6 +289,23 @@ main > h1 + .card { margin-top: 14px; }
 .pass-row::after { right: -11px; }
 .pass-row dt { font: 700 12px var(--display); text-transform: uppercase; letter-spacing: .12em; color: var(--muted); }
 .pass-row dd { margin: 0; font-weight: 650; font-size: 15px; }
+/* All packed: a rubber stamp across the pass and the luggage tag, tilted, in the accent red. It thumps down once,
+   as the last thing is ticked (app.js marks it for that one redraw). */
+.stamp {
+  position: absolute; z-index: 1; pointer-events: none;
+  padding: 0 10px; border: 3px dashed currentColor; border-radius: 8px;
+  font: 700 26px/1.3 var(--display); text-transform: uppercase; letter-spacing: .1em; color: var(--accent-text);
+  transform: rotate(-8deg); opacity: .9;
+}
+.pass-foot { position: relative; }
+.pass .stamp { right: 18px; top: -21px; }
+.tag-card .stamp { right: 16px; bottom: 10px; font-size: 20px; padding: 0 8px; border-width: 2.5px; }
+.stamp.thump { animation: stamp-thump .4s cubic-bezier(.2, .8, .3, 1); }
+@keyframes stamp-thump {
+  0% { transform: rotate(-8deg) scale(2.2); opacity: 0; }
+  55% { transform: rotate(-8deg) scale(.94); opacity: .9; }
+  75% { transform: rotate(-8deg) scale(1.03); }
+}
 
 .wx { margin-bottom: 14px; }
 /* On a narrow screen, when it was updated drops under the heading, with its button, rather than squeezing it. */
