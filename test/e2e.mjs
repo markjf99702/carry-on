@@ -1099,7 +1099,7 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await page.locator('.sheet .chip', { hasText: /Working out$/ }).click();
   await wait(300);
   assert.equal((await toasts()).length, said, 'nothing said while the sheet is open');
-  await page.locator('.sheet .chip', { hasText: /Dressing up$/ }).first().click();
+  await page.locator('.sheet .chip', { hasText: /Dressing up$/ }).click();
   await closeSheet(page);
   // Said from the sheet's close event, which comes a moment after it's closed.
   await until(async () => (await toasts()).at(-1) === 'Reykjavík: Workout clothes and Something dressy are on now.', 'what changed in the sheet, on closing it');
