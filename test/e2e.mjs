@@ -695,15 +695,18 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await page.click('[aria-label="Edit this trip"]');
   assert.equal(await page.locator('.stop .picked b').innerText(), 'Paris');
   assert.equal(await page.inputValue('.stop input[type=date]'), await day(page, 6));
-  // Leave and Back moved by the same number of days, the stop moves with them; with only one moved, it keeps its
-  // night. One picked by hand stays as picked.
+  // Leave and Back both moved, the stop moves by as many days as Leave did, so London keeps its nights and Paris
+  // gains or loses any; with only one moved, or a trip too much shorter to move it, it keeps its night. One picked
+  // by hand stays as picked.
   const night = () => page.inputValue('.stop input[type=date]');
   await page.fill('#start', await day(page, 5));
   assert.equal(await night(), await day(page, 6), 'leaving two days later, Paris keeps its night');
   await page.fill('#end', await day(page, 11));
   assert.equal(await night(), await day(page, 8), 'the whole trip two days later: so is Paris');
   await page.fill('#end', await day(page, 12));
-  assert.equal(await night(), await day(page, 6), 'staying a night longer too: Paris’s own night again');
+  assert.equal(await night(), await day(page, 8), 'staying a night longer too: Paris still moves with Leave, and has the extra night');
+  await page.fill('#end', await day(page, 8));
+  assert.equal(await night(), await day(page, 6), 'back a day sooner: moved with Leave, Paris would start the night you’re back, so it keeps its own');
   await page.fill('#end', await day(page, 11));
   await page.click('button:text-is("Save")');
   await page.waitForSelector('.pass h1');

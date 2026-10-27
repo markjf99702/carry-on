@@ -1218,7 +1218,7 @@ function tripForm(t, again = false) {
   if (draft?.key !== key) {
     // The stops as the form opens: the trip's, or going again, the old trip's places, each to have its night again.
     // Those come from Leave once it's picked, as many nights in as last time (after), till one is picked by hand.
-    // Editing, each moves with the trip from the night it had (was), till one is picked by hand: see nights().
+    // Editing, each moves with Leave from the night it had (was), till one is picked by hand: see nights().
     const was = t ? M.stops(t).sort((a, b) => a.from.localeCompare(b.from) || a.id.localeCompare(b.id)) : [];
     const stops = was.map((s, i) => (editing ? { key: s.id, id: s.id, place: s.place, from: s.from, was: s.from, moves: true }
       : { key: 'n' + i, id: '', place: s.place, from: '', after: D.nights(t.start, s.from), auto: true }));
@@ -1243,12 +1243,16 @@ function tripForm(t, again = false) {
   // before coming back.
   const stopsBox = h('div', { class: 'stops' });
   const nightRange = x => { x.min = st.start ? D.add(st.start, 1) : ''; x.max = st.end ? D.add(st.end, -1) : ''; };
-  // Editing, when Leave and Back move by the same number of days (the trip pushed back a week), the stops move with
-  // them, as going again does; when only one moves (leaving a day early, staying longer), they keep their nights.
+  // Editing, when Leave and Back both move (the trip pushed back a week, or a week later and a night longer), the
+  // stops move by as many days as Leave did, as going again does: the first place keeps its nights and the last
+  // gains or loses any. When only one moves (leaving a day early, staying longer), or moving would put a stop
+  // outside the new dates (a much shorter trip), they keep their nights.
   const movedBy = () => {
     if (!dr.dates0 || !D.isDay(st.start) || !D.isDay(st.end)) return 0;
     const by = D.num(st.start) - D.num(dr.dates0[0]);
-    return by === D.num(st.end) - D.num(dr.dates0[1]) ? by : 0;
+    if (!by || D.num(st.end) === D.num(dr.dates0[1])) return 0;
+    const inside = s => { const at = D.add(s.was, by); return at > st.start && at < st.end; };
+    return dr.stops.every(s => !s.moves || inside(s)) ? by : 0;
   };
   const nights = () => {
     for (const s of dr.stops) if (s.auto && st.start) s.from = D.add(st.start, s.after);
