@@ -49,6 +49,7 @@ function render() {
   const [, page = '', id = ''] = hash.slice(1).split('/');
   const screen = page + '/' + id, moved = screen !== current;
   if (moved) {
+    if (awake.trip && !(page === 'trip' && decodeURIComponent(id) === awake.trip)) letSleep();
     if (shownTrip) scrolls.set(shownTrip, tripY);
     shownTrip = '';
     draft = null; packedSeen = null; linger.clear(); clearTimeout(lingerT); lingerT = null;
@@ -562,6 +563,39 @@ function tripView(t) {
   ];
 }
 
+// Packing keeps both hands busy, and a phone that locks itself between ticks wants Face ID or a passcode for the
+// next one. So each tick on a trip keeps the screen on (the Screen Wake Lock API, MDN: Baseline 2025) until three
+// minutes after the last one, or until the trip is left. The browser lets go of it while the page is hidden, so
+// coming back within those minutes asks again. Where a browser can't, nothing changes; nothing is saved or sent.
+const AWAKE_MS = 3 * 60e3;
+const awake = { until: 0, trip: '', lock: null, asking: false, timer: null };
+function keepAwake(tripId) {
+  if (!navigator.wakeLock) return;
+  awake.until = Date.now() + AWAKE_MS;
+  awake.trip = tripId;
+  clearTimeout(awake.timer);
+  awake.timer = setTimeout(letSleep, AWAKE_MS);
+  askAwake();
+}
+function askAwake() {
+  if (awake.lock || awake.asking || document.hidden || Date.now() >= awake.until) return;
+  awake.asking = true;
+  navigator.wakeLock.request('screen').then(lock => {
+    awake.asking = false;
+    if (Date.now() >= awake.until) { lock.release().catch(() => {}); return; }
+    awake.lock = lock;
+    lock.addEventListener('release', () => { if (awake.lock === lock) awake.lock = null; });
+  }, () => { awake.asking = false; });
+}
+function letSleep() {
+  clearTimeout(awake.timer);
+  awake.until = 0;
+  awake.trip = '';
+  const lock = awake.lock;
+  awake.lock = null;
+  lock?.release().catch(() => {});
+}
+
 // Just after a tick the list holds still for a moment, so the tick shows where it was tapped and a quick next tap
 // lands on what was there: a bag the tick finished stays open, and with Hide done on, the ticked row stays. Every
 // tap starts the moment again. When it ends, the list closes up around the rows under the finger.
@@ -651,6 +685,7 @@ function bagCard(t, g, mode, hide, why, jobs = false) {
 function itemRow(t, g, r, mode, whyMap, jobs, hide) {
   const toggle = () => {
     const was = (t.marks?.[r.key]?.v || 0) > 0;
+    keepAwake(t.id);
     store.apply(d => M.mark(d, t.id, r.key, was ? 0 : 1));
     const bag = mode + ':' + g.bag.id;
     if (was) { linger.delete(r.key); linger.delete(bag); } else {
@@ -1648,7 +1683,7 @@ window.addEventListener('storage', e => { if (e.key === 'carry-on' || e.key === 
 window.addEventListener('pageshow', e => { if (e.persisted) { store.reload(); render(); } });
 window.addEventListener('hashchange', render);
 // A new day can change which trips are coming up, and old weather gets looked up again.
-document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { render(); askAwake(); } });
 // Back online: what couldn't be looked up is looked up now, not a minute after the last try, and what the failed
 // lookups said goes.
 window.addEventListener('online', () => {

@@ -1736,6 +1736,60 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   await ctx.close();
 }
 
+// ================= The screen stays on while packing =================
+// Each tick keeps the screen on until three minutes after the last one, or until the trip is left; back within those
+// minutes from another app, it asks again. The browser's wake lock is a stand-in here, and the clock is the test's.
+{
+  const { ctx, page } = await phone();
+  await ctx.addInitScript(() => {
+    window.wake = [];
+    const lock = () => {
+      const l = new EventTarget();
+      l.released = false;
+      l.release = async () => { if (l.released) return; l.released = true; window.wake.push('release'); l.dispatchEvent(new Event('release')); };
+      window.held = l;
+      return l;
+    };
+    Object.defineProperty(navigator, 'wakeLock', { configurable: true, value: { request: async type => { window.wake.push(type); return lock(); } } });
+  });
+  await page.clock.install();
+  await page.reload();
+  await page.click('text=Start with a starter list');
+  await planTrip(page, { where: 'Chic', from: 2, to: 4, by: 'Driving' });
+  const wake = () => page.evaluate(() => window.wake.splice(0));
+  const tick = name => row(page, name).locator('.tick').click();
+  const away = hidden => page.evaluate(hidden => {
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
+    if (hidden) window.held?.release(); // the browser lets go of it while the page is hidden
+    document.dispatchEvent(new Event('visibilitychange'));
+  }, hidden);
+  assert.deepEqual(await wake(), [], 'not just for opening the trip');
+  await tick('Belt');
+  assert.deepEqual(await wake(), ['screen'], 'a tick keeps the screen on');
+  await page.clock.fastForward('02:00');
+  await tick('Shoes');
+  await page.clock.fastForward('02:30');
+  assert.deepEqual(await wake(), [], 'held, three minutes after the last tick');
+  await page.clock.fastForward('00:31');
+  assert.deepEqual(await wake(), ['release'], 'then let go');
+  await tick('Pajamas');
+  assert.deepEqual(await wake(), ['screen']);
+  await away(true);
+  await page.clock.fastForward('01:00');
+  await away(false);
+  assert.deepEqual(await wake(), ['release', 'screen'], 'back within the three minutes: asked again');
+  await away(true);
+  await page.clock.fastForward('03:00');
+  await away(false);
+  assert.deepEqual(await wake(), ['release'], 'back after them: not');
+  await tick('Pajamas');
+  assert.deepEqual(await wake(), ['screen']);
+  await page.click('.crumb');
+  await page.waitForSelector('.tag-card');
+  assert.deepEqual(await wake(), ['release'], 'leaving the trip lets go');
+  await ctx.close();
+}
+
 // ================= Everything packed: one line =================
 // Once the moment after the last tick has passed, the bags fold into one line, and Hide done goes. Tapping the line
 // shows the bags; unticking something opens them, and the next time it's all packed they fold again.
