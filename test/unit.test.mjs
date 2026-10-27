@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as M from '../js/model.js';
-import { plan, conditions, qtyOf, units, grown, whyNot, passes, whenWords, bagComing, legs, legDays, occasionThings, recentPlaces } from '../js/rules.js';
+import { plan, conditions, qtyOf, units, grown, whyNot, passes, whenWords, bagComing, legs, legDays, occasionThings, recentPlaces, lastAdded } from '../js/rules.js';
 import { summarize, stale, tripWeather, tripDays, placeKey, forecastEdge, dayIcon, dayWords, searchPlaces, uvEstimate } from '../js/weather.js';
 import { plugsFor, plugText, localCountry } from '../js/plugs.js';
 import { parsePaste, encodeList, decodeList, guess, bagIcon, bagKind, sortLoose } from '../js/share.js';
@@ -1047,6 +1047,26 @@ test('recent places: the latest trips’ places, each once, stops too, up to fou
   doc = M.putTrip(doc, { id: 'f', start: '2026-05-01', end: '2026-05-03', place: { ...lake, name: 'Lake Placid' } });
   assert.equal(recentPlaces(doc, 9).filter(p => p.name === 'Lake Placid').length, 1, 'the same place on two trips, once');
   assert.deepEqual(recentPlaces(doc)[0], M.cleanPlace(lake), 'the place as saved, ready to pick');
+});
+
+test('going again: what was added just for the last trip, each once, in the bag it went in', () => {
+  let doc = trip(starter(), {});
+  doc = M.putExtra(doc, 't1', { id: 'e1', name: 'Kayak paddles', bag: 's-daybag' });
+  doc = M.putExtra(doc, 't1', { id: 'e2', name: 'Birthday present', bag: 's-clothes' });
+  doc = M.mark(doc, 't1', 'b:e2', 's-daybag'); // moved to the Day bag on that trip
+  doc = M.putExtra(doc, 't1', { id: 'e3', name: 'kayak  paddles', bag: 's-clothes' });
+  doc = M.putExtra(doc, 't1', { id: 'e4', name: 'Sunglasses', bag: 's-daybag' }); // on My list already
+  doc = M.putExtra(doc, 't1', { id: 'e5', name: 'Gone', bag: 's-daybag' });
+  doc = M.removeExtra(doc, 't1', 'e5');
+  doc = M.putBag(doc, { id: 'b-boat', name: 'Boat bag' });
+  doc = M.putExtra(doc, 't1', { id: 'e6', name: 'Life jacket', bag: 'b-boat' });
+  doc = M.removeBag(doc, 'b-boat');
+  assert.deepEqual(lastAdded(doc, doc.trips.t1), [
+    { id: 'e1', name: 'Kayak paddles', bag: 's-daybag' },
+    { id: 'e2', name: 'Birthday present', bag: 's-daybag' },
+    { id: 'e6', name: 'Life jacket', bag: 's-liquids' },
+  ], 'each name once, not what’s on My list or taken off, in the bag it went in, or the first bag once its own has gone');
+  assert.deepEqual(lastAdded(doc, trip(starter(), {}).trips.t1), [], 'nothing added, nothing to offer');
 });
 
 test('a trip’s days, place by place: from the night you get there to the day before the next stop', () => {

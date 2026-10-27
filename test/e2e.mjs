@@ -594,6 +594,46 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await ctx.close();
 }
 
+// ================= Go again offers what you added last time =================
+// Things added just for a trip come up when it's planned again, not picked until tapped; picked ones go on the new
+// trip, in the bag they went in.
+{
+  const { ctx, page } = await phone();
+  await page.click('text=Start with a starter list');
+  // A trip that's over, with two things added just for it, one moved to another bag.
+  await page.evaluate(() => {
+    const { store, M, D } = window.carryOn, t0 = D.today();
+    store.apply(d => {
+      let next = M.putTrip(d, { id: 't-lake', name: 'The lake', start: D.add(t0, -20), end: D.add(t0, -15), travel: 'drive', place: { name: 'Lake Placid', admin: 'New York', country: 'United States', cc: 'US', lat: 44.28, lon: -73.98 } });
+      next = M.setCond(next, 't-lake', 'swim', true);
+      next = M.putExtra(next, 't-lake', { id: 'e-paddles', name: 'Kayak paddles', bag: 's-clothes' });
+      next = M.mark(next, 't-lake', 'b:e-paddles', 's-daybag');
+      return M.putExtra(next, 't-lake', { id: 'e-gift', name: 'Present for Ana', bag: 's-clothes' });
+    });
+    window.carryOn.render();
+  });
+  await page.click('.past .again');
+  await page.waitForSelector('h1:text-is("The lake again")');
+  const last = page.locator('.form [aria-labelledby="lastAdded"] .chip');
+  assert.deepEqual(await last.allInnerTexts(), ['🎒 Kayak paddles', '👕 Present for Ana'], 'in the bag each went in');
+  assert.deepEqual(await last.evaluateAll(cs => cs.map(c => c.getAttribute('aria-pressed'))), ['false', 'false'], 'none picked yet');
+  await last.filter({ hasText: 'Kayak paddles' }).click();
+  assert.equal(await last.filter({ hasText: 'Kayak paddles' }).getAttribute('aria-pressed'), 'true');
+  await page.fill('#start', await day(page, 30));
+  await page.fill('#end', await day(page, 33));
+  await page.click('text=Make my list');
+  await page.waitForSelector('.pass h1');
+  assert.match(await page.locator('.bag', { hasText: 'Day bag' }).innerText(), /Kayak paddles\s+Just for this trip/);
+  assert.equal(await row(page, 'Present for Ana').count(), 0, 'not picked, not brought');
+  // Planned again from this one, the paddles come up again; something put on My list since doesn't.
+  await page.evaluate(() => { const { store, M } = window.carryOn; store.apply(d => M.putItem(d, { name: 'Kayak paddles', bag: 's-daybag' })); });
+  await page.click('[aria-label="Edit this trip"]');
+  await page.click('text=Plan another like this');
+  await page.waitForSelector('h1:text-is("The lake again")');
+  assert.equal(await page.locator('#lastAdded').count(), 0, 'on My list now, so not offered');
+  await ctx.close();
+}
+
 // ================= A trip with more than one stop =================
 {
   const { ctx, page } = await phone();

@@ -1156,6 +1156,9 @@ function tripForm(t, again = false) {
   const startIn = h('input', { type: 'date', id: 'start', value: st.start, min: editing ? null : D.add(today(), -30), required: true, oninput: e => { set('start', e.target.value); nights(); }, onchange: e => { set('start', e.target.value); if (!st.end || st.end < st.start) { set('end', st.start); endIn.value = st.end; } nights(); } });
   const endIn = h('input', { type: 'date', id: 'end', value: st.end, required: true, oninput: e => { set('end', e.target.value); nights(); }, onchange: e => { set('end', e.target.value); nights(); } });
   const nameIn = h('input', { type: 'text', id: 'name', value: st.name, maxlength: 60, placeholder: 'Sam’s wedding', autocomplete: 'off', oninput: e => set('name', e.target.value) });
+  // Going again, what was added just for the old trip, to bring again: none picked till tapped.
+  const extras = again ? R.lastAdded(doc(), t) : [];
+  dr.picked ||= new Set();
   // What the occasions picked bring, said again as they're picked.
   const broughtLine = h('p', { class: 'brings muted small', role: 'status' }, brings(st.tags));
   const save = () => {
@@ -1176,6 +1179,7 @@ function tripForm(t, again = false) {
     if (twice) { err(`Two stops start the same night. Pick another night for ${twice.place.name}.`); return; }
     const id = editing ? t.id : M.newId('t');
     if (editing) watchChange(id);
+    const bring = extras.filter(x => dr.picked.has(x.id));
     const datesMoved = editing && (t.start !== st.start || t.end !== st.end);
     const moved = datesMoved || (editing && (t.place?.lat !== st.place?.lat || t.place?.name !== st.place?.name));
     const before = new Map(dr.stops0.map(s => [s.id, s]));
@@ -1192,6 +1196,7 @@ function tripForm(t, again = false) {
       for (const sid of off) next = M.removeStop(next, id, sid);
       // Each stop was looked up for the trip's old days too.
       if (datesMoved) for (const s of M.stops(next.trips[id])) next = M.clearWx(next, id, s.id);
+      for (const x of bring) next = M.putExtra(next, id, { name: x.name, bag: x.bag });
       return next;
     });
     draft = null;
@@ -1228,6 +1233,17 @@ function tripForm(t, again = false) {
           return b;
         })),
         broughtLine),
+      extras.length ? h('div', { class: 'field' }, h('span', { class: 'label', id: 'lastAdded' }, 'Last time you added'),
+        h('div', { class: 'chips pick', role: 'group', 'aria-labelledby': 'lastAdded' }, extras.map(x => {
+          const bag = doc().bags[x.bag];
+          const b = h('button', { type: 'button', class: 'chip' + (dr.picked.has(x.id) ? ' on' : ''), 'aria-pressed': String(dr.picked.has(x.id)), title: `In ${theBag(bag)}`, onclick: () => {
+            if (dr.picked.has(x.id)) dr.picked.delete(x.id); else dr.picked.add(x.id);
+            changed();
+            b.classList.toggle('on', dr.picked.has(x.id)); b.setAttribute('aria-pressed', String(dr.picked.has(x.id)));
+          } }, `${bag.icon} ${x.name}`);
+          return b;
+        })),
+        h('small', { class: 'muted' }, 'Just for that trip. Tap any to bring it again.')) : null,
       h('div', { class: 'field' }, h('label', { for: 'name' }, 'Name it ', h('span', { class: 'muted' }, '(if you like)')), nameIn),
       errBox,
       h('div', { class: 'actions' }, h('button', { type: 'button', class: 'btn primary big', onclick: save }, editing ? 'Save' : 'Make my list'))),

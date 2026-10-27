@@ -118,6 +118,23 @@ export function recentPlaces(doc, n = 4) {
   return out;
 }
 
+// What was added just for a trip (kayak paddles in the car, a birthday present), to offer when it's planned again:
+// each name once, leaving out what's on My list now, each in the bag it went in on that trip if that's still there,
+// else its own, else the first bag. [{ id, name, bag }]
+export function lastAdded(doc, trip) {
+  const packing = M.bags(doc).filter(b => b.kind === 'bag'), there = id => packing.some(b => b.id === id);
+  const key = s => s.toLowerCase().replace(/\s+/g, ' ').trim();
+  const listed = new Set(M.items(doc).map(x => key(x.name))), seen = new Set(), out = [];
+  for (const x of M.extras(trip)) {
+    const k = key(x.name);
+    if (listed.has(k) || seen.has(k)) continue;
+    seen.add(k);
+    const bag = [trip.marks?.['b:' + x.id]?.v, x.bag].find(there) || packing[0]?.id;
+    if (bag) out.push({ id: x.id, name: x.name, bag });
+  }
+  return out;
+}
+
 // Each leg with its saved days. Together they're the trip's weather.
 export const legDays = trip => legs(trip).map(l => ({ ...l, days: tripDays(l.wx, l.from, l.to, l.place) }));
 
