@@ -81,17 +81,39 @@ export function archiveUrl(p, start, end) {
   })}`;
 }
 
+// About how strong the sun is at noon on a day too far off for the forecast's own UV index: the UV under a clear sky
+// for how high the sun gets there that day, less what that day's clouds usually take off. lat in degrees, day a
+// date ('2027-01-14'), elev the ground's height in metres, rad the day's sunshine (shortwave radiation, MJ/m²).
+//   Clear sky: 12.5 × μ^2.42, μ the cosine of the sun's angle from overhead at noon (Madronich, "Analytic formula
+//   for the clear-sky UV index", Photochemistry and Photobiology 83, 2007), from the latitude and the sun's
+//   declination (FAO Irrigation and Drainage Paper 56, Allen et al. 1998, eq. 24). About 10% more for each 1000 m up
+//   (WHO, "Global Solar UV Index: A Practical Guide", 2002).
+//   Clouds: the day's sunshine over a clear day's there (FAO-56 eqs. 21 and 37), at most 1.
+export function uvEstimate(lat, day, elev, rad) {
+  const y = +day.slice(0, 4), j = (Date.UTC(y, +day.slice(5, 7) - 1, +day.slice(8, 10)) - Date.UTC(y, 0, 1)) / 864e5 + 1;
+  const phi = lat * Math.PI / 180, dec = 0.409 * Math.sin(2 * Math.PI * j / 365 - 1.39), dr = 1 + 0.033 * Math.cos(2 * Math.PI * j / 365);
+  const ws = Math.acos(Math.max(-1, Math.min(1, -Math.tan(phi) * Math.tan(dec))));
+  const ra = 24 * 60 / Math.PI * 0.082 * dr * (ws * Math.sin(phi) * Math.sin(dec) + Math.cos(phi) * Math.cos(dec) * Math.sin(ws));
+  const clearDay = (0.75 + 2e-5 * elev) * ra;
+  const cloud = clearDay > 0 ? Math.max(0, Math.min(1, rad / clearDay)) : 0;
+  const mu = Math.max(0, Math.cos(phi - dec));
+  return 12.5 * mu ** 2.42 * (1 + 0.1 * Math.max(0, elev) / 1000) * cloud;
+}
+
 // Typical weather for some days (in order): the same dates in each of the last three years, averaged. Each year
 // is read by its own dates, so 29 February, which most years don't have, reads 1 March. A year that fails adds
-// its error to errors, and the days are made from the others.
+// its error to errors, and the days are made from the others. Each day has an estimate of its UV (uvEstimate),
+// from the place's height as the archive gives it.
 async function typical(place, keys, today, signal, errors) {
   // The archive runs about a week behind, so only years whose dates are already in it.
   const years = YEARS.filter(n => yearsBack(keys.at(-1), n) <= add(today, -7));
   const got = await Promise.allSettled(years.map(n => reach(archiveUrl(place, yearsBack(keys[0], n), yearsBack(keys.at(-1), n)), signal, 'the weather service')));
   const sets = [];
+  let elev = 0;
   got.forEach((g, i) => {
     if (g.status === 'rejected') { errors.push(g.reason); return; }
     const s = g.value.daily || {};
+    if (Number.isFinite(g.value.elevation)) elev = g.value.elevation;
     sets.push({ n: years[i], s, row: new Map((s.time || []).map((k, j) => [k, j])) });
   });
   const out = {};
@@ -103,7 +125,7 @@ async function typical(place, keys, today, signal, errors) {
     if (!rows.length) continue;
     const mean = f => rows.reduce((a, r) => a + (r[f] ?? 0), 0) / rows.length;
     out[k] = {
-      d: k, typ: 1, hi: mean('hi'), lo: mean('lo'), mm: mean('mm'), rad: mean('rad'),
+      d: k, typ: 1, hi: mean('hi'), lo: mean('lo'), mm: mean('mm'), rad: mean('rad'), uv: uvEstimate(place.lat, k, elev, mean('rad')),
       wet: rows.filter(r => rainOf({ mm: r.mm, snow: r.sn, rain: r.rain }) >= 1).length / rows.length,
       sn: rows.filter(r => (r.sn ?? 0) >= 0.5).length / rows.length,
     };
@@ -235,17 +257,21 @@ export function summarize(wx) {
   const rainLikely = fc.filter(rainy).every(d => (d.pop ?? 0) >= LIMITS.rainPop);
   const snowDays = fc.filter(d => (d.snow ?? 0) >= LIMITS.snowCm).map(d => d.d);
   const wet = mean(ty, 'wet'), sn = mean(ty, 'sn');
-  const uv = fc.length ? Math.max(...fc.map(d => d.uv ?? 0)) : 0, rad = mean(ty, 'rad');
+  // Strong sun: the forecast's UV index, or for typical weather its estimate (tuv). Typical days saved before there
+  // was an estimate go by how much sunshine they had (rad), until they're looked up again.
+  const est = ty.filter(d => d.uv !== undefined), unrated = ty.filter(d => d.uv === undefined);
+  const uv = fc.length ? Math.max(...fc.map(d => d.uv ?? 0)) : 0, tuv = est.length ? Math.max(...est.map(d => d.uv)) : 0;
+  const rad = mean(unrated, 'rad');
   const cold = minLo <= LIMITS.cold || meanHi <= LIMITS.coldDay;
   return {
-    maxHi, minLo, meanHi, rainDays, rainLikely, snowDays, wet, sn, uv, rad,
-    typical: ty.length > 0, forecast: fc.length > 0,
+    maxHi, minLo, meanHi, rainDays, rainLikely, snowDays, wet, sn, uv, tuv, rad,
+    typical: ty.length > 0, forecast: fc.length > 0, estimated: est.length > 0,
     hot: maxHi >= LIMITS.hot,
     cold,
     cool: !cold && minLo <= LIMITS.cool,
     rain: rainDays.length > 0 || (ty.length > 0 && wet >= LIMITS.rainShare),
     snow: snowDays.length > 0 || (ty.length > 0 && sn >= LIMITS.snowShare),
-    sun: uv >= LIMITS.uv || (ty.length > 0 && rad >= LIMITS.rad),
+    sun: uv >= LIMITS.uv || tuv >= LIMITS.uv || (unrated.length > 0 && rad >= LIMITS.rad),
   };
 }
 

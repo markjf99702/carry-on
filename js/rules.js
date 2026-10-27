@@ -146,13 +146,17 @@ export function conditions(doc, trip) {
       : rainy ? often(rainy.w.wet, `Rain in ${rainy.name}`) : often(w.wet, 'Rain');
     why.snow = w.snowDays.length ? `Snow likely ${dayList(w.snowDays)}${daysAt('snowDays', w.snowDays)}`
       : snowy ? often(snowy.w.sn, `Snow in ${snowy.name}`) : often(w.sn, 'Snow');
-    why.sun = w.forecast && w.uv >= 6 ? `UV up to ${Math.round(w.uv)}${where(x => x.forecast && x.uv === w.uv)}` : sunny ? `Strong sun in ${sunny.name} then` : 'Strong sun then';
+    // The forecast's UV, or typical weather's estimate of it ("about"), or for typical days saved before there was an
+    // estimate, how sunny they were.
+    why.sun = w.forecast && w.uv >= LIMITS.uv ? `UV up to ${Math.round(w.uv)}${where(x => x.forecast && x.uv === w.uv)}`
+      : w.tuv >= LIMITS.uv ? `UV about ${Math.round(w.tuv)}${where(x => x.tuv === w.tuv)} then` : sunny ? `Strong sun in ${sunny.name} then` : 'Strong sun then';
     no.hot = `Highs up to ${temp(w.maxHi, u)}`;
     no.cool = w.cold ? 'Cold instead' : `Lows ${temp(w.minLo, u)} and up`;
     no.cold = `Lows ${temp(w.minLo, u)} and up`;
     no.rain = w.forecast ? 'No rain forecast' : inTen(w.wet) ? `Rain on ${inTen(w.wet)}` : 'Hardly any rain then';
     no.snow = w.forecast ? 'No snow forecast' : inTen(w.sn) ? `Snow on ${inTen(w.sn)}` : 'Hardly any snow then';
-    no.sun = w.forecast && w.uv ? `UV up to ${Math.round(w.uv)}` : 'Not much sun then';
+    const fcUv = w.forecast && w.uv ? `UV up to ${Math.round(w.uv)}` : '', tyUv = w.estimated ? `about ${Math.round(w.tuv)}` : '';
+    no.sun = fcUv && tyUv ? `${fcUv}, then ${tyUv}` : fcUv || (tyUv ? `UV ${tyUv} then` : 'Not much sun then');
   }
   const on = { ...auto };
   for (const [k, m] of Object.entries(trip.set || {})) {

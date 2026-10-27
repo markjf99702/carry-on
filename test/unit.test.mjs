@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as M from '../js/model.js';
 import { plan, conditions, qtyOf, units, grown, whyNot, passes, whenWords, bagComing, legs, legDays } from '../js/rules.js';
-import { summarize, stale, tripWeather, tripDays, placeKey, forecastEdge, dayIcon, dayWords, searchPlaces } from '../js/weather.js';
+import { summarize, stale, tripWeather, tripDays, placeKey, forecastEdge, dayIcon, dayWords, searchPlaces, uvEstimate } from '../js/weather.js';
 import { plugsFor, plugText, localCountry } from '../js/plugs.js';
 import { parsePaste, encodeList, decodeList, guess, bagIcon, bagKind } from '../js/share.js';
 import { starterList } from '../js/starter.js';
@@ -161,6 +161,55 @@ test('weather: forecast thresholds and the reasons they give', () => {
   for (const n of ['Warm coat', 'Light jacket', 'Snow boots']) assert.ok(!all.includes(n), n);
   assert.equal(p.cond.why.rain, 'Rain likely Tue');
   assert.equal(p.cond.why.hot, 'Highs up to 88°');
+});
+
+test('typical weather’s UV: an estimate, held to the same UV 6 as the forecast', async () => {
+  // Six real places and weeks, the estimate from the archive's sunshine for the same dates in the three years before
+  // (each day's mean, MJ/m²), against the most the forecast's own UV index said (Open-Meteo's historical forecast,
+  // read 27 October 2026). It makes the forecast's call on five of the six; Cancún, at 6.2, it puts at about 5.
+  const cases = [
+    ['Mexico City, January', 19.4326, 2230, '2026-01-12', [16.83, 17.41, 18.31, 20.13, 20.35, 19.43, 19.87], 7.15],
+    ['Cancún, January', 21.1743, 9, '2026-01-12', [16.76, 14.54, 14.01, 16.32, 15.53, 14.46, 15.79], 6.2],
+    ['Honolulu, December', 21.3069, 4, '2025-12-08', [15.13, 16.61, 15.69, 15.68, 14.57, 14.11, 14.65], 5.9],
+    ['Stockholm, June', 59.3293, 24, '2026-06-15', [26.14, 20.63, 23.94, 19.54, 20.71, 23.61, 25.92], 6.2],
+    ['Aspen, March', 39.1911, 2404, '2026-03-09', [21.26, 16.44, 18.43, 17.67, 17.43, 16.02, 14.44], 6.7],
+    ['Lisbon, October', 38.7223, 66, '2026-10-13', [12.37, 15.04, 8.9, 10.85, 11.43, 13.49, 8.03], 5.25],
+  ];
+  const calls = cases.map(([name, lat, elev, from, rad, forecast]) => {
+    const days = rad.map((r, i) => ({ d: add(from, i), typ: 1, hi: 20, lo: 10, mm: 0, wet: 0, sn: 0, rad: r, uv: uvEstimate(lat, add(from, i), elev, r) }));
+    return [name, summarize({ days }).sun, forecast >= 6];
+  });
+  assert.deepEqual(calls.filter(([, est, fc]) => est !== fc).map(([name]) => name), ['Cancún, January']);
+  assert.deepEqual(calls.map(([, est]) => est), [true, false, false, true, true, false]);
+  // Higher up, and nearer the sun's path, is stronger; clouds take it off; a polar night has none.
+  assert.ok(uvEstimate(19.4, '2027-01-15', 2230, 20) > uvEstimate(19.4, '2027-01-15', 0, 20));
+  assert.ok(uvEstimate(-33.9, '2027-01-15', 0, 30) > 9, 'Sydney in January');
+  assert.ok(uvEstimate(-33.9, '2027-07-15', 0, 12) < 3, 'Sydney in July');
+  assert.ok(uvEstimate(19.4, '2027-01-15', 0, 10) < uvEstimate(19.4, '2027-01-15', 0, 20));
+  assert.equal(uvEstimate(78.2, '2027-12-15', 0, 0), 0, 'Svalbard in December');
+  // The lookup puts it on each typical day, from the archive's height for the place, and the saved copy keeps it.
+  const now = Date.parse('2026-11-02T12:00:00Z');
+  const stub = weatherStub(now, (kind, u) => ({ raw: { elevation: 2230, daily: (() => {
+    const time = range(u.searchParams.get('start_date'), u.searchParams.get('end_date'));
+    return { time, temperature_2m_max: time.map(() => 22), temperature_2m_min: time.map(() => 8), precipitation_sum: time.map(() => 0), snowfall_sum: time.map(() => 0), shortwave_radiation_sum: time.map(() => 18) };
+  })() } }));
+  try {
+    const wx = await tripWeather({ name: 'Mexico City', lat: 19.4326, lon: -99.1332, cc: 'MX' }, '2027-01-14', '2027-01-15', '2026-11-02', { now });
+    assert.equal(wx.days[0].uv, uvEstimate(19.4326, '2027-01-14', 2230, 18));
+    assert.equal(M.cleanWx(wx).days[0].uv, Math.round(wx.days[0].uv * 10) / 10);
+    assert.equal(summarize(wx).sun, true, 'Mexico City in January has strong sun, with less than the 20 MJ of sunshine that used to decide');
+  } finally { stub.restore(); }
+  // In words: about, for an estimate.
+  const doc = M.setPref(starter(), 'home', 'US');
+  const reasons = days => { const d = trip(doc, { place: { name: 'Cancún', cc: 'MX', country: 'Mexico' }, start: days[0].d, end: days.at(-1).d, wx: { at: 1, days } }); return conditions(d, d.trips.t1); };
+  const typ = (d, uv, rad = 15) => ({ d, typ: 1, hi: 24, lo: 18, mm: 0, wet: 0, sn: 0, rad, uv });
+  assert.equal(reasons([typ('2027-01-14', 7.6), typ('2027-01-15', 6.8)]).why.sun, 'UV about 8 then');
+  assert.equal(reasons([typ('2027-01-14', 3.6, 25)]).no.sun, 'UV about 4 then', 'a long sunny day with a low sun isn’t strong sun');
+  assert.equal(reasons([day('2027-01-12', 24, 18, { uv: 5 }), typ('2027-01-13', 4.2)]).no.sun, 'UV up to 5, then about 4');
+  // Typical days saved before the estimate go by their sunshine, as they did, until they're looked up again.
+  const old = { d: '2027-06-15', typ: 1, hi: 20, lo: 10, mm: 0, wet: 0, sn: 0, rad: 22 };
+  assert.equal(summarize({ days: [old] }).sun, true);
+  assert.equal(M.cleanWx({ at: 1, days: [old] }).days[0].uv, undefined);
 });
 
 test('weather: cold, cool and typical weather', () => {

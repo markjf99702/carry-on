@@ -122,6 +122,9 @@ function cleanDay(d) {
     out.wet = r2(numOk(d.wet, 0, 1) ?? 0);
     out.sn = r2(numOk(d.sn, 0, 1) ?? 0);
     out.rad = r1(numOk(d.rad, 0, 60) ?? 0);
+    // An estimate of the UV (weather.js uvEstimate); days saved before it have none.
+    const uv = numOk(d.uv, 0, 20);
+    if (uv !== null) out.uv = r1(uv);
   } else {
     for (const [k, lo2, hi2] of [['pop', 0, 100], ['rain', 0, 2000], ['snow', 0, 500], ['uv', 0, 20], ['code', 0, 99]]) {
       const v = numOk(d[k], lo2, hi2);
