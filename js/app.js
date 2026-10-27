@@ -220,6 +220,12 @@ function homeView() {
 }
 
 const title = t => t.name || t.place?.name || 'Trip';
+// A trip's name as a heading, sized to fit (css .pass h1, .tag-card h2): --w is its longest word, which sets how big
+// it can be and still fit on a phone without breaking mid-word, and a long name (.wordy) starts smaller.
+const fitted = (tag, t) => {
+  const name = title(t), w = Math.max(...name.split(/[\s-]+/).map(x => [...x].length));
+  return h(tag, { class: name.length > 28 ? 'wordy' : null, style: `--w: ${w}` }, name);
+};
 // A bag by name in a sentence: "the Day bag", but "Electronics".
 const theBag = b => (/\b(bag|case|pack|backpack|suitcase|pouch|kit|box|tote|purse)\b/i.test(b.name) ? 'the ' + b.name : b.name);
 
@@ -248,7 +254,7 @@ function tagCard(t) {
   return h('a', { class: 'tag-card' + (now ? ' now' : ''), href: `#/trip/${t.id}` },
     h('span', { class: 'hole', 'aria-hidden': 'true' }),
     h('span', { class: 'when' }, whenText(t)),
-    h('h2', {}, title(t)),
+    fitted('h2', t),
     where ? h('span', { class: 'where' }, where) : null,
     h('span', { class: 'dates' }, `${D.span(t.start, t.end, t0.slice(0, 4))} · ${n ? plural(n, 'night') : 'day trip'} · ${R.CONDITIONS.find(x => x.k === t.travel).icon}`),
     w ? h('span', { class: 'glance' }, `${W.dayIcon(W.tripDays(t.wx, t.start, t.end, t.place)[0])} ${W.temp(w.minLo, c.units)}–${W.temp(w.maxHi, c.units)}${w.rain ? ' · rain' + (w.rainDays.length ? ' likely' : ' some days') : ''}${w.snow ? ' · snow' : ''}`) : null,
@@ -408,7 +414,7 @@ function tripView(t) {
       h('div', { class: 'pass-top' },
         h('div', {},
           h('p', { class: 'when' + (t.start <= today() && today() <= t.end ? ' now' : '') }, whenText(t)),
-          h('h1', {}, title(t)),
+          fitted('h1', t),
           h('p', { class: 'sub' }, t.place ? (t.name ? W.placeLabel(t.place) : W.placeLabel(t.place).split(', ').slice(1).join(', ')) || '\u00a0' : 'No place set')),
         h('a', { class: 'icon-btn', href: `#/edit/${t.id}`, 'aria-label': 'Edit this trip', title: 'Edit this trip', html: ICONS.edit })),
       h('dl', { class: 'pass-row' },
@@ -896,7 +902,7 @@ function tripForm(t, again = false) {
     else go(`#/trip/${id}`, { replace: true });
   };
   return [
-    h('a', { class: 'crumb', href: editing ? `#/trip/${t.id}` : '#/', onclick: e => { if (editing && history.state?.from === `#/trip/${t.id}`) { e.preventDefault(); history.back(); } } }, h('span', { html: ICONS.back }), editing ? title(t) : 'Trips'),
+    h('a', { class: 'crumb', href: editing ? `#/trip/${t.id}` : '#/', onclick: e => { if (editing && history.state?.from === `#/trip/${t.id}`) { e.preventDefault(); history.back(); } } }, h('span', { html: ICONS.back }), editing ? h('span', { class: 'crumb-name' }, title(t)) : 'Trips'),
     h('h1', {}, editing ? 'Edit trip' : again ? `${title(t)} again` : 'Plan a trip'),
     h('section', { class: 'card form' },
       h('div', { class: 'field' }, h('label', { for: 'where' }, 'Where to?'), where,

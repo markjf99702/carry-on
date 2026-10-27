@@ -933,6 +933,59 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await ctx.close();
 }
 
+// ================= Long names =================
+// A name is sized to its longest word, so a long place name fits on the pass and the luggage tag without breaking
+// mid-word, and short ones keep their size. A very long word in Past trips, Go again's heading or Edit trip's way
+// back doesn't widen the page. As on a phone, where the scrollbar takes no room.
+{
+  const { ctx, page } = await phone({ mobile: true });
+  await page.click('text=Start with a starter list');
+  await page.evaluate(() => {
+    const { store, M, D, render } = window.carryOn, t0 = D.today();
+    const at = (name, cc) => ({ name, admin: '', country: '', cc, lat: 50, lon: 5 });
+    const trip = (id, place, from, name = '') => store.apply(d => M.putTrip(d, { id, place, start: D.add(t0, from), end: D.add(t0, from + 3), travel: 'train', name }));
+    trip('lis', { name: 'Lisbon', admin: 'Lisbon District', country: 'Portugal', cc: 'PT', lat: 38.7251, lon: -9.1498 }, 3);
+    trip('llan', at('Llanfairpwllgwyngyll', 'GB'), 30);
+    trip('mon', at('Mönchengladbach', 'DE'), 31);
+    trip('cha', at('Charlottesville', 'US'), 32);
+    trip('super', at('Lisbon', 'PT'), -20, 'Supercalifragilisticexpialidocious');
+    render();
+  });
+  // How many lines a heading takes, and its size.
+  const lines = loc => loc.evaluate(el => { const cs = getComputedStyle(el); return [Math.round(el.getBoundingClientRect().height / parseFloat(cs.lineHeight)), parseFloat(cs.fontSize)]; });
+  for (const width of [390, 375]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto(base + '#/');
+    await page.waitForSelector('.tag-card');
+    for (const name of ['Llanfairpwllgwyngyll', 'Mönchengladbach', 'Charlottesville']) {
+      assert.equal((await lines(page.locator('.tag-card h2', { hasText: name })))[0], 1, `${name} on one line on its tag at ${width}`);
+    }
+    assert.equal((await lines(page.locator('.tag-card h2', { hasText: 'Lisbon' })))[1], 34, 'a short name keeps its size');
+    for (const id of ['llan', 'mon', 'cha', 'lis']) {
+      await page.goto(base + '#/trip/' + id);
+      await page.waitForSelector('.pass h1');
+      const [n, size] = await lines(page.locator('.pass h1'));
+      assert.equal(n, 1, `${id} on one line on the pass at ${width}`);
+      if (id === 'lis') assert.equal(size, 46, 'Lisbon keeps its size');
+    }
+  }
+  // The narrowest phones: nothing is wider than the screen.
+  await page.setViewportSize({ width: 320, height: 640 });
+  await page.goto(base + '#/');
+  await page.waitForSelector('.past li');
+  await fits(page, 'Trips with a long name in Past trips');
+  assert.equal(await page.locator('.past .again').evaluate(el => el.getClientRects().length), 1, 'Go again on one line');
+  await page.goto(base + '#/again/super');
+  await page.waitForSelector('main > h1');
+  await fits(page, 'Go again with a long name');
+  await page.goto(base + '#/edit/super');
+  await page.waitForSelector('main > h1');
+  await fits(page, 'Edit trip with a long name');
+  assert.ok((await page.locator('.crumb').boundingBox()).height <= 46, 'the way back on one line');
+  assert.equal(await page.locator('.crumb').innerText(), 'Supercalifragilisticexpialidocious');
+  await ctx.close();
+}
+
 // ================= A pasted list =================
 {
   const { ctx, page } = await phone();

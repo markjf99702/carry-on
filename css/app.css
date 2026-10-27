@@ -210,8 +210,12 @@ ul.chips .chip small { font-weight: 500; color: var(--muted); font-size: 13px; }
 .card.ready p { margin: 0; flex: 1 1 220px; }
 .page-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 10px 0 16px; }
 .crumb + .page-head { margin-top: 0; }
-.crumb { display: inline-flex; align-items: center; gap: 2px; margin: 0 0 6px -6px; padding: 10px 6px; font-weight: 650; color: var(--muted); text-decoration: none; }
-.crumb svg { width: 18px; height: 18px; }
+.crumb { display: inline-flex; align-items: center; gap: 2px; max-width: 100%; margin: 0 0 6px -6px; padding: 10px 6px; font-weight: 650; color: var(--muted); text-decoration: none; }
+.crumb svg { flex: none; width: 18px; height: 18px; }
+/* A long trip name on the way back from Edit trip stays on one line. */
+.crumb-name { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* The trip form's heading ("Lisbon again"), however long the name. */
+main > h1 { overflow-wrap: anywhere; }
 .lede { font-size: 17px; }
 .hint { margin: -4px 0 12px; }
 .danger-zone { margin: 26px 0 0; text-align: center; }
@@ -228,7 +232,7 @@ ul.chips .chip small { font-weight: 500; color: var(--muted); font-size: 13px; }
 /* ---------- trips: luggage tags ---------- */
 .tags { display: grid; gap: 14px; margin-bottom: 24px; }
 .tag-card {
-  position: relative; display: grid; gap: 2px; padding: 16px 18px 16px 58px;
+  position: relative; display: grid; gap: 2px; padding: 16px 18px 16px 58px; container-type: inline-size;
   background: var(--kraft); color: var(--kraft-ink); text-decoration: none;
   border-radius: 6px 14px 14px 6px; box-shadow: var(--shadow);
   clip-path: polygon(26px 0, 100% 0, 100% 100%, 26px 100%, 0 calc(100% - 26px), 0 26px);
@@ -239,7 +243,11 @@ ul.chips .chip small { font-weight: 500; color: var(--muted); font-size: 13px; }
 .tag-card .hole { position: absolute; left: 14px; top: 50%; width: 16px; height: 16px; margin-top: -8px; border-radius: 50%; background: var(--bg); box-shadow: inset 0 0 0 3px var(--kraft-line); }
 .tag-card .when { font: 700 14px var(--display); text-transform: uppercase; letter-spacing: .1em; opacity: .75; }
 .tag-card.now .when { color: var(--accent-text); opacity: 1; }
-.tag-card h2 { font-size: 34px; line-height: 1; margin: 2px 0; overflow-wrap: anywhere; }
+/* The trip's name is sized to its longest word (--w, from app.js) so that word fits the tag's width (100cqi) without
+   breaking: about half the size per letter in this face. A long name (.wordy) starts smaller. Where a browser can't
+   size it, it keeps 34px and breaks where it has to. */
+.tag-card h2 { font-size: 34px; font-size: clamp(20px, 100cqi / (var(--w, 8) * .5), 34px); line-height: 1; margin: 2px 0; overflow-wrap: anywhere; }
+.tag-card h2.wordy { font-size: 28px; font-size: clamp(20px, 100cqi / (var(--w, 8) * .5), 28px); }
 .tag-card .where:empty { display: none; }
 .tag-card .where, .tag-card .dates, .tag-card .glance { font-size: 15px; }
 .tag-card .dates { font-weight: 600; }
@@ -251,16 +259,18 @@ ul.chips .chip small { font-weight: 500; color: var(--muted); font-size: 13px; }
 .past h2 { margin: 6px 0 8px; font-size: 18px; color: var(--muted); }
 .past ul { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
 .past li { display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--line); }
-.past li > a:first-child { flex: 1; display: grid; padding: 10px 2px; text-decoration: none; }
-.past .again { font-size: 14px; font-weight: 650; color: var(--accent-text); text-decoration: none; padding: 12px 8px; }
+.past li > a:first-child { flex: 1; display: grid; min-width: 0; padding: 10px 2px; text-decoration: none; overflow-wrap: anywhere; }
+.past .again { font-size: 14px; font-weight: 650; color: var(--accent-text); text-decoration: none; padding: 12px 8px; white-space: nowrap; }
 
 /* ---------- one trip: the boarding pass ---------- */
 .pass { position: relative; background: var(--paper); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); margin-bottom: 14px; overflow: hidden; }
 .pass-top { display: flex; align-items: flex-start; gap: 8px; padding: 16px 10px 14px 18px; border-bottom: 2px dashed var(--line); }
-.pass-top > div { flex: 1; min-width: 0; }
+.pass-top > div { flex: 1; min-width: 0; container-type: inline-size; }
 .pass .when { margin: 0 0 6px; font: 700 14px var(--display); text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
 .pass .when.now { color: var(--accent-text); }
-.pass h1 { font-size: 46px; line-height: .95; overflow-wrap: anywhere; }
+/* Sized to its longest word, as on the tag: 46px for most names, down to 26px for the longest. */
+.pass h1 { font-size: 46px; font-size: clamp(26px, 100cqi / (var(--w, 8) * .5), 46px); line-height: .95; overflow-wrap: anywhere; }
+.pass h1.wordy { font-size: 34px; font-size: clamp(26px, 100cqi / (var(--w, 8) * .5), 34px); }
 .pass .sub { margin: 4px 0 0; color: var(--muted); font-weight: 600; }
 /* The notches either side of the tear line. */
 .pass-row { position: relative; display: grid; grid-template-columns: 1.3fr 1.3fr .7fr 1fr; gap: 8px; margin: 0; padding: 12px 18px 14px; }
@@ -472,7 +482,7 @@ ul.chips .chip small { font-weight: 500; color: var(--muted); font-size: 13px; }
   .sheet { margin: auto; border-radius: 16px; }
   .sheet[open] { animation-name: fade; }
   h1 { font-size: 40px; }
-  .pass h1 { font-size: 58px; }
+  .pass h1, .pass h1.wordy { font-size: 58px; font-size: clamp(26px, 100cqi / (var(--w, 8) * .5), 58px); }
   .tags { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 420px) {
