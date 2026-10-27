@@ -1848,6 +1848,11 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   assert.ok(await clothes.locator('li.row.done').count() > 1, 'Hide done hides nothing while it’s all packed');
   await clothes.locator('li.row.done .tick').first().click();
   assert.equal(await page.locator('main .switch').count(), 1, 'unticked, Hide done is back');
+  // The rest stay for the moment, as after a tick, and then the list closes up around the row unticked.
+  assert.ok(await clothes.locator('li.row.done').count() > 1, 'for the moment, the rest stay');
+  const at = await clothes.locator('li.row:not(.done)').evaluate(el => el.getBoundingClientRect().top);
+  await until(async () => !(await clothes.locator('li.row.done').count()), 'the list to close up');
+  assert.ok(Math.abs(await clothes.locator('li.row:not(.done)').evaluate(el => el.getBoundingClientRect().top) - at) <= 1, 'the row unticked stays where it was');
   await page.evaluate(() => { window.carryOn.store.hide = false; });
   await allBut('go', '');
   // The luggage tag is stamped too.

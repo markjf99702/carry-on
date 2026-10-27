@@ -694,7 +694,12 @@ function itemRow(t, g, r, mode, whyMap, jobs, hide) {
     keepAwake(t.id);
     store.apply(d => M.mark(d, t.id, r.key, was ? 0 : 1));
     const bag = mode + ':' + g.bag.id;
-    if (was) { linger.delete(r.key); linger.delete(bag); } else {
+    if (was) {
+      linger.delete(r.key); linger.delete(bag);
+      // Unticked when everything was packed, with Hide done on but hiding nothing: the rows it hides again stay for
+      // the moment, as a tick's does, and then the list closes up around this one.
+      if (store.hide && !hide) for (const x of main.querySelectorAll('.row.done .tick')) linger.add(x.dataset.key);
+    } else {
       if (hide) linger.add(r.key);
       if (g.rows.every(x => x === r || x.done)) linger.add(bag);
     }
