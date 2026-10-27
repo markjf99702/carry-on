@@ -82,6 +82,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .err { color: var(--accent-text); font-weight: 600; }
 .err:empty { display: none; }
 .pad { padding: 10px 14px; margin: 0; }
+/* An address, which would otherwise break at its hyphen. */
+.nowrap { white-space: nowrap; }
 [hidden] { display: none !important; }
 /* For screen readers only. */
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

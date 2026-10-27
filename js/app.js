@@ -173,7 +173,8 @@ function welcome() {
       h('button', { type: 'button', class: 'btn big', onclick: () => pasteSheet() }, 'Paste my own list'),
       drive.ready ? h('a', { class: 'btn big', href: '#/settings', onclick: () => { toDrive = true; } }, 'Bring my list from Google Drive') : null),
     h('p', { class: 'small muted' }, 'Pasting works with a list copied from Google Keep, Notes or a document. Put each bag’s things under its name.'),
-    h('p', { class: 'small muted' }, 'No account. Your list stays on this phone unless you turn on Google Drive.'),
+    // Where there's no Google Drive (the one-file copy, say), it isn't mentioned.
+    h('p', { class: 'small muted' }, `No account. Your list stays on this phone${drive.ready ? ' unless you turn on Google Drive' : ''}.`),
     h('h2', { class: 'kicker how-head' }, 'How it works'),
     h('ul', { class: 'how' },
       h('li', {}, h('b', {}, 'Sorted by bag. '), 'Pack the liquids bag, then the day bag, then the clothes.'),
@@ -320,7 +321,7 @@ function weatherStrip(t, c) {
   // has. The one-file copy can't look a place up at all, so it points to the site instead of Edit.
   if (t.place.lat === undefined) {
     return h('section', { class: 'wx none' }, h('p', { class: 'muted small' }, 'This place wasn’t looked up, so there’s no forecast and no check for abroad or plugs. Set them under ', h('b', {}, 'Change'), ', or ',
-      single ? ['open ', h('a', { href: SITE, target: '_blank', rel: 'noopener' }, 'carry-on.junkdrawer.works')] : ['pick the place again in ', h('a', { href: `#/edit/${t.id}` }, 'Edit')], '.'));
+      single ? ['open ', h('a', { class: 'nowrap', href: SITE, target: '_blank', rel: 'noopener' }, 'carry-on.junkdrawer.works')] : ['pick the place again in ', h('a', { href: `#/edit/${t.id}` }, 'Edit')], '.'));
   }
   const days = W.tripDays(t.wx, t.start, t.end, t.place);
   const fc = days.some(d => !d.typ), ty = days.some(d => d.typ);
@@ -1348,7 +1349,9 @@ function settingsView() {
     driveHost,
     h('section', { class: 'card' },
       h('h2', {}, 'Backup'),
-      h('p', { class: 'muted small' }, 'A file with your list and trips, to keep or to bring to another browser. Restoring adds what’s in it; nothing here is lost.'),
+      // The one-file copy can't download a file, only bring one in.
+      h('p', { class: 'muted small' }, single ? ['Bring in a backup saved at ', h('span', { class: 'nowrap' }, 'carry-on.junkdrawer.works'), '. This copy can’t save one; send your list as a link from My list instead.']
+        : 'A file with your list and trips, to keep or to bring to another browser. Restoring adds what’s in it; nothing here is lost.'),
       h('div', { class: 'stack' },
         single ? null : h('button', { type: 'button', class: 'btn', onclick: () => {
           const a = h('a', { href: URL.createObjectURL(new Blob([store.backup()], { type: 'application/json' })), download: `carry-on-${today()}.json` });
@@ -1362,7 +1365,7 @@ function settingsView() {
         } })))),
     h('section', { class: 'card' },
       h('h2', {}, 'About'),
-      h('p', { class: 'small' }, 'Forecasts, past weather and place search come from ', h('a', { href: 'https://open-meteo.com/', target: '_blank', rel: 'noopener' }, 'Open-Meteo'), '. Looking up a trip sends its place and dates there; nothing else leaves this browser unless you turn on Google Drive. Plug types are from the IEC’s list of world plugs.'),
+      h('p', { class: 'small' }, 'Forecasts, past weather and place search come from ', h('a', { href: 'https://open-meteo.com/', target: '_blank', rel: 'noopener' }, 'Open-Meteo'), `. Looking up a trip sends its place and dates there; nothing else leaves this browser${drive.ready ? ' unless you turn on Google Drive' : ''}. Plug types are from the IEC’s list of world plugs.`),
       // Every rule in weather.js summarize(), with no break between a number and its unit.
       h('p', { class: 'small muted' }, 'Hot means a high of 28\u00a0°C (82\u00a0°F) or more; cool, a low of 13\u00a0°C (55\u00a0°F) or less; cold, a low of 4\u00a0°C (39\u00a0°F) or less, or highs that average 10\u00a0°C (50\u00a0°F) or less. Rain means a 50% chance of rain or more, or 3\u00a0mm (0.1\u00a0in) or more, on any day; for typical weather, rain on 3 days in 10. Snow means 0.5\u00a0cm (0.2\u00a0in) or more on any day; for typical weather, snow on 3 days in 20. Strong sun means a UV index of 6 or more; for typical weather, it’s estimated from how much sunshine those days had.')),
     h('div', { class: 'danger-zone' }, confirmBtn('Erase everything on this device', 'Tap again to erase it all', () => {

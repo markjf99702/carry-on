@@ -9,6 +9,7 @@ import { createRequire } from 'node:module';
 import { execSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { join, dirname, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
@@ -1018,6 +1019,32 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await bag.locator('.add-row button').click();
   await bag.locator('.rows .name', { hasText: 'Spare battery' }).waitFor();
   assert.equal(await bag.locator('.bag-empty').count(), 0);
+  await ctx.close();
+}
+
+// ================= The one-file copy =================
+// dist/carry-on.html, the whole app in one file (the copy published as a Claude Artifact), opened from the disk
+// with no weather service to reach. It says what it can't do rather than offering it. Only where esbuild, which
+// makes it, is installed (npm install).
+if (existsSync(join(root, 'node_modules', 'esbuild'))) {
+  execSync('node tools/build.mjs', { cwd: root, stdio: 'ignore' });
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true });
+  await ctx.route(/open-meteo\.com/, route => route.abort('internetdisconnected'));
+  const page = await ctx.newPage();
+  page.on('pageerror', e => problems.push('one-file copy: ' + e.message));
+  await page.goto('file://' + join(root, 'dist', 'carry-on.html'));
+  await page.waitForSelector('.welcome');
+  assert.equal(await page.evaluate(() => document.documentElement.hasAttribute('data-single')), true);
+  // It has no Google Drive, so it doesn't mention it.
+  assert.doesNotMatch(await page.locator('main').innerText(), /Google Drive/, 'no Drive on the first screen');
+  await page.click('text=Start with a starter list');
+  await page.evaluate(() => { location.hash = '#/settings'; });
+  await page.waitForSelector('.page-head h1');
+  assert.doesNotMatch(await page.locator('main').innerText(), /Google Drive/, 'no Drive in Settings');
+  // It can't save a backup, only bring one in.
+  const backup = page.locator('.card', { has: page.locator('h2', { hasText: 'Backup' }) });
+  assert.equal(await backup.locator('p').innerText(), 'Bring in a backup saved at carry-on.junkdrawer.works. This copy can’t save one; send your list as a link from My list instead.');
+  assert.deepEqual(await backup.locator('.btn').allInnerTexts(), ['Restore from a backup']);
   await ctx.close();
 }
 
