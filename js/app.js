@@ -502,7 +502,9 @@ function tripView(t) {
   const onKeys = Object.keys(c.on).filter(k => c.on[k] && R.condInfo(doc(), k));
   const order = k => { const i = R.CONDITIONS.findIndex(x => x.k === k); return i < 0 ? 100 : i; };
   onKeys.sort((a, b) => order(a) - order(b));
-  const hide = store.hide;
+  // Hide done hides nothing while everything is packed, once the moment after the last tick has passed: its switch
+  // has gone, so the bags shown from the one line show what's in them, and anything can be unticked.
+  const hide = store.hide && !(complete && !linger.size);
   const jobs = p.tasks.map(g => bagCard(t, g, mode, hide, c.why, true));
   return [
     h('a', { class: 'crumb', href: '#/' }, h('span', { html: ICONS.back }), 'Trips'),

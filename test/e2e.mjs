@@ -1832,6 +1832,16 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   assert.equal(await stamp.count(), 0, 'no stamp once something is unticked');
   await allBut('go', '');
   assert.equal(await line.count(), 1, 'one line again');
+  // With Hide done on, the bags shown from the line still show what's in them, with no switch to turn it off.
+  await page.evaluate(() => { window.carryOn.store.hide = true; window.carryOn.render(); });
+  await line.click();
+  const clothes = page.locator('main .bag', { has: page.locator('h2', { hasText: 'Clothes' }) });
+  await clothes.locator('.bag-done').click();
+  assert.ok(await clothes.locator('li.row.done').count() > 1, 'Hide done hides nothing while it’s all packed');
+  await clothes.locator('li.row.done .tick').first().click();
+  assert.equal(await page.locator('main .switch').count(), 1, 'unticked, Hide done is back');
+  await page.evaluate(() => { window.carryOn.store.hide = false; });
+  await allBut('go', '');
   // The luggage tag is stamped too.
   await page.click('.crumb');
   assert.equal(await page.locator('.tag-card .stamp').innerText(), 'PACKED');
