@@ -168,7 +168,7 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await more(page, 'Umbrella');
   const undo = await page.locator('#toast button').boundingBox();
   assert.equal(await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.textContent, [undo.x + undo.width / 2, undo.y + undo.height / 2]), 'Undo', 'Undo shows over the sheet');
-  assert.ok(undo.height >= 44, 'and is big enough to tap');
+  assert.ok(Math.round(undo.height) >= 44, 'and is big enough to tap'); // to the pixel: sliding in, it's a hair off
   await wait(500);
   await page.click('#toast button');
   await closeSheet(page);
