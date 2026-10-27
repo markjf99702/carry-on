@@ -2133,6 +2133,59 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   await ctx.close();
 }
 
+// ================= Pack it last =================
+// A thing marked Pack it last in My list waits with the last things out the door on a trip, saying where it goes,
+// and its bag counts without it; with the bags done, the trip and its tag say what's left for the morning.
+{
+  const { ctx, page } = await phone();
+  await page.click('text=Start with a starter list');
+  await page.goto(base + '#/list');
+  // Not for jobs.
+  await page.locator('.edit-row', { hasText: 'Take out the trash' }).click();
+  await until(() => sheetOpen(page), 'the job');
+  assert.equal(await page.locator('#sheet .last-pick').isVisible(), false, 'no Pack it last for a job');
+  await closeSheet(page);
+  await page.locator('.edit-row', { hasText: 'Phone charger' }).click();
+  await until(() => sheetOpen(page), 'the charger');
+  const pick = page.locator('#sheet .last-pick input');
+  assert.equal(await pick.isChecked(), false);
+  await page.locator('#sheet .last-pick').click();
+  await page.click('#sheet .btn.primary');
+  await until(async () => !(await sheetOpen(page)), 'Save');
+  assert.match(await page.locator('.edit-row', { hasText: 'Phone charger' }).innerText(), /Packed last/);
+  assert.match(await page.locator('.edit-row', { hasText: 'Headphones' }).innerText(), /^Headphones$/);
+  await page.goto(base + '#/');
+  await planTrip(page, { where: 'Chic', from: 2, to: 4, by: 'Driving' });
+  const last = page.locator('main .bag[data-bag="_last"]');
+  assert.equal(await last.locator('h2').innerText(), 'LAST THING OUT THE DOOR');
+  assert.deepEqual(await last.locator('.name').allInnerTexts(), ['Phone charger']);
+  assert.equal(await last.locator('.why').innerText(), 'Goes in Electronics');
+  assert.equal(await page.locator('main .bag', { has: page.locator('h2', { hasText: 'Electronics' }) }).locator('.name', { hasText: 'Phone charger' }).count(), 0, 'not in its bag too');
+  assert.equal(await last.locator('.bag-icon').innerText(), '🚪');
+  assert.equal(await last.locator('[data-key^="bagmore:"]').count(), 0, 'no bag menu for it');
+  // Between the bags and the jobs before leaving the house, on the page and in the chips that go to a bag.
+  const order = await page.locator('main .bag h2').allInnerTexts();
+  assert.equal(order.indexOf('LAST THING OUT THE DOOR'), order.indexOf('LEAVING THE HOUSE') - 1);
+  assert.equal(await page.locator('.jump [data-key="jump:_last"]').getAttribute('aria-label'), 'Last thing out the door, 0 of 1 packed');
+  // Everything in the bags packed, the night before.
+  await page.evaluate(() => {
+    const { store, M, R, render } = window.carryOn, t = Object.values(store.doc.trips)[0], p = R.plan(store.doc, t, 'go');
+    store.apply(d => M.markAll(d, t.id, p.groups.flatMap(g => g.rows).map(r => r.key), 1));
+    render();
+  });
+  const jobs = await page.locator('main .bag', { has: page.locator('h2', { hasText: 'Leaving the house' }) }).locator('li.row').count();
+  assert.equal(await page.locator('.progress p').innerText(), `All packed but ${1 + jobs} for the morning`);
+  assert.equal(await page.locator('.pass .stamp').count(), 0, 'not stamped yet');
+  await page.click('.crumb');
+  assert.equal(await page.locator('.tag-card .packed').innerText(), `All packed but ${1 + jobs} for the morning`);
+  await page.goBack();
+  await page.waitForSelector('.pass h1');
+  await last.locator('.tick').click();
+  assert.equal(await page.locator('.progress p').innerText(), `All packed but ${jobs} for the morning`);
+  await fits(page, 'the trip with the last things out the door');
+  await ctx.close();
+}
+
 // ================= From the keyboard =================
 {
   const { ctx, page } = await phone();

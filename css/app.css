@@ -172,6 +172,11 @@ input:not([type="checkbox"]):focus, select:focus, textarea:focus { outline: none
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .check { display: flex; align-items: center; gap: 10px; min-height: 44px; margin: -8px 0 4px; font-weight: 600; }
 .check input { width: 22px; height: 22px; accent-color: var(--accent); }
+/* My list's Pack it last, with a line under it on what it's for. */
+.check.last-pick { align-items: flex-start; margin: -4px 0 14px; }
+.last-pick input { flex: none; margin: 1px 0 0; }
+.last-pick > span { display: grid; gap: 2px; }
+.last-pick small { font-size: 13px; font-weight: 500; }
 
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .chip {
@@ -375,6 +380,8 @@ main > h1 + .card { margin-top: 14px; }
 .count { display: inline-flex; align-items: center; gap: 3px; font-weight: 700; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .count.all { color: var(--ok); }
 .count svg { width: 16px; height: 16px; }
+/* A group with no menu (the last things out the door) keeps its count clear of the edge. */
+.bag-head > .count:last-child { margin-right: 6px; }
 .bag-note { margin: 0; padding: 8px 14px 0; font-size: 14px; color: var(--muted); }
 .bag.all { background: color-mix(in srgb, var(--ok-soft) 45%, var(--paper)); }
 .bag.jobs { border-style: dashed; box-shadow: none; }

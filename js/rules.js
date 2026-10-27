@@ -260,7 +260,7 @@ export function whyNot(doc, rule, res) {
 // A row: { id, name, note, qty, daily (how many a day, for one by the day), capped (stopped at the laundry limit),
 //   hits: [condition keys], key: the mark key, done, extra?, gone?, deleted? (coming home: packed going, deleted
 //   from My list since), last? and goes (the bag it goes in) for one packed last }
-export const LAST = { id: '_last', name: 'Last thing out the door', icon: '🚪', kind: 'bag', when: [], unless: [], note: '', order: 1e9 };
+export const LAST = { id: '_last', name: 'Last thing out the door', icon: '🚪', kind: 'bag', when: [], unless: [], note: 'Still in use the night before: pack these on the way out.', order: 1e9 };
 // Whether a thing is packed last on this trip: as picked for this trip, or else as My list says.
 export const packedLast = (doc, trip, id) => {
   const v = trip.marks?.['l:' + id]?.v;

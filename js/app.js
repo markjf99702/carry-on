@@ -262,6 +262,14 @@ const theBag = b => (/\b(bag|case|pack|backpack|suitcase|pouch|kit|box|tote|purs
 // you leave the hotel. Its luggage tag counts the same way.
 const tripMode = t => store.mode(t.id, today()) || (today() >= t.end ? 'back' : 'go');
 
+// A plan's groups as a trip shows them going: the bags, the last things out the door, then the jobs.
+const goingGroups = p => [...p.groups, ...(p.last ? [p.last] : []), ...p.tasks];
+// How much is packed, in words, on a trip and its luggage tag: "7 of 55 packed"; with everything in the bags packed
+// the night before, "All packed but 3 for the morning" (the last things out the door, and the jobs before leaving
+// the house); "All packed". Coming home, "back in the bags". As [the part in bold, the rest].
+const packedWords = (p, mode) => (p.total && p.done === p.total ? [mode === 'go' ? 'All packed' : 'All back in the bags', '']
+  : p.morning ? ['All packed', ` but ${p.morning} for the morning`] : [`${p.done} of ${p.total}`, mode === 'go' ? ' packed' : ' back in the bags']);
+
 // When a trip is, in a few words, on its luggage tag and its boarding pass: "In 3 days", "Tomorrow", "Now · back
 // Wed", "Past trip". Back more than six days on, it's a date, as a weekday alone could be either of two.
 function whenText(t) {
@@ -294,7 +302,7 @@ function tagCard(t) {
     w ? h('span', { class: 'glance' }, `${W.dayIcon(R.legDays(t).flatMap(l => l.days)[0])} ${W.temp(w.minLo, c.units)}–${W.temp(w.maxHi, c.units)}${w.rain ? ' · rain' + (w.rainDays.length ? ' likely' : ' some days') : ''}${w.snow ? ' · snow' : ''}`) : null,
     h('span', { class: 'meter', 'aria-hidden': 'true' }, meter(t.id + ':tag', p.done, p.total)),
     p.done === p.total && p.total ? stamp(mode) : null,
-    h('span', { class: 'packed' }, p.done === p.total && p.total ? (mode === 'go' ? 'All packed' : 'All back in the bags') : `${p.done} of ${p.total} ${mode === 'go' ? 'packed' : 'back in the bags'}`));
+    h('span', { class: 'packed' }, packedWords(p, mode).join('')));
 }
 
 // ---------- weather lookups ----------
@@ -334,7 +342,7 @@ function maybeWeather(t, force = false) {
 // While What this trip calls for is open, the page redraws under it after every tap there, so what changed waits
 // (held) until it closes, and says everything changed in it at once.
 let change = null; // { id, before: [[thing's id, name], …] in the list's order, held }
-const onList = t => { const p = R.plan(doc(), t, 'go'); return [...p.groups, ...p.tasks].flatMap(g => g.rows.map(r => [r.id, r.name])); };
+const onList = t => { const p = R.plan(doc(), t, 'go'); return goingGroups(p).flatMap(g => g.rows.map(r => [r.id, r.name])); };
 // Before a change: what's on the list. A change still waiting for its forecast keeps what was on it before that one.
 function watchChange(id, { held = false } = {}) {
   const t = doc().trips[id];
@@ -548,10 +556,10 @@ function tripView(t) {
       h('button', { type: 'button', 'data-key': 'mode:back', 'aria-pressed': String(mode === 'back'), onclick: () => { store.setMode(t.id, 'back', today()); render(); } }, 'Coming home')),
     h('div', { class: 'progress' },
       h('div', { class: 'meter', 'aria-hidden': 'true' }, meter(t.id + ':' + mode, p.done, p.total)),
-      h('p', { class: complete ? 'all' + (finished ? ' just' : '') : null }, complete ? h('span', { html: ICONS.check }) : null, h('b', {}, complete ? (mode === 'go' ? 'All packed' : 'All back in the bags') : `${p.done} of ${p.total}`), complete ? '' : mode === 'go' ? ' packed' : ' back in the bags'),
+      h('p', { class: complete ? 'all' + (finished ? ' just' : '') : null }, complete ? h('span', { html: ICONS.check }) : null, h('b', {}, packedWords(p, mode)[0]), packedWords(p, mode)[1]),
       complete ? null : h('label', { class: 'switch' }, h('input', { type: 'checkbox', 'data-key': 'hide', checked: hide, onchange: e => { store.hide = e.target.checked; render(); } }), h('span', {}, 'Hide done'))),
     // Each bag, in the order they come, with how much of it is done, to go straight to it on a long list.
-    oneLine ? null : jumpRow((mode === 'back' ? [...p.tasks, ...p.groups] : [...p.groups, ...p.tasks]).map(g => {
+    oneLine ? null : jumpRow((mode === 'back' ? [...p.tasks, ...p.groups] : goingGroups(p)).map(g => {
       const done = g.rows.filter(r => r.done).length, jobs = g.bag.kind !== 'bag';
       return { bag: g.bag, count: `${done}/${g.rows.length}`, all: done === g.rows.length, said: `${done} of ${g.rows.length} ${jobs ? 'done' : mode === 'go' ? 'packed' : 'back in'}` };
     })),
@@ -567,6 +575,8 @@ function tripView(t) {
     mode === 'back' && !oneLine ? jobs : null,
     oneLine ? null : p.groups.map(g => bagCard(t, g, mode, hide, c.why)),
     M.bags(doc()).some(b => b.kind === 'bag') ? h('button', { type: 'button', class: 'btn add-extra', 'data-key': 'add-extra', onclick: () => extraSheet(t, null, { home: mode === 'back' }) }, h('span', { html: ICONS.plus }), mode === 'go' ? 'Add something for this trip' : 'Add something to bring home') : null,
+    // Going, what's still in use the night before, to pack on the way out, then the jobs before leaving the house.
+    p.last && !oneLine ? bagCard(t, p.last, mode, hide, c.why) : null,
     mode === 'go' && !oneLine ? jobs : null,
     p.left.length || p.leftBags.length ? leftOff(t, p.left, p.leftBags, mode) : null,
   ];
@@ -681,7 +691,7 @@ function bagCard(t, g, mode, hide, why, jobs = false) {
     b.when?.length ? h('span', { class: 'bag-cond' }, b.when.map(k => R.condInfo(doc(), k)?.icon).join('')) : null,
     h('span', { class: 'count' + (all ? ' all' : '') }, all ? h('span', { html: ICONS.check }) : null,
       h('span', { 'aria-hidden': 'true' }, `${done}/${g.rows.length}`), h('span', { class: 'sr-only' }, `${done} of ${g.rows.length} ${jobs ? 'done' : mode === 'go' ? 'packed' : 'back in'}`)),
-    b.id !== '_loose' ? h('button', { type: 'button', class: 'icon-btn small', 'data-key': 'bagmore:' + b.id, 'aria-label': `More for ${b.name}`, html: ICONS.more, onclick: () => bagSheet(t, g, mode) }) : null);
+    b.id !== '_loose' && b.id !== R.LAST.id ? h('button', { type: 'button', class: 'icon-btn small', 'data-key': 'bagmore:' + b.id, 'aria-label': `More for ${b.name}`, html: ICONS.more, onclick: () => bagSheet(t, g, mode) }) : null);
   return h('section', { class: 'bag' + (all ? ' all' : '') + (jobs ? ' jobs' : ''), 'data-bag': b.id },
     head,
     b.note && !(b.id === 's-liquids' && t.travel !== 'fly' && b.note === AIRPORT_NOTE) ? h('p', { class: 'bag-note' }, b.note) : null,
@@ -726,7 +736,9 @@ function itemRow(t, g, r, mode, whyMap, jobs, hide) {
     going && r.capped ? line('why', `${cap(perDay(r.daily))} a day, up to ${R.laundry(doc()) * r.daily}: laundry after that`) : null,
     going && r.packedOnly ? line('why', 'Packed, though the trip no longer calls for it') : null,
     going && r.added ? line('why', 'Added for this trip') : null,
-    r.moved ? line('why', 'In this bag for this trip') : null,
+    r.moved && !r.last ? line('why', 'In this bag for this trip') : null,
+    // Packed last: the bag it goes in, which isn't the group it's in.
+    r.last ? line('why', `Goes in ${theBag(r.goes)}`) : null,
     going && r.extra ? line('why', 'Just for this trip') : null,
     r.deleted ? line('why', 'No longer on your list') : null,
   ];
@@ -746,7 +758,7 @@ function leftOff(t, left, leftBags, mode) {
     const was = t.marks?.['x:' + id]?.v;
     apply(d => M.mark(d, t.id, 'x:' + id, skipped ? 0 : 'add'));
     const p = R.plan(doc(), doc().trips[t.id], mode);
-    const g = [...p.groups, ...p.tasks].find(x => x.bag.id === id || x.rows.some(r => r.id === id));
+    const g = goingGroups(p).find(x => x.bag.id === id || x.rows.some(r => r.id === id));
     const still = !g && (p.left.find(l => l.item.id === id) || p.leftBags.find(l => l.bag.id === id));
     toast(still ? `${name} is still off: ${still.why.charAt(0).toLowerCase() + still.why.slice(1)}.` : g && g.bag.id !== id ? `${name} is on the list, in ${theBag(g.bag)}.` : `${name} is on the list.`,
       { label: 'Undo', run: () => apply(d => M.mark(d, t.id, 'x:' + id, was || 0)) });
@@ -1355,7 +1367,8 @@ function listBag(b) {
       h('button', { type: 'button', class: 'edit-row', 'data-key': 'item:' + x.id, onclick: () => itemEditor(x) },
         h('span', { class: 'name' }, x.name, x.per === 'day' ? h('span', { class: 'qty' }, ` · ${perDay(x.qty)} a day`) : x.qty > 1 ? h('span', { class: 'qty' }, ' ×' + x.qty) : null),
         x.note ? h('small', {}, x.note) : null,
-        condChips(x) ? h('small', { class: 'why' }, condChips(x)) : null)))) : null,
+        condChips(x) ? h('small', { class: 'why' }, condChips(x)) : null,
+        x.last?.v && b.kind === 'bag' ? h('small', { class: 'why' }, h('span', { 'aria-hidden': 'true' }, R.LAST.icon), ' Packed last') : null)))) : null,
     h('form', { class: 'add-row', onsubmit: e => { e.preventDefault(); addOne(); } },
       input = h('input', { type: 'text', 'data-key': 'add:' + b.id, placeholder: b.kind === 'bag' ? `Add to ${b.name}` : 'Add a job', 'aria-label': `Add to ${b.name}`, maxlength: 80, enterkeyhint: 'done', autocomplete: 'off' }),
       h('button', { type: 'submit', class: 'btn small' }, 'Add')));
@@ -1385,15 +1398,21 @@ function itemEditor(x, { when: when0 = [], then = null } = {}) {
   const bagsAll = M.bags(doc());
   const bag0 = x?.bag || bagsAll[0]?.id;
   const when = new Set(x?.when || when0), unless = new Set(x?.unless || []);
-  let name, bag, qty, note, mode;
+  let name, bag, qty, note, mode, last;
   sheet(isNew ? 'Add a thing' : x.name, close => {
     const whenBox = h('div', { hidden: !when.size }, condPicker(when));
+    // Packed last is for things in a bag, not jobs.
+    const inBag = () => doc().bags[bag.value]?.kind === 'bag';
+    const lastPick = h('label', { class: 'check last-pick', hidden: doc().bags[bag0]?.kind !== 'bag' }, last = h('input', { type: 'checkbox', checked: !!x?.last?.v }),
+      h('span', {}, 'Pack it last', h('small', { class: 'muted' }, 'With the last things out the door, for what’s still in use the night before: a charger in the wall, medicine in the fridge.')));
     const save = () => {
       const n = name.value.trim();
       if (!n) { name.focus(); return; }
       const q = qty.value;
       const daily = q.startsWith('day');
       const fields = { id: x?.id || M.newId('i'), name: n, bag: bag.value, note: note.value.trim(), when: mode.value === 'some' ? [...when] : [], unless: [...unless], per: daily ? 'day' : '', qty: daily ? +q.slice(3) || 1 : +q };
+      // Saved only when it changes, so a thing that never had it still has none.
+      if (inBag() && last.checked !== !!x?.last?.v) fields.last = last.checked;
       if (!then) close();
       applyCounting(d => M.putItem(d, fields));
       render();
@@ -1402,7 +1421,7 @@ function itemEditor(x, { when: when0 = [], then = null } = {}) {
     return [
       h('label', { class: 'field' }, h('span', {}, 'Name'), name = h('input', { type: 'text', value: x?.name || '', maxlength: 80, autofocus: isNew, autocomplete: 'off' })),
       h('div', { class: 'two' },
-        h('label', { class: 'field' }, h('span', {}, 'Bag'), bag = h('select', {}, bagsAll.map(b => h('option', { value: b.id, selected: b.id === bag0 }, `${b.icon} ${b.name}`)))),
+        h('label', { class: 'field' }, h('span', {}, 'Bag'), bag = h('select', { onchange: () => { lastPick.hidden = !inBag(); } }, bagsAll.map(b => h('option', { value: b.id, selected: b.id === bag0 }, `${b.icon} ${b.name}`)))),
         h('label', { class: 'field' }, h('span', {}, 'How many'), qty = h('select', {},
           // Just one to 6, and more where a pasted list ("Socks x10") or a link had it, so Save keeps it.
           [...new Set([1, 2, 3, 4, 5, 6, x?.per !== 'day' ? x?.qty || 1 : 1])].map(n => h('option', { value: n, selected: x?.per !== 'day' && (x?.qty || 1) === n }, n === 1 ? 'Just one' : String(n))),
@@ -1417,6 +1436,7 @@ function itemEditor(x, { when: when0 = [], then = null } = {}) {
         h('summary', {}, 'Leave it home when…'),
         condPicker(unless)),
       h('label', { class: 'field' }, h('span', {}, 'Note'), note = h('input', { type: 'text', value: x?.note || '', maxlength: 140, placeholder: 'Shows under it on the list', autocomplete: 'off' })),
+      lastPick,
       h('div', { class: 'sheet-actions' },
         isNew ? null : h('div', { class: 'nudge' },
           h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Move up', html: ICONS.up, onclick: () => { store.apply(d => M.nudge(d, 'items', x.id, -1)); render(); } }),
