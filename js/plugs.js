@@ -49,7 +49,8 @@ export function plugsFor(home, dest) {
 }
 
 // "Type G, 230 V"
-export const plugText = p => `Type ${p.types.join('/')}, ${p.volts} V`;
+// No break between the volts and the V.
+export const plugText = p => `Type ${p.types.join('/')}, ${p.volts}\u00a0V`;
 
 // The country this browser's languages point to, for a first guess at home. The first language says most: its
 // own country (en-GB → GB, zh-Hant-TW → TW), or one a later tag in that language names (en, en-GB → GB), or else

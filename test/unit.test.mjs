@@ -56,7 +56,7 @@ test('abroad: passport, and an adapter only where the plugs differ', () => {
   assert.ok(allNames(p).includes('Passport'));
   const adapter = p.groups.flatMap(g => g.rows).find(r => r.name === 'Plug adapter');
   assert.deepEqual(adapter.hits, ['plug']);
-  assert.match(p.cond.why.plug, /Type C\/F, 230 V/);
+  assert.match(p.cond.why.plug, /Type C\/F, 230\u00a0V/);
   doc = trip(doc, { place: { name: 'Tokyo', cc: 'JP', country: 'Japan' } });
   p = plan(doc, doc.trips.t1);
   assert.ok(allNames(p).includes('Passport'));
@@ -87,7 +87,7 @@ test('plugs', () => {
   assert.equal(plugsFor('DE', 'FR').need, false, 'a Europlug fits French sockets');
   assert.equal(plugsFor('GB', 'IE').need, false);
   assert.equal(plugsFor('US', 'GB').voltsDiffer, true);
-  assert.equal(plugText(plugsFor('US', 'AU')), 'Type I, 230 V');
+  assert.equal(plugText(plugsFor('US', 'AU')), 'Type I, 230\u00a0V', 'with no break before the V');
 });
 
 test('weather: forecast thresholds and the reasons they give', () => {
@@ -139,7 +139,7 @@ test('the reasons say what the rules saw', () => {
   assert.equal(why([typ('2027-01-10', -2, -8, { wet: 0.4, sn: 0.2 })]).rain, 'Rain on about 4 days in 10 this time of year');
   assert.equal(why([typ('2027-01-10', -2, -8, { wet: 0.4, sn: 0.2 })]).snow, 'Snow on about 2 days in 10 this time of year');
   // The plug: one line, no brackets.
-  assert.equal(why([day('2026-11-02', 15, 8)], { name: 'Lisbon', cc: 'PT', country: 'Portugal' }).plug, 'Type C/F, 230 V · check anything that heats up');
+  assert.equal(why([day('2026-11-02', 15, 8)], { name: 'Lisbon', cc: 'PT', country: 'Portugal' }).plug, 'Type C/F, 230\u00a0V · check anything that heats up');
 });
 
 test('why something isn’t coming, in words: conditions by their phrase, occasions by name', () => {

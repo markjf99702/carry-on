@@ -116,7 +116,7 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   for (const n of ['Warm coat', 'Snow boots', 'Hiking boots', 'Workout clothes']) assert.ok(!names.includes(n), `${n} is not on the list`);
   assert.ok(names.includes('Socks ×5'), 'socks for five days');
   assert.match(await row(page, 'Umbrella').innerText(), /Rain likely Fri|Rain likely \w{3}/);
-  assert.match(await row(page, 'Plug adapter').innerText(), /Type C\/F, 230 V/);
+  assert.match(await row(page, 'Plug adapter').innerText(), /Type C\/F, 230\u00a0V/);
   assert.match(await page.locator('.bag', { hasText: 'Liquids bag' }).locator('.bag-note').innerText(), /quart bag, for a carry-on/, 'flying: the airport rule');
   const chips = await page.locator('.needs .chip').allInnerTexts();
   for (const c of ['Flying', 'Abroad', 'Different plugs', 'Rain', 'Work']) assert.ok(chips.some(x => x.includes(c)), `${c} chip`);
