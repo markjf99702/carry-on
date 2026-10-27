@@ -47,10 +47,11 @@ function iconCopy(v) {
 }
 
 // ---------- toast ----------
-// It goes after a few seconds, or about eight with an Undo, but waits while the pointer is on it or it has the
-// focus. A screen reader hears it from a live region that's on the page from the start (MDN, "ARIA live regions"),
-// and the sheet's own while a sheet is open, since the rest of the page is hidden then; the words go in a moment
-// after it's emptied, so they're heard as new.
+// It goes after a few seconds (a long one, such as what an edit changed on a trip's list, stays about as long as it
+// takes to read, up to eight), or about eight with an Undo, but waits while the pointer is on it or it has the focus.
+// A screen reader hears it from a live region that's on the page from the start (MDN, "ARIA live regions"), and the
+// sheet's own while a sheet is open, since the rest of the page is hidden then; the words go in a moment after it's
+// emptied, so they're heard as new.
 let toastT = null, sayT = null, toastLeft = 0, toastEnd = 0, paused = false;
 // The last toast's action and when it came, for toastKeep, and a toast waiting for one with an Undo to go (toastNext).
 let last = { action: undefined, at: 0 }, next = '';
@@ -91,7 +92,7 @@ export function toast(msg, action) {
   }
   el.hidden = false;
   paused = false;
-  hideIn(action ? 8000 : 3000);
+  hideIn(action ? 8000 : Math.min(8000, Math.max(3000, String(msg).length * 60)));
   const [page, inSheet] = lives(), live = document.getElementById('sheet').open ? inSheet : page;
   page.textContent = inSheet.textContent = '';
   clearTimeout(sayT);

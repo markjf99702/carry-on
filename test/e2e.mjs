@@ -962,6 +962,9 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   assert.ok(calls.slice(lookups).some(c => c.startsWith('forecast')), 'after the new forecast');
   assert.deepEqual(await toasts(), ['Reykjavík: Warm coat, Gloves and hat and Snow boots are on now; Sunscreen, Swimsuit, Sandals and 2 more are off.']);
   assert.ok(await row(page, 'Snow boots').count() && !(await row(page, 'Sunscreen').count()), 'as the list says');
+  // Twenty words take longer to read than a short toast's three seconds.
+  await wait(3500);
+  assert.equal(await page.locator('#toast').isHidden(), false, 'a long one stays long enough to read');
   // From What this trip calls for, on closing it, with everything changed there.
   await page.click('.needs .btn');
   await until(() => sheetOpen(page), 'the conditions sheet');
