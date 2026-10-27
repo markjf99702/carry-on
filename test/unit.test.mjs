@@ -1846,6 +1846,26 @@ test('one a day stops at the laundry limit, and the row says so', () => {
   assert.equal(row(doc, 'Belt').capped, false, 'not one a day');
 });
 
+test('two or three for each day, still stopped at the laundry limit', () => {
+  let doc = M.setPref(starter(), 'home', 'US');
+  doc = M.putTrip(doc, { id: 't1', start: T, end: add(T, 2), travel: 'drive', place: { name: 'Chicago', cc: 'US', country: 'United States' } }); // 3 days
+  const row = (d, name) => plan(d, d.trips.t1).groups.flatMap(g => g.rows).find(r => r.name === name);
+  assert.deepEqual([row(doc, 'Socks').qty, row(doc, 'Socks').daily], [3, 1], 'one a day, as every one saved so far is');
+  doc = M.putItem(doc, { id: 's-clothes-socks', qty: 2 });
+  assert.deepEqual([row(doc, 'Socks').qty, row(doc, 'Socks').daily, row(doc, 'Socks').capped], [6, 2, false], 'two kids on a 3-day weekend');
+  // A week with the laundry limit of 7, then ten days: 14 either way.
+  const week = M.putTrip(doc, { id: 't1', end: add(T, 6) }), ten = M.putTrip(doc, { id: 't1', end: add(T, 9) });
+  assert.equal(row(week, 'Socks').qty, 14);
+  assert.deepEqual([row(ten, 'Socks').qty, row(ten, 'Socks').capped], [14, true]);
+  assert.equal(row(M.putItem(ten, { id: 's-clothes-socks', qty: 3 }), 'Socks').qty, 21);
+  // Two a day instead of one: a tick on one a day is too few now.
+  let one = M.mark(M.putItem(doc, { id: 's-clothes-socks', qty: 1 }), 't1', 'p:s-clothes-socks', 1);
+  assert.deepEqual(grown(one, M.putItem(one, { id: 's-clothes-socks', qty: 2 }), 't1'), ['p:s-clothes-socks']);
+  // It keeps through cleaning and a link.
+  assert.deepEqual([M.cleanItem(doc.items['s-clothes-socks']).per, M.cleanItem(doc.items['s-clothes-socks']).qty], ['day', 2]);
+  assert.deepEqual(M.listOf(doc).items.find(x => x.id === 's-clothes-socks'), { id: 's-clothes-socks', name: 'Socks', bag: 's-clothes', qty: 2, per: 'day' });
+});
+
 test('qty', () => {
   let doc = M.setPref(starter(), 'laundry', 3);
   doc = trip(doc, {});

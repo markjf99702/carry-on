@@ -177,7 +177,8 @@ export function passes(rule, on) {
 }
 
 export const days = trip => nights(trip.start, trip.end) + 1;
-export const qtyOf = (doc, trip, item) => (item.per === 'day' ? Math.min(days(trip), laundry(doc)) : item.qty || 1);
+// One, two or three for each day, up to the laundry limit's days: two a day for a week is 14.
+export const qtyOf = (doc, trip, item) => (item.per === 'day' ? Math.min(days(trip), laundry(doc)) * (item.qty || 1) : item.qty || 1);
 
 // Whether a bag or list of jobs comes on a trip: its conditions say so, or it was brought along anyway, and it
 // wasn't left off ('x:BAGID').
@@ -204,8 +205,9 @@ export function whyNot(doc, rule, res) {
 //   leftBags: [{ bag, why, skipped, count, more }], done, total, cond }
 //   count: how many of the bag's things its line stands for. more: some things in it are on the list anyway (moved
 //   or added to it, or packed already), so those are more.
-// A row: { id, name, note, qty, capped (one a day, stopped at the laundry limit), hits: [condition keys],
-//   key: the mark key, done, extra?, gone?, deleted? (coming home: packed going, deleted from My list since) }
+// A row: { id, name, note, qty, daily (how many a day, for one by the day), capped (stopped at the laundry limit),
+//   hits: [condition keys], key: the mark key, done, extra?, gone?, deleted? (coming home: packed going, deleted
+//   from My list since) }
 export function plan(doc, trip, mode = 'go') {
   const cond = conditions(doc, trip), on = cond.on;
   const marks = trip.marks || {};
@@ -236,7 +238,7 @@ export function plan(doc, trip, mode = 'go') {
     }
     if (mode === 'back' && anyPacked && !packed) continue;
     groupOf(bag).rows.push({
-      id: it.id, name: it.name, note: it.note, qty: qtyOf(doc, trip, it), capped: it.per === 'day' && days(trip) > laundry(doc),
+      id: it.id, name: it.name, note: it.note, qty: qtyOf(doc, trip, it), daily: it.per === 'day' ? it.qty || 1 : 0, capped: it.per === 'day' && days(trip) > laundry(doc),
       hits: res.hits, key: (mode === 'go' ? 'p:' : 'r:') + it.id,
       added: p === 'add', moved: bag !== home, packedOnly: (!res.ok || !bagIn) && p !== 'add',
     });
@@ -256,7 +258,7 @@ export function plan(doc, trip, mode = 'go') {
     deleted.sort((a, b) => rank(a) - rank(b) || a.order - b.order || a.name.localeCompare(b.name));
     for (const it of deleted) {
       groupOf(bagFor(mv(it.id)) || bagFor(it.bag) || fallback).rows.push({
-        id: it.id, name: it.name, note: it.note, qty: qtyOf(doc, trip, it), capped: it.per === 'day' && days(trip) > laundry(doc),
+        id: it.id, name: it.name, note: it.note, qty: qtyOf(doc, trip, it), daily: it.per === 'day' ? it.qty || 1 : 0, capped: it.per === 'day' && days(trip) > laundry(doc),
         hits: [], key: 'r:' + it.id, deleted: true,
       });
     }

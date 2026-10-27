@@ -6,7 +6,8 @@
 //           leaving the hotel. when/unless are condition keys (rules.js): the bag comes along only when one of
 //           `when` applies (or always, when it's empty) and none of `unless` does.
 //   item  { id, name, bag, order, when, unless, qty, per, note, t, del? }
-//           per 'day': one for each day of the trip, up to the laundry limit; otherwise qty of it.
+//           per 'day': qty for each day of the trip (one, two or three), up to the laundry limit's days; otherwise
+//           qty of it. A copy of Carry On from before two or three a day reads per 'day' as one a day.
 //   tag   { id, name, icon, order, t, del? }   an occasion a trip can have: work, the gym, a wedding
 // A trip:
 //   { id, name, place, start, end, travel, t, del?, set, marks, extras, wx, stops? }

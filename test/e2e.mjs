@@ -919,6 +919,24 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   assert.equal(await said(), 'Socks needs more now (×5), so it’s unticked.');
   await page.goto(trip);
   assert.equal(await tick('Socks').getAttribute('aria-checked'), 'false');
+  // Two for each day, from How many in My list: twice as many, stopped at twice the laundry limit.
+  await page.goto(base + '#/list');
+  await page.locator('.edit-row', { hasText: 'Socks' }).click();
+  const howMany = page.locator('.sheet label', { hasText: 'How many' }).locator('select');
+  assert.deepEqual((await howMany.locator('option').allInnerTexts()).slice(-3), ['One for each day (up to 5)', 'Two for each day (up to 10)', 'Three for each day (up to 15)']);
+  await howMany.selectOption({ label: 'Two for each day (up to 10)' });
+  await page.click('.sheet .btn.primary');
+  assert.equal(await page.locator('.edit-row', { hasText: 'Socks' }).locator('.name').innerText(), 'Socks · two a day');
+  await page.goto(trip);
+  assert.equal(await row(page, 'Socks').locator('.name').innerText(), 'Socks ×10');
+  await page.goto(base + '#/settings');
+  await page.click('[aria-label="One fewer"]');
+  await page.goto(trip);
+  assert.equal(await row(page, 'Socks').locator('.name').innerText(), 'Socks ×8');
+  assert.match(await row(page, 'Socks').innerText(), /Two a day, up to 8: laundry after that/);
+  await page.goto(base + '#/settings');
+  await page.click('[aria-label="One more"]');
+  await page.goto(trip);
   // The bag that finishes the packing: it says everything's packed, and its Undo takes back just that bag.
   await page.evaluate(() => {
     const { store, M, R, render } = window.carryOn, id = location.hash.split('/')[2], p = R.plan(store.doc, store.doc.trips[id], 'go');

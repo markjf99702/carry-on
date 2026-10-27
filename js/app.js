@@ -17,6 +17,9 @@ const single = document.documentElement.hasAttribute('data-single');
 const doc = () => store.doc;
 const today = () => D.today();
 const plural = (n, one, many = one + 's') => `${n} ${n === 1 ? one : many}`;
+// How many a day, in words: "one", "two", "three", then numbers.
+const perDay = n => ['one', 'two', 'three'][(n || 1) - 1] || String(n);
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
 const BAG_ICONS = ['🧳', '🧴', '🪥', '💊', '🔌', '🛂', '👜', '🎒', '👕', '👟', '💼', '🏋️', '🧸', '🍼', '📷', '🎮', '⛳', '🏕️', '🎿', '🏖️', '🐶', '📚', '🍫', '🏠', '🏨'];
 const TAG_ICONS = ['🏷️', '💼', '🏋️', '🏊', '👔', '🥾', '💍', '🎉', '⛳', '🎿', '🏕️', '👶', '🐶', '🎭', '🏖️', '🎸', '🚴', '🎣'];
 
@@ -720,7 +723,7 @@ function itemRow(t, g, r, mode, whyMap, jobs, hide) {
     r.gone ? line(null, 'Not coming back') : null,
     r.note ? line(null, r.note) : null,
     why.length ? line('why', why.flatMap((w, i) => (i ? [' · ', ...w] : w))) : null,
-    going && r.capped ? line('why', `One a day, up to ${R.laundry(doc())}: laundry after that`) : null,
+    going && r.capped ? line('why', `${cap(perDay(r.daily))} a day, up to ${R.laundry(doc()) * r.daily}: laundry after that`) : null,
     going && r.packedOnly ? line('why', 'Packed, though the trip no longer calls for it') : null,
     going && r.added ? line('why', 'Added for this trip') : null,
     r.moved ? line('why', 'In this bag for this trip') : null,
@@ -1287,7 +1290,7 @@ function listBag(b) {
     its.length ? null : h('p', { class: 'muted small pad bag-empty' }, b.kind === 'bag' ? 'Nothing in it yet.' : 'No jobs in it yet.'),
     its.length ? h('ul', { class: 'rows' }, its.map(x => h('li', { class: 'row' },
       h('button', { type: 'button', class: 'edit-row', 'data-key': 'item:' + x.id, onclick: () => itemEditor(x) },
-        h('span', { class: 'name' }, x.name, x.per === 'day' ? h('span', { class: 'qty' }, ' · one a day') : x.qty > 1 ? h('span', { class: 'qty' }, ' ×' + x.qty) : null),
+        h('span', { class: 'name' }, x.name, x.per === 'day' ? h('span', { class: 'qty' }, ` · ${perDay(x.qty)} a day`) : x.qty > 1 ? h('span', { class: 'qty' }, ' ×' + x.qty) : null),
         x.note ? h('small', {}, x.note) : null,
         condChips(x) ? h('small', { class: 'why' }, condChips(x)) : null)))) : null,
     h('form', { class: 'add-row', onsubmit: e => { e.preventDefault(); addOne(); } },
@@ -1324,7 +1327,8 @@ function itemEditor(x, bagId) {
       const n = name.value.trim();
       if (!n) { name.focus(); return; }
       const q = qty.value;
-      const fields = { id: x?.id, name: n, bag: bag.value, note: note.value.trim(), when: mode.value === 'some' ? [...when] : [], unless: [...unless], per: q === 'day' ? 'day' : '', qty: q === 'day' ? 1 : +q };
+      const daily = q.startsWith('day');
+      const fields = { id: x?.id, name: n, bag: bag.value, note: note.value.trim(), when: mode.value === 'some' ? [...when] : [], unless: [...unless], per: daily ? 'day' : '', qty: daily ? +q.slice(3) || 1 : +q };
       close();
       applyCounting(d => M.putItem(d, fields));
       render();
@@ -1335,7 +1339,9 @@ function itemEditor(x, bagId) {
         h('label', { class: 'field' }, h('span', {}, 'Bag'), bag = h('select', {}, bagsAll.map(b => h('option', { value: b.id, selected: b.id === bag0 }, `${b.icon} ${b.name}`)))),
         h('label', { class: 'field' }, h('span', {}, 'How many'), qty = h('select', {},
           [1, 2, 3, 4, 5, 6].map(n => h('option', { value: n, selected: x?.per !== 'day' && (x?.qty || 1) === n }, n === 1 ? 'Just one' : String(n))),
-          h('option', { value: 'day', selected: x?.per === 'day' }, `One for each day (up to ${R.laundry(doc())})`)))),
+          // One, two or three for each day, and more where a list from a link had it.
+          [...new Set([1, 2, 3, x?.per === 'day' ? x.qty || 1 : 1])].map(n => h('option', { value: n === 1 ? 'day' : 'day' + n, selected: x?.per === 'day' && (x.qty || 1) === n },
+            `${cap(perDay(n))} for each day (up to ${R.laundry(doc()) * n})`))))),
       h('label', { class: 'field' }, h('span', {}, 'Bring it'), mode = h('select', { onchange: e => { whenBox.hidden = e.target.value !== 'some'; } },
         h('option', { value: 'all', selected: !when.size }, 'On every trip'),
         h('option', { value: 'some', selected: !!when.size }, 'Only when the trip calls for…'))),
