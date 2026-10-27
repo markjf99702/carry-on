@@ -1757,19 +1757,20 @@ test('pasted lists: blank-line blocks and ALL-CAPS headings, when nothing else m
 });
 
 test('a flat pasted list sorted into the starter list’s bags, by name and icon, and what fits none stays loose', () => {
-  const keep = parsePaste('Toothbrush\nFloss\nRazor\nShampoo\nToothpaste\nSunscreen\nPhone charger\nCables\nHeadphones\nPassport\nWallet\nID\nKeys\nSocks\nShirts\nShoes\nSunglasses\nSnacks\nBook\nKayak paddles\nContact lens solution\nContacts\nHair ties\nAddress book\niPads');
+  const keep = parsePaste('Toothbrush\nFloss\nRazor\nShampoo\nToothpaste\nSunscreen\nPhone charger\nCables\nHeadphones\nPassport\nWallet\nID\nKeys\nSocks\nShirts\nShoes\nSunglasses\nSnacks\nBook\nKayak paddles\nContact lens solution\nContacts\nHair ties\nAddress book\niPads\nMalaria tablets\nTablet');
   const { list, placed, left } = sortLoose(keep);
   const inBags = l => l.bags.map(b => [b.icon, b.name, l.items.filter(x => x.bag === b.id).map(x => x.name)]);
   assert.deepEqual(inBags(list), [
     ['🧴', 'Liquids bag', ['Shampoo', 'Toothpaste', 'Sunscreen', 'Contact lens solution']],
-    ['🪥', 'Toiletries bag', ['Toothbrush', 'Floss', 'Razor', 'Contacts', 'Hair ties']],
-    ['🔌', 'Electronics', ['Phone charger', 'Cables', 'Headphones', 'iPads']],
+    ['🪥', 'Toiletries bag', ['Toothbrush', 'Floss', 'Razor', 'Contacts', 'Hair ties', 'Malaria tablets']],
+    ['🔌', 'Electronics', ['Phone charger', 'Cables', 'Headphones', 'iPads', 'Tablet']],
     ['🛂', 'Documents and money', ['Passport', 'Wallet', 'ID', 'Keys']],
     ['👕', 'Clothes', ['Socks', 'Shirts', 'Shoes']],
     ['🎒', 'Day bag', ['Sunglasses', 'Snacks', 'Book', 'Address book']],
     ['🧳', 'Not in a bag', ['Kayak paddles']],
   ]);
-  assert.deepEqual([placed, left], [24, 1]);
+  assert.deepEqual([placed, left], [26, 1]);
+  // Tablets are medicine, a tablet is a screen.
   // The same names and icons as the starter list's bags, so it lines up with it: added to the starter list, the
   // bags are its own, and only what's new comes in.
   const starterBags = starterList().bags;
