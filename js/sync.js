@@ -107,8 +107,9 @@ async function run(tries, g) {
       remote = mergeDocs(await download(extra.id), remote, { first: true });
       await api('PATCH', `drive/v3/files/${extra.id}`, JSON.stringify({ trashed: true }), 'application/json');
     }
-    // A device's first sync with this file (or a file made fresh after the old one was deleted) takes
-    // the union: nothing on either side counts as removed.
+    // A device's first sync with this file (or a file made fresh after the old one was deleted) makes things of
+    // the same name on both sides into one, and an untouched starter list gives way to a list of the person's own
+    // (model.js). Something deleted on either side stays deleted, as at every sync.
     const first = !file || st.fileId !== file.id;
     const merged = remote ? mergeDocs(local, remote, { first }) : local, out = canon(merged);
     if (g !== gen) return false; // saving stopped meanwhile

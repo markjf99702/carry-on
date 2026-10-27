@@ -75,7 +75,9 @@ export const store = {
     fresh();
     // Where the backup and this device each made a thing of the same name, it becomes one with this device's id,
     // which Drive and the other devices hold too.
-    const merged = M.mergeDocs(incoming, doc, { first: true });
+    // Nothing here counts as removed by it (keepAll): something the backup has deleted but this device still has
+    // stays.
+    const merged = M.mergeDocs(incoming, doc, { first: true, keepAll: true });
     // Something deleted here since the backup was saved comes back, stamped newer than its deletion as Undo does,
     // so the next sync doesn't delete it again. That includes untouched starter things, which a first merge
     // otherwise leaves deleted.

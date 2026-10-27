@@ -314,8 +314,13 @@ const untouched = x => x.t === 0;
 
 // Merges two copies. Order doesn't matter and merging again changes nothing, so every device that syncs
 // ends up with the same list and trips.
-// first: this device's first merge with that copy (turning Drive on, restoring a backup, adding a shared list).
-//   - Nothing counts as removed: something one side deleted but the other still has stays.
+// first: this device's first merge with that copy (turning Drive on, folding two Drive files into one, restoring a
+// backup).
+//   - A deletion stands, as at every sync: deleted on one device means deleted on all. Something one side deleted
+//     stays deleted even where the other side had changed it earlier; only a change made after the deletion brings
+//     it back, as always.
+//   - keepAll, for restoring a backup: nothing counts as removed. Something one side deleted but the other still
+//     has stays, unless that's an untouched starter one (below).
 //   - A bag, thing or occasion made separately on both sides (same name, for a bag the same kind, and for a thing
 //     the same bag) becomes one, with the remote side's id; this side's trips follow, so their ticks and occasions
 //     stay, and so do its bags and things that come only for an occasion (or not for it).
@@ -324,7 +329,7 @@ const untouched = x => x.t === 0;
 //     never had them: when the other side has a list of its own (a bag or a thing that isn't untouched),
 //     starter bags and their things are dropped together (kept as deletions, so the phone's next sync drops them
 //     there too). A starter bag holding a thing of the person's own stays, though, so that thing still shows.
-export function mergeDocs(local, remote, { first = false } = {}) {
+export function mergeDocs(local, remote, { first = false, keepAll = false } = {}) {
   const out = { app: APP, v: 1 };
   const bagMap = Object.create(null), itemMap = Object.create(null), tagMap = Object.create(null);
   const tagKeys = ks => [...new Set(ks.map(k => tagMap[k] || k))].sort();
@@ -366,7 +371,7 @@ export function mergeDocs(local, remote, { first = false } = {}) {
       let m = !x ? y : !y ? x : mergeRec(x, y);
       if (first && name !== 'tags') {
         const keep = [x, y].find(z => z && !gone(z));
-        if (x && y && gone(m) && keep && !untouched(keep)) { m = { ...m }; delete m.del; }
+        if (keepAll && x && y && gone(m) && keep && !untouched(keep)) { m = { ...m }; delete m.del; }
         else if (!gone(m) && untouched(m) && (x ? !y && bHas : aHas) && !inUse.has(id)) m = { ...m, del: 1 };
       }
       merged[id] = m;
@@ -418,7 +423,7 @@ export function putBag(doc, fields) {
 // A bag goes with everything in it. An untouched starter bag counts as touched once it's deleted (t 1, older than
 // any real change), as it went on purpose: a list of jobs deleted from My list is told from an untouched starter one
 // a list of the person's own took the place of (jobsTakenOff). Its details keep their time otherwise, so a rename
-// made on another phone before the deletion still wins where a first merge keeps the bag (mergeDocs).
+// made on another phone before the deletion still wins where restoring a backup keeps the bag (mergeDocs).
 export function removeBag(doc, id) {
   const old = doc.bags[id];
   if (!bagThere(doc, old)) return doc;

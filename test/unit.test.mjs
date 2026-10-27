@@ -1401,11 +1401,36 @@ test('starting again from the starter list after deleting every bag sticks at th
   assert.ok(M.items(starter()).every(x => x.t === 0));
 });
 
-test('a first merge: a deletion on one side does not take away what the other side still has', () => {
-  const base = M.replaceList(M.blankDoc(), starterList());
-  const a = M.removeItem(base, 's-daybag-snacks');
-  const b = M.putItem(base, { id: 's-daybag-snacks', name: 'Snacks' });
-  assert.ok(!M.gone(M.mergeDocs(a, b, { first: true }).items['s-daybag-snacks']));
+test('turning Drive on: what another device deleted stays deleted, even where this phone changed it earlier', () => {
+  // This phone, not on Drive yet, changes a thing, renames a bag and ticks a trip. Afterwards another device deletes
+  // all three and saves to Drive. Deleted on one means deleted on all.
+  const base = trip(M.replaceList(M.blankDoc(), starterList()), {});
+  let phone = M.putItem(base, { id: 's-daybag-snacks', note: 'Trail mix' });
+  phone = M.putBag(phone, { id: 's-toiletries', name: 'Wash bag' });
+  phone = M.mark(phone, 't1', 'p:s-clothes-belt', 1);
+  later();
+  const drive = M.removeTrip(M.removeBag(M.removeItem(base, 's-daybag-snacks'), 's-toiletries'), 't1');
+  // Either way round: Drive's deletion reaching this phone, or this phone's reaching Drive.
+  for (const [local, remote] of [[phone, drive], [drive, phone]]) {
+    const m = M.mergeDocs(local, remote, { first: true });
+    assert.ok(M.gone(m.items['s-daybag-snacks']), 'the thing stays deleted');
+    assert.ok(!M.bags(m).some(b => b.id === 's-toiletries'), 'so does the bag');
+    assert.ok(!M.items(m).some(x => x.bag === 's-toiletries'), 'with its things');
+    assert.ok(M.gone(m.trips.t1), 'and the trip');
+    assert.equal(M.canon(M.mergeDocs(m, remote)), M.canon(m), 'the next sync changes nothing');
+  }
+  // A change made after the deletion brings it back, as at every sync.
+  later();
+  const after = M.putItem(phone, { id: 's-daybag-snacks', note: 'Trail mix and fruit' });
+  for (const m of [M.mergeDocs(after, drive, { first: true }), M.mergeDocs(drive, after, { first: true })]) {
+    assert.equal(M.items(m).find(x => x.id === 's-daybag-snacks')?.note, 'Trail mix and fruit');
+  }
+  // Restoring a backup (keepAll) is the exception: nothing counts as removed.
+  for (const m of [M.mergeDocs(drive, phone, { first: true, keepAll: true }), M.mergeDocs(phone, drive, { first: true, keepAll: true })]) {
+    assert.equal(M.items(m).find(x => x.id === 's-daybag-snacks')?.note, 'Trail mix');
+    assert.equal(M.bags(m).find(b => b.id === 's-toiletries')?.name, 'Wash bag');
+    assert.ok(!M.gone(m.trips.t1));
+  }
 });
 
 test('the same thing made on two devices becomes one on a first merge', () => {
@@ -1565,6 +1590,14 @@ test('a backup brings back starter things deleted since it was saved, and says w
   const synced = M.mergeDocs(store.doc, drive);
   assert.deepEqual(M.items(synced).filter(x => x.name === 'Kindle').map(x => x.id), ['kindleA']);
   assert.equal(synced.trips.t1.marks['p:kindleA'].v, 1);
+  // A backup from a phone where something was deleted after this device changed it: restoring it takes nothing away
+  // here. (Turning Drive on with that phone's copy would.)
+  store.erase();
+  store.apply(() => M.putItem(starter(), { id: 's-daybag-snacks', note: 'Trail mix' }));
+  const here = store.doc;
+  later();
+  assert.deepEqual(store.restoreBackup(JSON.stringify(M.removeItem(here, 's-daybag-snacks'))), none);
+  assert.equal(M.items(store.doc).find(x => x.id === 's-daybag-snacks')?.note, 'Trail mix');
   store.erase();
 });
 
@@ -1647,14 +1680,16 @@ test('a list of jobs taken off on purpose is told from an untouched starter one 
   const merged = M.mergeDocs(starter(), M.replaceList(M.blankDoc(), pasted), { first: true });
   assert.ok(M.gone(merged.bags['s-back']) && !M.jobsTakenOff(merged, 'back'));
   // Telling them apart doesn't make a deletion newer than an edit made before it: one phone renames the Work bag,
-  // the other deletes it later, and the first merge, which keeps what one side still has, keeps the new name.
+  // the other deletes it later, and restoring a backup, which keeps what one side still has, keeps the new name.
+  // (Turning Drive on, the deletion stands.)
   const renamed = M.putBag(starter(), { id: 's-work', name: 'Office bag' });
   later();
   const deleted = M.removeBag(starter(), 's-work');
-  for (const m of [M.mergeDocs(deleted, renamed, { first: true }), M.mergeDocs(renamed, deleted, { first: true })]) {
+  for (const m of [M.mergeDocs(deleted, renamed, { first: true, keepAll: true }), M.mergeDocs(renamed, deleted, { first: true, keepAll: true })]) {
     assert.ok(!M.gone(m.bags['s-work']));
     assert.equal(m.bags['s-work'].name, 'Office bag');
   }
+  for (const m of [M.mergeDocs(deleted, renamed, { first: true }), M.mergeDocs(renamed, deleted, { first: true })]) assert.ok(M.gone(m.bags['s-work']));
 });
 
 test('replacing a list can be undone, everywhere, without bringing back what was deleted before', () => {

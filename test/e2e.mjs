@@ -2852,6 +2852,37 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   await a.ctx.close(); await b.ctx.close();
 }
 
+// ================= A phone turning on Google Drive after something was deleted on another =================
+// Deleted on one phone means deleted on all: a phone that changed something earlier, and turns Drive on after
+// another phone deleted it, doesn't bring it back.
+{
+  const g = fakeGoogle();
+  const a = await phone({ google: g }), c = await phone({ google: g });
+  for (const p of [a.page, c.page]) { await p.click('text=Start with a starter list'); await p.waitForSelector('text=No trips yet.'); }
+  // The second phone gives Snacks a note and renames Leaving the house. Later the first deletes both, and saves to
+  // Drive.
+  await c.page.evaluate(() => { const { store, M } = window.carryOn; store.apply(d => M.putBag(M.putItem(d, { id: 's-daybag-snacks', note: 'Trail mix' }), { id: 's-leave', name: 'Before we go' })); });
+  await wait(20);
+  await a.page.evaluate(() => { const { store, M } = window.carryOn; store.apply(d => M.removeBag(M.removeItem(d, 's-daybag-snacks'), 's-leave')); });
+  await a.page.goto(base + '#/settings');
+  await a.page.click('text=Save to Google Drive');
+  const inDrive = () => JSON.parse(g.files().find(f => f.appProperties?.carryon === 'sync')?.body || 'null');
+  await until(() => inDrive()?.bags['s-leave'].del, 'the deletions in Drive');
+  // Then the second phone turns Drive on.
+  await c.page.goto(base + '#/settings');
+  await c.page.click('text=Save to Google Drive');
+  await until(() => c.page.evaluate(() => document.getElementById('cloud').dataset.s === 'ok' && !!JSON.parse(localStorage.getItem('carry-on.sync') || '{}').fileId), 'the second phone’s first sync');
+  await c.page.goto(base + '#/list');
+  await c.page.evaluate(() => window.carryOn.render());
+  const headings = await c.page.locator('.bag.edit h2').allInnerTexts();
+  assert.ok(!headings.includes('BEFORE WE GO') && !headings.includes('LEAVING THE HOUSE'), 'the jobs list stays deleted');
+  assert.ok(headings.includes('DAY BAG'), `the rest of the list is there (${headings})`);
+  assert.ok(!(await rowsText(c.page)).includes('Snacks'), 'Snacks stays deleted');
+  const isGone = x => !!x?.del && x.del >= x.t;
+  assert.ok(isGone(inDrive().bags['s-leave']) && isGone(inDrive().items['s-daybag-snacks']), 'and in Drive');
+  await a.ctx.close(); await c.ctx.close();
+}
+
 assert.deepEqual(problems, [], 'problems while using it');
 await browser.close();
 server.close();
