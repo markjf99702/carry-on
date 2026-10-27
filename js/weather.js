@@ -20,7 +20,8 @@ export function forecastEdge(today, now = Date.now()) {
 }
 
 // fetch, but when the connection itself fails, say which service couldn't be reached
-// rather than passing on the browser's own words ("Failed to fetch", "Load failed").
+// rather than passing on the browser's own words ("Failed to fetch", "Load failed"). A service that's busy or down
+// says so in plain words, with no status code; anything else gives the service's own words.
 async function reach(url, signal, what) {
   let res;
   try {
@@ -32,7 +33,13 @@ async function reach(url, signal, what) {
   if (!res.ok) {
     let reason = '';
     try { reason = (await res.json()).reason || ''; } catch { /* not JSON */ }
-    throw Object.assign(new Error(`${what[0].toUpperCase() + what.slice(1)} said no (${res.status}${reason ? `: ${reason}` : ''}).`), { status: res.status, reason });
+    const What = what[0].toUpperCase() + what.slice(1);
+    // 429 is Open-Meteo's daily limit used up. A trip's weather is looked up again by itself; place search, when
+    // something's typed.
+    const msg = res.status === 429 ? `${What} has had too many lookups today. ${what === 'place search' ? 'Try again later.' : 'It tries again later.'}`
+      : res.status >= 500 ? `${What} isn’t answering right now.`
+        : `${What} said no (${res.status}${reason ? `: ${String(reason).replace(/\.$/, '')}` : ''}).`;
+    throw Object.assign(new Error(msg), { status: res.status, reason });
   }
   return res.json();
 }
@@ -79,7 +86,7 @@ export function archiveUrl(p, start, end) {
 async function typical(place, keys, today, signal, errors) {
   // The archive runs about a week behind, so only years whose dates are already in it.
   const years = YEARS.filter(n => yearsBack(keys.at(-1), n) <= add(today, -7));
-  const got = await Promise.allSettled(years.map(n => reach(archiveUrl(place, yearsBack(keys[0], n), yearsBack(keys.at(-1), n)), signal, 'the weather history service')));
+  const got = await Promise.allSettled(years.map(n => reach(archiveUrl(place, yearsBack(keys[0], n), yearsBack(keys.at(-1), n)), signal, 'the weather service')));
   const sets = [];
   got.forEach((g, i) => {
     if (g.status === 'rejected') { errors.push(g.reason); return; }

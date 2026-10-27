@@ -596,6 +596,45 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await ctx.close();
 }
 
+// ================= Offline, then back online =================
+// A trip opened with no connection says so plainly, and its weather comes in when the connection comes back,
+// with nothing tapped. Days already there stay, and the line under them isn't a red warning.
+{
+  const { ctx, page } = await phone();
+  let down = false;
+  for (const host of ['api', 'archive-api']) await ctx.route(`https://${host}.open-meteo.com/**`, route => (down ? route.abort('internetdisconnected') : route.fallback()));
+  const offline = async on => { down = on; await ctx.setOffline(on); };
+  await page.click('text=Start with a starter list');
+  await offline(true);
+  const id = await page.evaluate(() => {
+    const { store, M, D } = window.carryOn;
+    store.apply(d => M.putTrip(d, { id: 'off', place: { name: 'Lisbon', admin: 'Lisbon District', country: 'Portugal', cc: 'PT', lat: 38.7251, lon: -9.1498 }, start: D.add(D.today(), 3), end: D.add(D.today(), 7), travel: 'fly', name: '' }));
+    location.hash = '#/trip/off';
+    return 'off';
+  });
+  await page.waitForSelector('.pass h1');
+  const line = page.locator('.wx > p');
+  await until(async () => /No connection right now/.test(await page.locator('.wx').innerText()), 'the offline line');
+  assert.equal(await line.first().innerText(), 'No connection right now. The forecast comes in when you’re back online. You can set the weather by hand under Change.');
+  assert.match(await line.first().getAttribute('class'), /\berr\b/, 'red, with nothing to show');
+  await offline(false);
+  await page.waitForSelector('.wx-days li');
+  assert.equal(await page.locator('.wx-days li').count(), 5, 'the forecast came in by itself');
+  assert.equal(await page.locator('.wx .err').count(), 0);
+  // Offline again with the days kept: a lookup that fails says so quietly under them.
+  await offline(true);
+  await page.click('[aria-label="Look up the weather again"]');
+  await until(async () => /No connection right now/.test(await page.locator('.wx').innerText()), 'the offline line under the days');
+  const kept = page.locator('.wx p', { hasText: 'No connection' });
+  assert.equal(await kept.innerText(), 'No connection right now. The forecast comes in when you’re back online. Showing the last lookup.');
+  assert.doesNotMatch(await kept.getAttribute('class'), /\berr\b/, 'not red, with days to show');
+  assert.equal(await page.locator('.wx-days li').count(), 5);
+  await offline(false);
+  await until(async () => !/No connection/.test(await page.locator('.wx').innerText()), 'the line to go once back online');
+  assert.equal(id, 'off');
+  await ctx.close();
+}
+
 // ================= Changes while packing say so =================
 {
   const { ctx, page } = await phone();

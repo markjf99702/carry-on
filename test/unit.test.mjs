@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as M from '../js/model.js';
 import { plan, conditions, qtyOf, units, grown, whyNot, passes, whenWords, bagComing } from '../js/rules.js';
-import { summarize, stale, tripWeather, tripDays, placeKey, forecastEdge, dayIcon, dayWords } from '../js/weather.js';
+import { summarize, stale, tripWeather, tripDays, placeKey, forecastEdge, dayIcon, dayWords, searchPlaces } from '../js/weather.js';
 import { plugsFor, plugText, localCountry } from '../js/plugs.js';
 import { parsePaste, encodeList, decodeList, guess, bagIcon, bagKind } from '../js/share.js';
 import { starterList } from '../js/starter.js';
@@ -352,8 +352,27 @@ test('Open-Meteo’s out-of-range answer reads as plain words', async () => {
   // Only the forecast's: the archive saying it doesn't have a day isn't about the forecast.
   const stub2 = weatherStub(now, () => ({ status: 400, reason: "Parameter 'end_date' is out of allowed range from 1940-01-01 to 2026-10-20" }));
   try {
-    await assert.rejects(tripWeather(PLACE, '2026-12-01', '2026-12-03', '2026-10-27', { now }), { message: /^The weather history service said no \(400/ });
+    await assert.rejects(tripWeather(PLACE, '2026-12-01', '2026-12-03', '2026-10-27', { now }), { message: "The weather service said no (400: Parameter 'end_date' is out of allowed range from 1940-01-01 to 2026-10-20)." });
   } finally { stub2.restore(); }
+});
+
+test('a busy or broken weather service says so in plain words, with no status codes', async () => {
+  const now = Date.parse('2026-11-02T12:00:00Z'), today = '2026-11-02';
+  const said = async answer => {
+    const stub = weatherStub(now, () => answer);
+    try { return await tripWeather(PLACE, '2026-11-04', '2026-11-06', today, { now }).then(() => 'no error', e => e.message); } finally { stub.restore(); }
+  };
+  // What Open-Meteo answers when its daily limit is used up.
+  assert.equal(await said({ status: 429, reason: 'Daily API request limit exceeded. Please try again tomorrow.' }), 'The weather service has had too many lookups today. It tries again later.');
+  assert.equal(await said({ status: 503, reason: 'Service Unavailable' }), 'The weather service isn’t answering right now.');
+  assert.equal(await said({ status: 500 }), 'The weather service isn’t answering right now.');
+  // Anything else gives its own words, without a doubled full stop.
+  assert.equal(await said({ status: 418, reason: 'Short and stout.' }), 'The weather service said no (418: Short and stout).');
+  assert.equal(await said({ status: 404 }), 'The weather service said no (404).');
+  // Place search, which tries again only when something's typed.
+  const was = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: false, status: 429, json: async () => ({ error: true, reason: 'Daily API request limit exceeded. Please try again tomorrow.' }) });
+  try { await assert.rejects(searchPlaces('Lisbon'), { message: 'Place search has had too many lookups today. Try again later.' }); } finally { globalThis.fetch = was; }
 });
 
 test('turning a condition on or off by hand, and occasions', () => {

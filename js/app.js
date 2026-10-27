@@ -322,7 +322,9 @@ function weatherStrip(t, c) {
         h('span', { class: 'muted small' }, busy ? 'Looking it up…' : days.length ? 'Updated ' + ago(t.wx.at) : ''),
         // Not disabled while it looks: a disabled button can't keep the focus.
         h('button', { type: 'button', class: 'icon-btn small' + (busy ? ' spin' : ''), 'data-key': 'wx', 'aria-label': 'Look up the weather again', title: 'Look up the weather again', html: ICONS.refresh, 'aria-disabled': busy ? 'true' : null, onclick: () => { if (wxBusy[t.id]) return; maybeWeather(t, true); render(); } }))),
-    err ? h('p', { class: 'err small' }, err, ' ', days.length ? 'Showing the last lookup.' : 'You can set the weather by hand under Change.') : null,
+    // A lookup that failed. Offline, that's the reason whatever it said. With days to show it's a quiet line: the
+    // days are still there, and it isn't something to fix.
+    err ? h('p', { class: days.length ? 'muted small' : 'err small' }, navigator.onLine === false ? 'No connection right now. The forecast comes in when you’re back online.' : err, ' ', days.length ? 'Showing the last lookup.' : 'You can set the weather by hand under Change.') : null,
     // While the first lookup is on its way, the days' room is kept, so they don't push everything down when they come.
     !days.length && busy ? h('ol', { class: 'wx-days wait', 'aria-hidden': 'true' }) : null,
     days.length ? h('ol', { class: 'wx-days', 'aria-labelledby': 'wxHead' }, days.map(d => h('li', { class: d.typ ? 'typ' : '' },
@@ -1336,6 +1338,13 @@ window.addEventListener('pageshow', e => { if (e.persisted) { store.reload(); re
 window.addEventListener('hashchange', render);
 // A new day can change which trips are coming up, and old weather gets looked up again.
 document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
+// Back online: what couldn't be looked up is looked up now, not a minute after the last try, and what the failed
+// lookups said goes.
+window.addEventListener('online', () => {
+  for (const k in wxTried) delete wxTried[k];
+  for (const k in wxErr) delete wxErr[k];
+  redraw();
+});
 render();
 
 if ('serviceWorker' in navigator && !single && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => {});
