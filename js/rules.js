@@ -67,6 +67,20 @@ export function whenParts(doc, keys, wrap = (info, words) => words) {
 }
 export const whenWords = (doc, keys) => whenParts(doc, keys).join('');
 
+// What an occasion (or any condition) brings, and what it keeps home, in My list's order: comes, the bags and things
+// that come along only when it's on, as one of their conditions; stays, those left home for it. A thing in a bag
+// that's listed goes with its bag, so it isn't named again. Each is { bag } or { item }.
+export function occasionThings(doc, k) {
+  const out = { comes: [], stays: [] };
+  for (const [list, field] of [[out.comes, 'when'], [out.stays, 'unless']]) {
+    for (const b of M.bags(doc)) {
+      if (b[field].includes(k)) list.push({ bag: b });
+      else for (const it of M.items(doc, b.id)) if (it[field].includes(k)) list.push({ item: it });
+    }
+  }
+  return out;
+}
+
 // "about 5 days in 10", from a share of days (0 to 1); '' when it rounds to none.
 function inTen(share) {
   const n = Math.round(share * 10);

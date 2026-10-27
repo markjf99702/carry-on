@@ -947,6 +947,7 @@ function condSheet(id, at = '') {
         const on = !!t.set?.[g.id]?.v;
         return h('button', { type: 'button', class: 'chip' + (on ? ' on' : ''), 'data-key': 'tag:' + g.id, 'data-k': g.id, 'aria-pressed': String(on), onclick: () => { store.apply(d => M.setCond(d, id, g.id, on ? null : true)); draw(); render(); } }, `${g.icon} ${g.name}`);
       })),
+      h('p', { class: 'brings muted small' }, brings(new Set(M.tags(doc()).filter(g => t.set?.[g.id]?.v).map(g => g.id)))),
       h('h3', {}, 'Getting there'),
       h('div', { class: 'seg' }, M.TRAVEL.map(k => {
         const info = R.CONDITIONS.find(x => x.k === k);
@@ -1055,6 +1056,20 @@ function placeBox(fd, o) {
   return where;
 }
 
+// Under the occasions picked for a trip, what each brings, in a line: "Work brings the Work bag. Swimming brings
+// Sunscreen, Swimsuit and Sandals." One that brings nothing yet says so, and where to change that. '' with none picked.
+function brings(picked) {
+  const said = [], none = [];
+  for (const g of M.tags(doc()).filter(g => picked.has(g.id))) {
+    const names = R.occasionThings(doc(), g.id).comes.map(x => (x.bag ? theBag(x.bag) : x.item.name));
+    if (names.length) said.push(`${g.name} brings ${names.length > 4 ? `${names.slice(0, 3).join(', ')} and ${names.length - 3} more` : andList(names)}.`);
+    else none.push(g.name);
+  }
+  const or = none.length > 1 ? `${none.slice(0, -1).join(', ')} or ${none.at(-1)}` : none[0];
+  if (none.length) said.push(`Nothing comes only for ${or} yet. Mark things for ${none.length > 1 ? 'them' : 'it'} in My list.`);
+  return said.join(' ');
+}
+
 // Until home is set, what's abroad goes by a guess at it from the browser's languages: the trip form says so under
 // Where to?, and Change picks home there and then, as Settings does. Once it's set, the line goes.
 function homeGuess(dr) {
@@ -1136,6 +1151,8 @@ function tripForm(t, again = false) {
   const startIn = h('input', { type: 'date', id: 'start', value: st.start, min: editing ? null : D.add(today(), -30), required: true, oninput: e => { set('start', e.target.value); nights(); }, onchange: e => { set('start', e.target.value); if (!st.end || st.end < st.start) { set('end', st.start); endIn.value = st.end; } nights(); } });
   const endIn = h('input', { type: 'date', id: 'end', value: st.end, required: true, oninput: e => { set('end', e.target.value); nights(); }, onchange: e => { set('end', e.target.value); nights(); } });
   const nameIn = h('input', { type: 'text', id: 'name', value: st.name, maxlength: 60, placeholder: 'Sam’s wedding', autocomplete: 'off', oninput: e => set('name', e.target.value) });
+  // What the occasions picked bring, said again as they're picked.
+  const broughtLine = h('p', { class: 'brings muted small', role: 'status' }, brings(st.tags));
   const save = () => {
     st.start = startIn.value; st.end = endIn.value;
     if (!st.place && dr.main.typed?.trim()) { err('Pick a place from the list, or use what you typed.'); dr.main.draw(); return; }
@@ -1201,9 +1218,11 @@ function tripForm(t, again = false) {
             if (st.tags.has(g.id)) st.tags.delete(g.id); else st.tags.add(g.id);
             set('tags', st.tags);
             b.classList.toggle('on', st.tags.has(g.id)); b.setAttribute('aria-pressed', String(st.tags.has(g.id)));
+            broughtLine.textContent = brings(st.tags);
           } }, `${g.icon} ${g.name}`);
           return b;
-        }))),
+        })),
+        broughtLine),
       h('div', { class: 'field' }, h('label', { for: 'name' }, 'Name it ', h('span', { class: 'muted' }, '(if you like)')), nameIn),
       errBox,
       h('div', { class: 'actions' }, h('button', { type: 'button', class: 'btn primary big', onclick: save }, editing ? 'Save' : 'Make my list'))),
@@ -1275,7 +1294,7 @@ function starterJobs(kind) {
   const what = kind === 'back' ? 'hotel checklist' : 'house checklist';
   const lower = s => (/^\p{Lu}\p{Ll}/u.test(s) ? s[0].toLowerCase() + s.slice(1) : s);
   return h('div', { class: 'jobs-offer' },
-    h('button', { type: 'button', class: 'btn small add-jobs', 'data-key': 'starter-jobs:' + kind, onclick: () => {
+    h('button', { type: 'button', class: 'btn small dashed', 'data-key': 'starter-jobs:' + kind, onclick: () => {
       const now = store.apply(d => M.addList(d, { bags: [bag], items: jobs, tags: [] }));
       render();
       const added = M.bags(now).find(b => b.kind === kind);
@@ -1334,11 +1353,13 @@ function condPicker(picked, { travel = true } = {}) {
   ]));
 }
 
-function itemEditor(x, bagId) {
+// A thing in My list, or a new one (x null). when: a new one's conditions to start with (from an occasion's sheet).
+// then: what to open after Save, in place of closing (back to that occasion's sheet).
+function itemEditor(x, { when: when0 = [], then = null } = {}) {
   const isNew = !x;
   const bagsAll = M.bags(doc());
-  const bag0 = x?.bag || bagId || bagsAll[0]?.id;
-  const when = new Set(x?.when || []), unless = new Set(x?.unless || []);
+  const bag0 = x?.bag || bagsAll[0]?.id;
+  const when = new Set(x?.when || when0), unless = new Set(x?.unless || []);
   let name, bag, qty, note, mode;
   sheet(isNew ? 'Add a thing' : x.name, close => {
     const whenBox = h('div', { hidden: !when.size }, condPicker(when));
@@ -1347,10 +1368,11 @@ function itemEditor(x, bagId) {
       if (!n) { name.focus(); return; }
       const q = qty.value;
       const daily = q.startsWith('day');
-      const fields = { id: x?.id, name: n, bag: bag.value, note: note.value.trim(), when: mode.value === 'some' ? [...when] : [], unless: [...unless], per: daily ? 'day' : '', qty: daily ? +q.slice(3) || 1 : +q };
-      close();
+      const fields = { id: x?.id || M.newId('i'), name: n, bag: bag.value, note: note.value.trim(), when: mode.value === 'some' ? [...when] : [], unless: [...unless], per: daily ? 'day' : '', qty: daily ? +q.slice(3) || 1 : +q };
+      if (!then) close();
       applyCounting(d => M.putItem(d, fields));
       render();
+      then?.(fields.id);
     };
     return [
       h('label', { class: 'field' }, h('span', {}, 'Name'), name = h('input', { type: 'text', value: x?.name || '', maxlength: 80, autofocus: isNew, autocomplete: 'off' })),
@@ -1391,7 +1413,8 @@ function deleteAsk(b) {
   return n === 1 ? 'Delete it and its job?' : `Delete it and its ${n} jobs?`;
 }
 
-function bagEditor(b) {
+// A bag or list of jobs in My list, or a new one. then: what to open after Save, in place of closing.
+function bagEditor(b, { then = null } = {}) {
   const isNew = !b;
   const when = new Set(b?.when || []), unless = new Set(b?.unless || []);
   let name, kind, note, iconPick = b?.icon || '';
@@ -1404,8 +1427,10 @@ function bagEditor(b) {
     const save = () => {
       const n = name.value.trim();
       if (!n) { name.focus(); return; }
-      close();
-      apply(d => M.putBag(d, { id: b?.id, name: n, kind: kind.value, icon: iconPick || bagIcon(n, kind.value), note: note.value.trim(), when: [...when], unless: [...unless] }));
+      const id = b?.id || M.newId('b');
+      if (!then) close();
+      apply(d => M.putBag(d, { id, name: n, kind: kind.value, icon: iconPick || bagIcon(n, kind.value), note: note.value.trim(), when: [...when], unless: [...unless] }));
+      then?.(id);
     };
     return [
       h('label', { class: 'field' }, h('span', {}, 'Name'), name = h('input', { type: 'text', value: b?.name || '', maxlength: 60, autofocus: isNew, autocomplete: 'off', placeholder: 'Toiletries bag' })),
@@ -1434,9 +1459,14 @@ function bagEditor(b) {
   }, { wide: true });
 }
 
-function tagEditor(g) {
+// An occasion: its name and icon, and what comes along for it and stays home for it, each to tap and change, with a
+// way to add a thing that comes only for it. Just added (added), it opens again saying so, ready for those things.
+// focus: the key of the thing to put the focus on, coming back from it.
+function tagEditor(g, { added = false, focus = '' } = {}) {
   const isNew = !g;
   let name, iconPick = g?.icon || '🏷️';
+  // Back here after changing or adding one of its things, at that one.
+  const again = id => { const x = doc().tags[g.id]; if (x && !M.gone(x)) tagEditor(x, { focus: 'occ-thing:' + id }); else closeSheet(); };
   sheet(isNew ? 'Add an occasion' : `${g.icon} ${g.name}`, close => {
     const icons = h('div', { class: 'icon-pick', role: 'group', 'aria-label': 'Icon' }, TAG_ICONS.map(i => {
       const btn = h('button', { type: 'button', 'aria-pressed': String(i === iconPick), onclick: () => { iconPick = i; icons.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === btn))); } }, i);
@@ -1445,17 +1475,33 @@ function tagEditor(g) {
     const save = () => {
       const n = name.value.trim();
       if (!n) { name.focus(); return; }
-      close();
-      apply(d => M.putTag(d, { id: g?.id, name: n, icon: iconPick }));
+      const id = g?.id || M.newId('o');
+      if (!isNew) close();
+      apply(d => M.putTag(d, { id, name: n, icon: iconPick }));
+      if (isNew) tagEditor(doc().tags[id], { added: true });
     };
+    // Each thing or bag, to open: a thing says which bag it's in, a bag how much is in it.
+    const things = list => h('ul', { class: 'rows occ-things' }, list.map(({ bag: b, item: x }) => h('li', { class: 'row' },
+      h('button', { type: 'button', class: 'edit-row', 'data-key': 'occ-thing:' + (b || x).id, onclick: () => (b ? bagEditor(b, { then: again }) : itemEditor(x, { then: again })) },
+        h('span', { class: 'name' }, b ? `${b.icon} ${b.name}` : x.name),
+        h('small', {}, b ? `${b.kind === 'bag' ? 'A bag' : 'A list of jobs'} · ${plural(M.items(doc(), b.id).length, b.kind === 'bag' ? 'thing' : 'job')}` : `In ${theBag(doc().bags[x.bag])}`)))));
+    const { comes, stays } = isNew ? { comes: [], stays: [] } : R.occasionThings(doc(), g.id);
     return [
+      added ? h('p', { class: 'occ-added', role: 'status' }, `${g.name} is in. Add the things that come only for it.`) : null,
       h('label', { class: 'field' }, h('span', {}, 'Name'), name = h('input', { type: 'text', value: g?.name || '', maxlength: 30, autofocus: isNew, autocomplete: 'off', placeholder: 'Wedding' })),
       h('div', { class: 'field' }, h('span', { class: 'label' }, 'Icon'), icons),
+      isNew ? null : [
+        h('h3', {}, 'Comes along for it'),
+        comes.length ? things(comes) : h('p', { class: 'muted small' }, 'Nothing yet.'),
+        h('button', { type: 'button', class: 'btn small dashed occ-add', 'data-key': 'occ-add-thing', autofocus: added, onclick: () => itemEditor(null, { when: [g.id], then: again }) }, h('span', { html: ICONS.plus }), 'Add a thing for it'),
+        stays.length ? [h('h3', {}, 'Stays home for it'), things(stays)] : null,
+      ],
       h('div', { class: 'sheet-actions' },
         isNew ? null : h('button', { type: 'button', class: 'btn danger-quiet', onclick: () => { close(); apply(d => M.removeTag(d, g.id)); toast(`${g.name} deleted.`); } }, 'Delete'),
         h('button', { type: 'button', class: 'btn primary', onclick: save }, isNew ? 'Add it' : 'Save')),
     ];
-  });
+  }, { wide: !isNew });
+  if (focus) byKey(document.getElementById('sheet'), focus)?.focus();
 }
 
 // ---------- lists in and out ----------

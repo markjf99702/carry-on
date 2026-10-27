@@ -300,7 +300,10 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await page.click('text=+ Add one');
   await page.fill('.sheet input', 'Wedding');
   await page.click('.sheet .btn.primary');
-  assert.ok(await page.locator('.chip', { hasText: 'Wedding' }).count());
+  assert.ok(await page.locator('main .chip', { hasText: 'Wedding' }).count());
+  // It opens again, for the things that come only for it.
+  assert.equal(await page.locator('.sheet .occ-added').innerText(), 'Wedding is in. Add the things that come only for it.');
+  await closeSheet(page);
   // A long sheet keeps its title and its Save on screen while it scrolls.
   const inReach = sel => page.evaluate(sel => { const b = document.querySelector(sel), r = b.getBoundingClientRect(); return b.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); }, sel);
   await page.locator('.edit-row', { hasText: 'Sunscreen' }).click();
@@ -1450,6 +1453,82 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   await page.click('.sheet .btn.primary');
   await until(async () => /Your pasted list/i.test(await page.locator('.sheet').innerText()), 'the second preview');
   assert.equal(await page.locator('.sheet label.check').count(), 0);
+  await ctx.close();
+}
+
+// ================= Occasions show what they bring =================
+// An occasion's sheet in My list lists what comes along for it and stays home, each to open, and adds a thing just
+// for it; a new one opens again ready for those. Planning a trip, and changing what it calls for, the occasions picked
+// say what they bring.
+{
+  const { ctx, page } = await phone();
+  await page.click('text=Start with a starter list');
+  await page.evaluate(() => { const { store, M } = window.carryOn; store.apply(d => M.putItem(d, { id: 's-electronics-laptop-and-charger', unless: ['swim'] })); });
+  await page.goto(base + '#/list');
+  await page.click('[data-key="occ:swim"]');
+  const things = () => page.locator('.sheet .occ-things').evaluateAll(ls => ls.map(l => [...l.querySelectorAll('.edit-row')].map(b => b.innerText.replace(/\s+/g, ' '))));
+  assert.deepEqual(await things(), [['Sunscreen In the Liquids bag', 'Swimsuit In Clothes', 'Sandals In Clothes'], ['Laptop and charger In Electronics']]);
+  assert.deepEqual(await page.locator('.sheet h3').allInnerTexts(), ['COMES ALONG FOR IT', 'STAYS HOME FOR IT']);
+  // A thing opens to change, and Save comes back here, at it.
+  await page.click('.sheet .edit-row:has-text("Sandals")');
+  assert.equal(await page.locator('#sheetTitle').innerText(), 'SANDALS');
+  await page.fill('.sheet input[type="text"] >> nth=0', 'Flip-flops');
+  await page.click('.sheet .btn.primary');
+  assert.match(await page.locator('#sheetTitle').innerText(), /SWIMMING/);
+  assert.match(await page.evaluate(() => document.activeElement.innerText), /^Flip-flops/, 'the focus on it');
+  await page.keyboard.press('Escape');
+  await page.click('[data-key="occ:work"]');
+  assert.deepEqual(await things(), [['💼 Work bag A bag · 3 things']]);
+  await page.keyboard.press('Escape');
+  // A new occasion opens again, ready for its things.
+  await page.click('[data-key="occ:new"]');
+  await page.fill('.sheet input[type="text"]', 'Beach');
+  await page.click('.sheet .btn.primary');
+  assert.equal(await page.locator('.sheet .occ-added').innerText(), 'Beach is in. Add the things that come only for it.');
+  assert.equal(await page.locator('.sheet .occ-things').count(), 0);
+  assert.match(await page.locator('.sheet').innerText(), /Nothing yet\./);
+  assert.equal(await page.evaluate(() => document.activeElement.innerText), 'Add a thing for it');
+  await page.click('text=Add a thing for it');
+  assert.equal(await page.locator('#sheetTitle').innerText(), 'ADD A THING');
+  assert.equal(await page.locator('.sheet select >> nth=2').inputValue(), 'some', 'only when the trip calls for…');
+  assert.equal(await page.locator('.sheet .chip[aria-pressed="true"]').allInnerTexts().then(x => x.join()), '🏷️ Beach');
+  await page.fill('.sheet input[type="text"] >> nth=0', 'Beach towel');
+  await page.selectOption('.sheet select >> nth=0', { label: '🎒 Day bag' });
+  await page.click('.sheet .btn.primary');
+  assert.deepEqual(await things(), [['Beach towel In the Day bag']]);
+  await page.keyboard.press('Escape');
+  assert.match(await page.locator('main .edit-row', { hasText: 'Beach towel' }).innerText(), /Only for 🏷️ beach/);
+  await page.click('[data-key="occ:new"]');
+  await page.fill('.sheet input[type="text"]', 'Wedding');
+  await page.click('.sheet .btn.primary');
+  await page.keyboard.press('Escape');
+  // Planning a trip: a line under the occasions picked says what each brings.
+  await page.goto(base + '#/new');
+  const line = page.locator('.form .brings');
+  assert.equal(await line.innerText(), '');
+  const chip = name => page.locator('.form .chip', { hasText: new RegExp(` ${name}$`) });
+  await chip('Work').click();
+  assert.equal(await line.innerText(), 'Work brings the Work bag.');
+  await chip('Swimming').click();
+  await chip('Wedding').click();
+  await chip('Beach').click();
+  assert.equal(await line.innerText(), 'Work brings the Work bag. Swimming brings Sunscreen, Swimsuit and Flip-flops. Beach brings Beach towel. Nothing comes only for Wedding yet. Mark things for it in My list.');
+  await chip('Work').click();
+  await chip('Swimming').click();
+  await chip('Beach').click();
+  assert.equal(await line.innerText(), 'Nothing comes only for Wedding yet. Mark things for it in My list.');
+  await fits(page, 'the line under the occasions');
+  // And in What this trip calls for.
+  await page.fill('#where', 'Lisb');
+  await page.locator('.results button').first().click();
+  await page.fill('#start', await day(page, 3));
+  await page.fill('#end', await day(page, 5));
+  await page.click('text=Make my list');
+  await page.waitForSelector('.pass h1');
+  await page.click('[data-key="conds"]');
+  assert.equal(await page.locator('.sheet .brings').innerText(), 'Nothing comes only for Wedding yet. Mark things for it in My list.');
+  await page.locator('.sheet .chip', { hasText: 'Beach' }).click();
+  assert.equal(await page.locator('.sheet .brings').innerText(), 'Beach brings Beach towel. Nothing comes only for Wedding yet. Mark things for it in My list.');
   await ctx.close();
 }
 

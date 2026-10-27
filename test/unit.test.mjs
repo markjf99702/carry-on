@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as M from '../js/model.js';
-import { plan, conditions, qtyOf, units, grown, whyNot, passes, whenWords, bagComing, legs, legDays } from '../js/rules.js';
+import { plan, conditions, qtyOf, units, grown, whyNot, passes, whenWords, bagComing, legs, legDays, occasionThings } from '../js/rules.js';
 import { summarize, stale, tripWeather, tripDays, placeKey, forecastEdge, dayIcon, dayWords, searchPlaces, uvEstimate } from '../js/weather.js';
 import { plugsFor, plugText, localCountry } from '../js/plugs.js';
 import { parsePaste, encodeList, decodeList, guess, bagIcon, bagKind, sortLoose } from '../js/share.js';
@@ -268,6 +268,25 @@ test('the reasons say what the rules saw', () => {
   assert.equal(why([typ('2027-01-10', -2, -8, { wet: 0.4, sn: 0.2 })]).snow, 'Snow on about 2 days in 10 this time of year');
   // The plug: one line, no brackets.
   assert.equal(why([day('2026-11-02', 15, 8)], { name: 'Lisbon', cc: 'PT', country: 'Portugal' }).plug, 'Type C/F, 230\u00a0V · check anything that heats up');
+});
+
+test('what an occasion brings and keeps home, in My list’s order, a bag’s things with their bag', () => {
+  let doc = starter();
+  const names = x => (x.bag ? x.bag.name : x.item.name);
+  assert.deepEqual(occasionThings(doc, 'work').comes.map(names), ['Work bag'], 'its things go with it');
+  assert.deepEqual(occasionThings(doc, 'swim').comes.map(names), ['Sunscreen', 'Swimsuit', 'Sandals']);
+  assert.deepEqual(occasionThings(doc, 'swim').stays, []);
+  doc = M.putTag(doc, { id: 'o-beach', name: 'Beach' });
+  assert.deepEqual(occasionThings(doc, 'o-beach'), { comes: [], stays: [] }, 'a new one brings nothing yet');
+  doc = M.putItem(doc, { id: 'i-towel', name: 'Beach towel', bag: 's-daybag', when: ['o-beach'] });
+  doc = M.putItem(doc, { id: 's-electronics-laptop-and-charger', unless: ['o-beach'] });
+  doc = M.putItem(doc, { id: 's-work-badge', when: ['o-beach'] });
+  doc = M.putBag(doc, { id: 's-work', unless: ['o-beach'] });
+  const beach = occasionThings(doc, 'o-beach');
+  assert.deepEqual(beach.comes.map(names), ['Beach towel', 'Badge'], 'the Day bag comes before the Work bag');
+  assert.deepEqual(beach.stays.map(names), ['Laptop and charger', 'Work bag']);
+  // Deleted, it's gone from the list.
+  assert.deepEqual(occasionThings(M.removeItem(doc, 'i-towel'), 'o-beach').comes.map(names), ['Badge']);
 });
 
 test('why something isn’t coming, in words: conditions by their phrase, occasions by name', () => {
