@@ -2,11 +2,11 @@
 // The list, the trips and their last weather lookup are in localStorage.
 // Network first, so a new version shows up as soon as you're online.
 
-const CACHE = 'carry-on-v21'; // bump the number when the files change
+const CACHE = 'carry-on-v22'; // bump the number when the files change
 const SHELL = [
   './', 'index.html', 'css/app.css', 'icon.svg', 'icon-180.png', 'manifest.webmanifest',
   'fonts/figtree.woff2', 'fonts/barlow-condensed-700.woff2',
-  'js/app.js', 'js/days.js', 'js/model.js', 'js/plugs.js', 'js/rules.js', 'js/share.js', 'js/starter.js',
+  'js/app.js', 'js/calendar.js', 'js/days.js', 'js/model.js', 'js/plugs.js', 'js/rules.js', 'js/share.js', 'js/starter.js',
   'js/store.js', 'js/sync.js', 'js/ui.js', 'js/weather.js',
 ];
 

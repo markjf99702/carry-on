@@ -1473,6 +1473,8 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   await page.click('text=Make my list');
   await page.waitForSelector('.wx.none');
   assert.equal(await page.locator('.wx.none').innerText(), 'This place wasn’t looked up, so there’s no forecast and no check for abroad or plugs. Set them under Change, or open carry-on.junkdrawer.works.');
+  // It can't save a calendar file either, so a trip to come has only Copy as text.
+  assert.deepEqual(await page.locator('main .trip-tools .btn').allInnerTexts(), ['Copy as text']);
   // Served from an address where the site itself would start its service worker, this copy doesn't ask for one.
   const served = await ctx.newPage();
   await served.goto(base + 'dist/carry-on.html');
@@ -2340,6 +2342,28 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   // The dark look prints black on white too.
   await page.emulateMedia({ media: 'print', colorScheme: 'dark' });
   assert.deepEqual(await page.evaluate(() => [getComputedStyle(document.body).backgroundColor, getComputedStyle(document.body).color]), ['rgb(255, 255, 255)', 'rgb(0, 0, 0)']);
+  await ctx.close();
+}
+
+// ================= A trip in the calendar =================
+// A trip still to come can be saved as a calendar file, with an alert the evening before and the trip's link; one
+// under way or over has no such button.
+{
+  const { ctx, page } = await phone();
+  await page.click('text=Start with a starter list');
+  await planTrip(page, { where: 'Lisb', from: 3, to: 7 });
+  const [file] = await Promise.all([page.waitForEvent('download'), page.click('main >> text=Add to my calendar')]);
+  assert.equal(file.suggestedFilename(), 'Lisbon.ics');
+  const ics = (await readFile(await file.path(), 'utf8')).replace(/\r\n /g, '');
+  const id = await page.evaluate(() => Object.keys(window.carryOn.store.doc.trips)[0]);
+  const [start, end] = await page.evaluate(() => { const t = Object.values(window.carryOn.store.doc.trips)[0]; return [t.start, window.carryOn.D.add(t.end, 1)].map(k => k.replace(/-/g, '')); });
+  for (const line of ['BEGIN:VCALENDAR', `UID:${id}@carry-on.junkdrawer.works`, `DTSTART;VALUE=DATE:${start}`, `DTEND;VALUE=DATE:${end}`, 'SUMMARY:Lisbon', 'LOCATION:Lisbon\\, Portugal', `URL:${base}#/trip/${id}`, 'DESCRIPTION:Pack for Lisbon', 'TRIGGER:-PT5H']) {
+    assert.ok(ics.split('\r\n').includes(line), line);
+  }
+  assert.match(await page.locator('#toast span').innerText(), /^Saved Lisbon\.ics\. Open it to add Lisbon to your calendar, with a reminder at 7 pm the evening before\.$/);
+  // Under way: no button.
+  await page.evaluate(() => { const { store, M, D, render } = window.carryOn, t = Object.values(store.doc.trips)[0]; store.apply(d => M.putTrip(d, { id: t.id, start: D.today() })); render(); });
+  assert.deepEqual(await page.locator('main .trip-tools .btn').allInnerTexts(), ['Copy as text']);
   await ctx.close();
 }
 

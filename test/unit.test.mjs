@@ -9,6 +9,7 @@ import { summarize, stale, tripWeather, tripDays, placeKey, forecastEdge, dayIco
 import { plugsFor, plugText, localCountry } from '../js/plugs.js';
 import { parsePaste, encodeList, decodeList, guess, bagIcon, bagKind, sortLoose, listText } from '../js/share.js';
 import { starterList } from '../js/starter.js';
+import { tripCalendar } from '../js/calendar.js';
 import { store } from '../js/store.js'; // in Node there's no localStorage, so it keeps the doc in memory only
 import { add, span, yearsBack, range, weekday, short, long, dayLong } from '../js/days.js';
 
@@ -2109,6 +2110,43 @@ test('links with an odd shape, or from another app, say what’s wrong', async (
   await assert.rejects(decodeList(await pack({ app: 'brickyard', list: 1, sets: [] })), { message: 'That link is for another app, not Carry On.' });
   const cut = { message: 'That link doesn’t hold a Carry On list. It may have been cut short.' };
   for (const code of ['nonsense', '', (await encodeList({ bags: [] })).slice(0, 12), await pack({ list: 1, bags: [] }), await pack({ app: 'carry-on', bags: {} })]) await assert.rejects(decodeList(code), cut);
+});
+
+test('a trip as a calendar file: its days, an alert the evening before, and the same event when saved again', () => {
+  let d = M.putTrip(M.blankDoc(), { id: 't1', name: 'Sam’s wedding; the long weekend, Lisbon', start: '2026-11-13', end: '2026-11-16', place: LISBON });
+  const url = 'https://carry-on.junkdrawer.works/#/trip/t1';
+  const ics = tripCalendar(d.trips.t1, { name: 'Sam’s wedding; the long weekend, Lisbon', where: 'Lisbon, Portugal', url, now: Date.UTC(2026, 9, 27, 12, 0, 0) });
+  assert.ok(ics.endsWith('\r\n') && !/[^\r]\n/.test(ics), 'every line ends in CRLF');
+  // Each line 75 octets at most; unfolded, the lines read back whole.
+  for (const l of ics.split('\r\n')) assert.ok(new TextEncoder().encode(l).length <= 75, l);
+  const lines = ics.replace(/\r\n /g, '').split('\r\n');
+  const get = k => lines.find(l => l.startsWith(k + ':') || l.startsWith(k + ';'));
+  assert.equal(lines[0], 'BEGIN:VCALENDAR');
+  assert.equal(get('UID'), 'UID:t1@carry-on.junkdrawer.works');
+  assert.equal(get('DTSTAMP'), 'DTSTAMP:20261027T120000Z');
+  assert.equal(get('DTSTART'), 'DTSTART;VALUE=DATE:20261113');
+  assert.equal(get('DTEND'), 'DTEND;VALUE=DATE:20261117', 'the day after the last');
+  assert.equal(get('SUMMARY'), 'SUMMARY:Sam’s wedding\\; the long weekend\\, Lisbon');
+  assert.equal(get('LOCATION'), 'LOCATION:Lisbon\\, Portugal');
+  assert.equal(get('URL'), 'URL:' + url);
+  assert.equal(get('DESCRIPTION'), 'DESCRIPTION:Your packing list: ' + url);
+  // The alert: 7 pm the evening before the first all-day day.
+  const alarm = lines.slice(lines.indexOf('BEGIN:VALARM'), lines.indexOf('END:VALARM') + 1);
+  assert.deepEqual(alarm, ['BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:Pack for Sam’s wedding\\; the long weekend\\, Lisbon', 'TRIGGER:-PT5H', 'END:VALARM']);
+  assert.equal(lines.at(-2), 'END:VCALENDAR');
+  // Saved again after the dates change: the same event, a later sequence.
+  const seq = c => +c.replace(/\r\n /g, '').split('\r\n').find(l => l.startsWith('SEQUENCE:')).slice(9);
+  const moved = M.putTrip(d, { id: 't1', end: '2026-11-17' });
+  moved.trips.t1.t = d.trips.t1.t + 5000; // a few seconds later
+  const again = tripCalendar(moved.trips.t1, { name: 'Lisbon', url });
+  assert.match(again, /\r\nUID:t1@carry-on\.junkdrawer\.works\r\n/);
+  assert.match(again, /\r\nDTEND;VALUE=DATE:20261118\r\n/);
+  assert.ok(seq(again) > seq(ics) && seq(ics) > 0 && seq(again) < 2 ** 31);
+  // No place, no location; a name with letters of more than one byte folds between them.
+  assert.doesNotMatch(again, /LOCATION/);
+  const long = tripCalendar(moved.trips.t1, { name: 'Reykjavík, Akureyri, Höfn, Vík, Selfoss and the whole of the south coast of Ísland', url });
+  for (const l of long.split('\r\n')) assert.ok(new TextEncoder().encode(l).length <= 75);
+  assert.match(long.replace(/\r\n /g, ''), /\r\nSUMMARY:Reykjavík\\, Akureyri\\, Höfn\\, Vík\\, Selfoss and the whole of the south coast of Ísland\r\n/);
 });
 
 test('ticks on too few: a longer trip, a higher laundry limit or a higher How many', () => {
