@@ -402,12 +402,20 @@ export function putBag(doc, fields) {
   const order = there(doc, 'bags', doc.bags[id]) ? doc.bags[id].order : nextOrder(bags(doc));
   return put(doc, 'bags', cleanBag, { ...fields, order: fields.order ?? order, id });
 }
-// A bag goes with everything in it.
+// A bag goes with everything in it. It counts as changed too, as it's gone on purpose: a list of jobs deleted from
+// My list is told from an untouched starter one a list of the person's own took the place of (jobsTakenOff).
 export function removeBag(doc, id) {
-  let next = remove(doc, 'bags', id);
+  const old = doc.bags[id];
+  if (!bagThere(doc, old)) return doc;
+  const t = stamp(old);
+  let next = { ...doc, bags: { ...doc.bags, [id]: { ...old, t, del: t } } };
   for (const x of items(doc, id)) next = remove(next, 'items', x.id);
   return next;
 }
+// Whether a list of jobs of this kind ('leave' or 'back') was taken off on purpose: deleted from My list, or left out
+// of a list used instead after it was made or changed here. A starter list nobody touched, which a pasted list or one
+// from another phone took the place of, doesn't count, so My list can offer the starter's checklist instead.
+export const jobsTakenOff = (doc, kind) => Object.values(doc.bags).some(b => b.kind === kind && gone(b) && b.t > 0);
 export function restoreBag(doc, id, itemIds = []) {
   let next = restore(doc, 'bags', id);
   for (const i of itemIds) next = restore(next, 'items', i);

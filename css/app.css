@@ -427,6 +427,10 @@ main > h1 + .card { margin-top: 14px; }
 /* ---------- my list ---------- */
 .bag.edit .bag-head { padding-right: 10px; }
 .kind-head { margin: 24px 0 10px; font-size: 18px; color: var(--muted); }
+/* No list of jobs under a heading: the starter's checklist to add, and what's in it. */
+.jobs-offer { margin: 0 0 14px; }
+.jobs-offer p { margin: 8px 2px 0; }
+.add-jobs { border-style: dashed; background: none; }
 .conds { color: var(--sky); }
 .add-row { display: flex; gap: 8px; padding: 8px 10px 12px 14px; border-top: 1px solid var(--line); }
 .add-row input { min-height: 40px; padding: 8px 10px; }

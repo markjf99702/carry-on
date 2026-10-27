@@ -1399,6 +1399,24 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   assert.deepEqual(await page.locator('.bag.edit h2').allInnerTexts(), ['ELECTRONICS', 'ATTIRE', 'NOT IN A BAG', 'LEAVING THE HOUSE']);
   assert.match(await page.locator('.edit-row', { hasText: 'Socks' }).innerText(), /one a day/);
   assert.match(await page.locator('.edit-row', { hasText: 'Swimsuit' }).innerText(), /Only when 🌡️ it’s hot or for 🏊 swimming/);
+  // No hotel checklist came with it: under that heading, the starter's, to add as if typed.
+  const offer = page.locator('.jobs-offer');
+  assert.equal(await offer.count(), 1, 'just the hotel’s: the pasted list has jobs for leaving the house');
+  assert.match(await offer.evaluate(el => el.previousElementSibling.textContent), /^Before you leave the hotel$/);
+  assert.equal(await offer.locator('p').innerText(), 'Chargers out of the outlets, the safe and the drawers, the fridge and the hooks on the doors, the bathroom and the shower, under the bed and in the closet.');
+  await page.click('text=Add the starter’s hotel checklist');
+  assert.equal(await page.locator('#toast span').innerText(), 'The starter’s hotel checklist is in: 5 jobs. Change them like anything on your list.');
+  assert.equal(await offer.count(), 0);
+  assert.deepEqual(await page.locator('.bag.edit h2').allInnerTexts(), ['ELECTRONICS', 'ATTIRE', 'NOT IN A BAG', 'LEAVING THE HOUSE', 'LEAVING THE HOTEL']);
+  assert.equal(await page.evaluate(() => document.activeElement.textContent), 'Leaving the hotel', 'the focus on the new list');
+  assert.ok(await page.evaluate(() => Object.values(window.carryOn.store.doc.items).filter(x => x.name === 'The safe and the drawers').every(x => x.t > 0)), 'as if typed');
+  // Deleted on purpose, the empty heading goes too.
+  await page.click('[aria-label="Change Leaving the hotel"]');
+  await page.click('.sheet .btn.danger-quiet');
+  await page.click('.sheet .btn.danger-quiet');
+  await until(async () => !(await sheetOpen(page)), 'the sheet to close');
+  assert.deepEqual(await page.locator('.kind-head').allInnerTexts(), ['BEFORE YOU LEAVE HOME']);
+  assert.equal(await offer.count(), 0);
   await ctx.close();
 }
 

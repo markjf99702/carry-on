@@ -1416,6 +1416,32 @@ test('adding a list skips what’s already on it, in whichever bag, and adding i
   assert.equal(M.canon(M.addList(added, mine)), M.canon(added));
 });
 
+test('a list of jobs taken off on purpose is told from an untouched starter one a list of your own took the place of', () => {
+  const pasted = parsePaste('Toiletries:\n- Toothbrush');
+  // The starter list, then a pasted list used instead: the starter's jobs went, but not on purpose.
+  later();
+  let doc = M.replaceList(starter(), pasted);
+  assert.ok(!M.bags(doc).some(b => b.kind !== 'bag'));
+  assert.deepEqual([M.jobsTakenOff(doc, 'leave'), M.jobsTakenOff(doc, 'back')], [false, false]);
+  // The starter's hotel checklist added as if typed, then deleted from My list: on purpose.
+  const list = starterList(), back = list.bags.find(b => b.kind === 'back');
+  doc = M.addList(doc, { bags: [back], items: list.items.filter(x => x.bag === back.id) });
+  const added = M.bags(doc).find(b => b.kind === 'back');
+  assert.ok(added.t > 0 && M.items(doc, added.id).every(x => x.t > 0), 'as if typed');
+  assert.equal(M.items(doc, added.id).length, 5);
+  later();
+  doc = M.removeBag(doc, added.id);
+  assert.deepEqual([M.jobsTakenOff(doc, 'leave'), M.jobsTakenOff(doc, 'back')], [false, true]);
+  // The untouched starter's house jobs deleted from My list: on purpose too, and Undo brings them back.
+  const off = M.removeBag(starter(), 's-leave');
+  assert.ok(M.jobsTakenOff(off, 'leave') && !M.bags(off).some(b => b.id === 's-leave'));
+  later();
+  assert.equal(M.items(M.restoreBag(off, 's-leave', M.items(starter(), 's-leave').map(x => x.id)), 's-leave').length, 4);
+  // Dropped by a first merge with a phone that has a list of its own: not.
+  const merged = M.mergeDocs(starter(), M.replaceList(M.blankDoc(), pasted), { first: true });
+  assert.ok(M.gone(merged.bags['s-back']) && !M.jobsTakenOff(merged, 'back'));
+});
+
 test('replacing a list can be undone, everywhere, without bringing back what was deleted before', () => {
   let before = M.putItem(starter(), { id: 'i-mine', name: 'My own thing', bag: 's-daybag' });
   before = M.putTag(M.removeBag(before, 's-work'), { id: 'o-wed', name: 'Wedding' });

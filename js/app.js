@@ -1245,10 +1245,12 @@ function listView() {
       h('a', { class: 'btn primary', href: '#/new' }, h('span', { html: ICONS.plus }), 'Plan a trip')),
     jumpRow(kinds.flatMap(([kind]) => all.filter(b => b.kind === kind)).map(b => ({ bag: b }))),
     kinds.map(([kind, label]) => {
-      const bs = all.filter(b => b.kind === kind);
+      const bs = all.filter(b => b.kind === kind), none = kind !== 'bag' && !bs.length;
+      // No list of jobs of this kind: the starter's to add, unless one was taken off on purpose.
+      if (none && M.jobsTakenOff(doc(), kind)) return null;
       return [
         kind !== 'bag' ? h('h2', { class: 'kind-head' }, label) : null,
-        bs.map(b => listBag(b)),
+        none ? starterJobs(kind) : bs.map(b => listBag(b)),
       ];
     }),
     h('button', { type: 'button', class: 'btn add-extra', 'data-key': 'bag:new', onclick: () => bagEditor(null) }, h('span', { html: ICONS.plus }), 'Add a bag or a list of jobs'),
@@ -1264,6 +1266,23 @@ function listView() {
         h('button', { type: 'button', class: 'btn', 'data-key': 'share', onclick: shareSheet }, 'Send my list as a link'),
         h('button', { type: 'button', class: 'btn', 'data-key': 'paste', onclick: () => pasteSheet() }, 'Paste a list'))),
   ];
+}
+
+// Under a heading for jobs with none, the starter list's checklist, to add as if typed: the hotel's is what Coming
+// home starts with. Its jobs are named, as a sentence: "Take out the trash, set the thermostat, …".
+function starterJobs(kind) {
+  const list = starterList(), bag = list.bags.find(b => b.kind === kind), jobs = list.items.filter(x => x.bag === bag.id);
+  const what = kind === 'back' ? 'hotel checklist' : 'house checklist';
+  const lower = s => (/^\p{Lu}\p{Ll}/u.test(s) ? s[0].toLowerCase() + s.slice(1) : s);
+  return h('div', { class: 'jobs-offer' },
+    h('button', { type: 'button', class: 'btn small add-jobs', 'data-key': 'starter-jobs:' + kind, onclick: () => {
+      const now = store.apply(d => M.addList(d, { bags: [bag], items: jobs, tags: [] }));
+      render();
+      const added = M.bags(now).find(b => b.kind === kind);
+      if (added) main.querySelector(`[data-key="head:${CSS.escape(added.id)}"]`)?.focus();
+      toast(`The starter’s ${what} is in: ${plural(jobs.length, 'job')}. Change them like anything on your list.`);
+    } }, h('span', { html: ICONS.plus }), `Add the starter’s ${what}`),
+    h('p', { class: 'muted small' }, jobs.map((x, i) => (i ? lower(x.name) : x.name)).join(', ') + '.'));
 }
 
 function listBag(b) {
