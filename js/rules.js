@@ -1,7 +1,7 @@
 // What a trip needs: which conditions apply to it, and so which bags and things go on its list.
 // No page code, so the tests run it in Node.
 import * as M from './model.js';
-import { nights, weekday, num } from './days.js';
+import { nights, weekday, num, add } from './days.js';
 import { summarize, temp, tripDays, LIMITS } from './weather.js';
 import { plugsFor, plugText, countryName, localCountry } from './plugs.js';
 
@@ -66,33 +66,71 @@ function inTen(share) {
   return n ? `about ${n} ${n === 1 ? 'day' : 'days'} in 10` : '';
 }
 
+// "a, b and c"
+const and = list => (list.length > 1 ? `${list.slice(0, -1).join(', ')} and ${list.at(-1)}` : list[0] || '');
+
+// Where a trip is, day by day: its place from the day you leave, then each stop from the night you get there to the
+// day before the next, the last one to the day you're back. A stop on a night outside the trip, or on the same night
+// as another (the newer one counts), isn't one of them. A trip with one place is one leg, its whole trip.
+//   [{ id: '' (the trip's own place) or the stop's id, place, from, to, wx }]
+export function legs(trip) {
+  const out = [{ id: '', place: trip.place, from: trip.start, wx: trip.wx }];
+  const list = M.stops(trip).filter(s => s.from > trip.start && s.from < trip.end)
+    .sort((a, b) => a.from.localeCompare(b.from) || b.t - a.t || a.id.localeCompare(b.id));
+  for (const s of list) if (s.from !== out.at(-1).from) out.push({ id: s.id, place: s.place, from: s.from, wx: s.wx });
+  return out.map((l, i) => ({ ...l, to: i + 1 < out.length ? add(out[i + 1].from, -1) : trip.end }));
+}
+// Each leg with its saved days. Together they're the trip's weather.
+export const legDays = trip => legs(trip).map(l => ({ ...l, days: tripDays(l.wx, l.from, l.to, l.place) }));
+
 // Every condition for this trip: what the place and weather say (auto), what the person set (set), the
 // result (on), a few words on why for each one that's on (why), and for one the place or weather says no to, why
-// not (no).
+// not (no). A trip with stops is abroad when any of its places is, has every country's plugs, and is hot, rainy and
+// so on when any place's own days are; its reasons name the place.
 export function conditions(doc, trip) {
-  const u = units(doc), from = home(doc), place = trip.place;
+  const u = units(doc), from = home(doc), ls = legDays(trip), multi = ls.length > 1;
   const auto = { [trip.travel]: true }, why = {}, no = {};
   why[trip.travel] = BY_KEY[trip.travel].name;
-  if (place?.cc) {
-    auto.abroad = place.cc !== from;
-    if (auto.abroad) why.abroad = place.country || countryName(place.cc);
+  // At home only when every place is known to be.
+  const known = ls.filter(l => l.place?.cc), away = known.filter(l => l.place.cc !== from);
+  if (away.length || (known.length && known.length === ls.length)) {
+    auto.abroad = away.length > 0;
+    const countries = [...new Map(away.map(l => [l.place.cc, l.place.country || countryName(l.place.cc)]))];
+    if (auto.abroad) why.abroad = and(countries.map(([, name]) => name));
     else no.abroad = no.plug = 'In your home country';
-    const p = auto.abroad ? plugsFor(from, place.cc) : null;
-    auto.plug = !!p?.need;
-    if (p) why.plug = plugText(p) + (p.voltsDiffer ? ' · check anything that heats up' : '');
-    if (p && !p.need) no.plug = 'Your plugs fit there';
+    // An adapter for each country whose sockets your plugs don't fit, named when the trip goes to more than one.
+    const plugs = countries.map(([cc, name]) => ({ name, p: plugsFor(from, cc) })).filter(x => x.p);
+    const need = plugs.filter(x => x.p.need), named = new Set(known.map(l => l.place.cc)).size > 1;
+    auto.plug = need.length > 0;
+    const said = new Map();
+    for (const x of need.length ? need : plugs) said.set(plugText(x.p), [...(said.get(plugText(x.p)) || []), x.name]);
+    if (said.size) why.plug = [...said].map(([text, names]) => (named ? `${and(names)}: ` : '') + text).join('; ') + ((need.length ? need : plugs).some(x => x.p.voltsDiffer) ? ' · check anything that heats up' : '');
+    if (plugs.length && !need.length) no.plug = plugs.length > 1 ? `Your plugs fit in ${and(plugs.map(x => x.name))}` : 'Your plugs fit there';
   }
-  const w = summarize({ days: tripDays(trip.wx, trip.start, trip.end, place) });
+  const w = summarize({ days: ls.flatMap(l => l.days) });
+  // With stops, each place's days on their own: what the first place that calls for something says.
+  const parts = multi ? ls.map(l => ({ name: l.place?.name, w: summarize({ days: l.days }) })).filter(x => x.w) : [];
+  const where = test => { const x = parts.find(p => test(p.w)); return x ? ` in ${x.name}` : ''; };
+  if (w && multi) {
+    for (const k of ['hot', 'cold', 'rain', 'snow', 'sun']) w[k] = parts.some(x => x.w[k]);
+    w.cool = !w.cold && parts.some(x => x.w.cool);
+  }
   if (w) {
     for (const k of ['hot', 'cool', 'cold', 'rain', 'snow', 'sun']) auto[k] = w[k];
     // Each in the words of the rule that brought it (weather.js summarize).
     const often = (share, what) => `${what} ${share >= 0.85 ? 'most days' : `on ${inTen(share) || 'about 1 day in 10'}`} this time of year`;
-    why.hot = `Highs up to ${temp(w.maxHi, u)}`;
-    why.cool = `Lows down to ${temp(w.minLo, u)}`;
-    why.cold = w.minLo <= LIMITS.cold ? why.cool : `Highs around ${temp(w.meanHi, u)}`;
-    why.rain = w.rainDays.length ? `Rain ${w.rainLikely ? 'likely' : 'forecast'} ${dayList(w.rainDays)}` : often(w.wet, 'Rain');
-    why.snow = w.snowDays.length ? `Snow likely ${dayList(w.snowDays)}` : often(w.sn, 'Snow');
-    why.sun = w.forecast && w.uv >= 6 ? `UV up to ${Math.round(w.uv)}` : 'Strong sun then';
+    // Forecast days of rain or snow name their place when they're all in one.
+    const daysAt = (k, list) => { const at = parts.filter(x => x.w[k].some(d => list.includes(d))); return at.length === 1 ? ` in ${at[0].name}` : ''; };
+    const rainy = parts.find(x => x.w.rain), snowy = parts.find(x => x.w.snow), sunny = parts.find(x => x.w.sun);
+    const chilly = w.minLo > LIMITS.cold ? parts.find(x => x.w.cold) : null;
+    why.hot = `Highs up to ${temp(w.maxHi, u)}${where(x => x.maxHi === w.maxHi)}`;
+    why.cool = `Lows down to ${temp(w.minLo, u)}${where(x => x.minLo === w.minLo)}`;
+    why.cold = w.minLo <= LIMITS.cold ? why.cool : `Highs around ${temp((chilly?.w || w).meanHi, u)}${chilly ? ` in ${chilly.name}` : ''}`;
+    why.rain = w.rainDays.length ? `Rain ${w.rainLikely ? 'likely' : 'forecast'} ${dayList(w.rainDays)}${daysAt('rainDays', w.rainDays)}`
+      : rainy ? often(rainy.w.wet, `Rain in ${rainy.name}`) : often(w.wet, 'Rain');
+    why.snow = w.snowDays.length ? `Snow likely ${dayList(w.snowDays)}${daysAt('snowDays', w.snowDays)}`
+      : snowy ? often(snowy.w.sn, `Snow in ${snowy.name}`) : often(w.sn, 'Snow');
+    why.sun = w.forecast && w.uv >= 6 ? `UV up to ${Math.round(w.uv)}${where(x => x.forecast && x.uv === w.uv)}` : sunny ? `Strong sun in ${sunny.name} then` : 'Strong sun then';
     no.hot = `Highs up to ${temp(w.maxHi, u)}`;
     no.cool = w.cold ? 'Cold instead' : `Lows ${temp(w.minLo, u)} and up`;
     no.cold = `Lows ${temp(w.minLo, u)} and up`;

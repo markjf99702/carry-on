@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as M from '../js/model.js';
-import { plan, conditions, qtyOf, units, grown, whyNot, passes, whenWords, bagComing } from '../js/rules.js';
+import { plan, conditions, qtyOf, units, grown, whyNot, passes, whenWords, bagComing, legs, legDays } from '../js/rules.js';
 import { summarize, stale, tripWeather, tripDays, placeKey, forecastEdge, dayIcon, dayWords, searchPlaces } from '../js/weather.js';
 import { plugsFor, plugText, localCountry } from '../js/plugs.js';
 import { parsePaste, encodeList, decodeList, guess, bagIcon, bagKind } from '../js/share.js';
@@ -804,6 +804,81 @@ test('stops merge one by one, and each one’s newest weather lookup wins', () =
   // A lookup that lands after its stop was taken off doesn't bring it back.
   const off = M.removeStop(y, 't1', 'sa');
   assert.equal(M.setStopWx(off, 't1', 'sa', lookup(PORTO, 300, 30)), off);
+});
+
+test('a trip’s days, place by place: from the night you get there to the day before the next stop', () => {
+  let doc = M.putTrip(M.blankDoc(), { id: 't1', place: LISBON, start: '2026-11-10', end: '2026-11-20' });
+  assert.deepEqual(legs(doc.trips.t1).map(l => [l.id, l.place.name, l.from, l.to]), [['', 'Lisbon', '2026-11-10', '2026-11-20']], 'one place: the whole trip');
+  doc = M.putStop(doc, 't1', { id: 's2', place: MADRID, from: '2026-11-17' });
+  doc = M.putStop(doc, 't1', { id: 's1', place: PORTO, from: '2026-11-13' });
+  // Not counted: a night before you leave, the night you're back (you sleep at home), or after it.
+  for (const [id, from] of [['x1', '2026-11-10'], ['x2', '2026-11-20'], ['x3', '2026-11-25']]) doc = M.putStop(doc, 't1', { id, place: PARIS, from });
+  assert.deepEqual(legs(doc.trips.t1).map(l => [l.id, l.place.name, l.from, l.to]), [
+    ['', 'Lisbon', '2026-11-10', '2026-11-12'], ['s1', 'Porto', '2026-11-13', '2026-11-16'], ['s2', 'Madrid', '2026-11-17', '2026-11-20']]);
+  // Two stops on one night (one added on each phone): the newer counts.
+  later();
+  doc = M.putStop(doc, 't1', { id: 'x4', place: PARIS, from: '2026-11-13' });
+  assert.deepEqual(legs(doc.trips.t1).map(l => l.place.name), ['Lisbon', 'Paris', 'Madrid']);
+  // Each place's weather counts for its own days only.
+  const wx = (place, hi) => ({ at: 1, for: placeKey(place), days: range('2026-11-10', '2026-11-20').map(d => day(d, hi, 10)) });
+  doc = M.setWx(doc, 't1', wx(LISBON, 20));
+  doc = M.setStopWx(doc, 't1', 'x4', wx(PARIS, 21));
+  doc = M.setStopWx(doc, 't1', 's2', wx(MADRID, 22));
+  assert.deepEqual(legDays(doc.trips.t1).flatMap(l => l.days.map(d => d.hi)), [20, 20, 20, 21, 21, 21, 21, 22, 22, 22, 22]);
+});
+
+test('a trip with stops calls for what any of its places does, and says where', () => {
+  const us = M.setPref(starter(), 'home', 'US');
+  const fc = (d, hi, lo, extra = {}) => day(d, hi, lo, { pop: 10, uv: 3, code: 2, ...extra });
+  const typ = (d, hi, lo, extra = {}) => ({ d, typ: 1, hi, lo, mm: 0, wet: 0.1, sn: 0, rad: 10, ...extra });
+  const lookup = (place, f) => ({ at: 1, for: placeKey(place), days: range('2026-11-02', '2026-11-08').map(f) });
+  const twoStops = (doc, a, b, night, wa, wb) => {
+    let d = M.putTrip(doc, { id: 't1', place: a, start: '2026-11-02', end: '2026-11-08', travel: 'fly', ...(wa ? { wx: lookup(a, wa) } : {}) });
+    d = M.putStop(d, 't1', { id: 's1', place: b, from: night });
+    return wb ? M.setStopWx(d, 't1', 's1', lookup(b, wb)) : d;
+  };
+  // London, cool with rain on Tuesday, then Paris, hot. In London on Paris's hot days it's mild, and in Paris on
+  // London's rainy day it's dry: only each place's own days count.
+  let doc = twoStops(us, LONDON, PARIS, '2026-11-05', d => fc(d, d >= '2026-11-05' ? 30 : 15, 9, d === '2026-11-03' ? { pop: 80, mm: 6 } : {}), d => fc(d, d >= '2026-11-05' ? 31 : 18, 16, d === '2026-11-07' ? { uv: 7 } : {}));
+  let p = plan(doc, doc.trips.t1), c = p.cond;
+  assert.equal(c.why.abroad, 'United Kingdom and France');
+  assert.equal(c.on.plug, true);
+  assert.equal(c.why.plug, 'United Kingdom: Type G, 230\u00a0V; France: Type C/E, 230\u00a0V · check anything that heats up', 'each country whose sockets differ, by name');
+  assert.equal(c.why.hot, 'Highs up to 88° in Paris');
+  assert.equal(c.why.cool, 'Lows down to 48° in London');
+  assert.equal(c.why.rain, 'Rain likely Tue in London');
+  assert.equal(c.why.sun, 'UV up to 7 in Paris');
+  for (const n of ['Passport', 'Plug adapter', 'Swimsuit', 'Umbrella', 'Light jacket', 'Sunscreen']) assert.ok(allNames(p).includes(n), n);
+  assert.ok(!allNames(p).includes('Warm coat'));
+  // From the UK, only France needs an adapter, and it says France.
+  doc = twoStops(M.setPref(starter(), 'home', 'GB'), LONDON, PARIS, '2026-11-05');
+  c = conditions(doc, doc.trips.t1);
+  assert.equal(c.why.abroad, 'France');
+  assert.equal(c.why.plug, 'France: Type C/E, 230\u00a0V');
+  // Two places in one country: no names, as a trip with one place has it.
+  doc = twoStops(us, LISBON, PORTO, '2026-11-05');
+  c = conditions(doc, doc.trips.t1);
+  assert.equal(c.why.abroad, 'Portugal');
+  assert.equal(c.why.plug, 'Type C/F, 230\u00a0V · check anything that heats up');
+  // From Germany, the plugs fit in both.
+  doc = twoStops(M.setPref(starter(), 'home', 'DE'), LISBON, PARIS, '2026-11-05');
+  c = conditions(doc, doc.trips.t1);
+  assert.equal(c.on.plug, false);
+  assert.equal(c.no.plug, 'Your plugs fit in Portugal and France');
+  // Cold from one place's highs, and typical rain in one place, though the trip's days together are neither.
+  doc = twoStops(us, LISBON, PORTO, '2026-11-07', d => typ(d, 24, 14), d => typ(d, 8, 5, { wet: 0.5 }));
+  c = conditions(doc, doc.trips.t1);
+  assert.equal(c.weather.meanHi > 10, true);
+  assert.equal(c.on.cold, true);
+  assert.equal(c.why.cold, 'Highs around 46° in Porto');
+  assert.equal(c.on.rain, true);
+  assert.equal(c.why.rain, 'Rain in Porto on about 5 days in 10 this time of year');
+  assert.equal(c.on.cool, false, 'cold instead');
+  // A stop typed in without a lookup: abroad still shows from the other place, but at home it's unknown.
+  doc = twoStops(us, LISBON, { name: 'The cabin' }, '2026-11-05');
+  assert.equal(conditions(doc, doc.trips.t1).on.abroad, true);
+  doc = twoStops(us, { name: 'Chicago', cc: 'US', country: 'United States', lat: 41.85, lon: -87.65 }, { name: 'The cabin' }, '2026-11-05');
+  assert.equal(conditions(doc, doc.trips.t1).auto.abroad, undefined);
 });
 
 test('a first merge keeps everything, but untouched starter things give way to a real list', () => {
