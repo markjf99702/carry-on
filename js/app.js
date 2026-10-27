@@ -71,7 +71,7 @@ function render() {
   const h1 = main.querySelector('h1');
   if (h1) h1.tabIndex = -1;
   document.title = page && h1 && !main.querySelector('.welcome') ? `${h1.textContent} · Carry On` : 'Carry On';
-  if (moved) { current = screen; window.scrollTo(0, scrolls.get(shownTrip) || 0); tripY = scrollY; (h1 || main).focus({ preventScroll: true }); }
+  if (moved) { current = screen; window.scrollTo(0, scrolls.has(shownTrip) ? scrolls.get(shownTrip) : page === 'trip' ? listTop(id) : 0); tripY = scrollY; (h1 || main).focus({ preventScroll: true }); }
   else if (onTitle) h1?.focus({ preventScroll: true });
   const back = key ? byKey(main, key) : fid ? main.querySelector('#' + CSS.escape(fid)) : null;
   if (back) {
@@ -79,6 +79,15 @@ function render() {
     if (caret && back.setSelectionRange) try { back.setSelectionRange(...caret); } catch { /* not a text box */ }
   } else focusFirst(near);
   document.body.dataset.page = page || 'home';
+}
+
+// Where a trip opens, the first time this visit: with anything ticked, going or coming home, at its list, with the
+// Going / Coming home switch just under the top bar and the boarding pass and the weather one swipe up; with nothing
+// ticked yet, at its top.
+function listTop(id) {
+  const marks = doc().trips[decodeURIComponent(id)]?.marks || {}, at = main.querySelector('.seg.mode');
+  if (!at || !Object.entries(marks).some(([k, m]) => /^[pr]:/.test(k) && m.v)) return 0;
+  return at.getBoundingClientRect().top + scrollY - (document.querySelector('.bar')?.offsetHeight || 0) - 8;
 }
 
 // The keys to try, in order, when the control with the focus goes: the next ones in its bag (or in Left off), then

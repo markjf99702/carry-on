@@ -1644,6 +1644,37 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   await ctx.close();
 }
 
+// ================= A trip opens at its list once packing has started =================
+// With nothing ticked a trip opens at its top. With anything ticked, going or coming home, it opens with the Going /
+// Coming home switch just under the top bar. Left earlier in the same visit, it opens where it was.
+{
+  const { ctx, page } = await phone();
+  await page.click('text=Start with a starter list');
+  await planTrip(page, { where: 'Chic', from: 2, to: 4, by: 'Driving' });
+  const trip = page.url(), bar = await page.locator('.bar').evaluate(el => el.offsetHeight);
+  const reopen = async () => { await page.goto(base); await page.reload(); await page.locator('.tag-card').first().click(); await page.waitForSelector('.pass h1'); };
+  const switchAt = async () => Math.round((await page.locator('.seg.mode').boundingBox()).y);
+  await reopen();
+  assert.equal(await page.evaluate(() => scrollY), 0, 'nothing ticked: at the top');
+  await row(page, 'Belt').locator('.tick').click();
+  await reopen();
+  assert.ok(Math.abs(await switchAt() - bar - 8) <= 1, `something ticked: the switch under the top bar (${await switchAt()}, bar ${bar})`);
+  assert.equal(await page.evaluate(() => document.activeElement.tagName), 'H1', 'the focus on the trip’s name, as on any screen');
+  // Where it was left this visit.
+  await page.evaluate(() => window.scrollTo(0, 1500));
+  await page.goBack();
+  await page.waitForSelector('.tag-card');
+  await page.locator('.tag-card').first().click();
+  await page.waitForSelector('.pass h1');
+  assert.equal(await page.evaluate(() => Math.round(scrollY)), 1500, 'where it was left');
+  // Ticked only coming home counts too.
+  await page.evaluate(() => { const { store, M } = window.carryOn, t = Object.values(store.doc.trips)[0]; store.apply(d => M.mark(M.mark(d, t.id, 'p:s-clothes-belt', 0), t.id, 'r:s-clothes-belt', 1)); });
+  await reopen();
+  assert.ok(Math.abs(await switchAt() - bar - 8) <= 1, 'ticked coming home: at the list');
+  assert.equal(page.url(), trip);
+  await ctx.close();
+}
+
 // ================= Everything packed: one line =================
 // Once the moment after the last tick has passed, the bags fold into one line, and Hide done goes. Tapping the line
 // shows the bags; unticking something opens them, and the next time it's all packed they fold again.
