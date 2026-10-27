@@ -4,7 +4,8 @@
 // pass lists only what went. A trip too far off for a forecast gets typical weather; one with no connection is
 // set by hand. The list is changed, sent as a link and opened on another phone, a list is pasted in, what's typed
 // stays put while the page redraws, quick taps tick what was tapped, finishing the packing says so, and two phones
-// share one list and its ticks through a stand-in Google Drive (test/fake-google.mjs).
+// share one list and its ticks through a stand-in Google Drive (test/fake-google.mjs). One visit is enough to open a
+// trip offline, and the one-file copy is built and opened from the disk.
 import { createRequire } from 'node:module';
 import { execSync } from 'node:child_process';
 import { createServer } from 'node:http';
@@ -1025,6 +1026,32 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await ctx.close();
 }
 
+// ================= Offline after one visit =================
+// On a first visit the page's own files load before the service worker takes over, so all it keeps for offline is
+// what sw.js lists. With only that, and no connection, a trip opens: a file missing from the list fails here.
+{
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await openMeteo(ctx);
+  const page = await ctx.newPage();
+  page.on('pageerror', e => problems.push('offline after one visit: ' + e.message));
+  await page.goto(base);
+  await page.waitForFunction(() => navigator.serviceWorker?.controller, null, { timeout: 15000 });
+  await page.click('text=Start with a starter list');
+  await page.evaluate(() => {
+    const { store, M, D } = window.carryOn;
+    store.apply(d => M.putTrip(d, { id: 'away', place: { name: 'Lisbon', admin: 'Lisbon District', country: 'Portugal', cc: 'PT', lat: 38.7251, lon: -9.1498 }, start: D.add(D.today(), 3), end: D.add(D.today(), 7), travel: 'fly', name: '' }));
+  });
+  await ctx.setOffline(true);
+  const p2 = await ctx.newPage();
+  p2.on('pageerror', e => problems.push('offline after one visit: ' + e.message));
+  await p2.goto(base + '#/trip/away');
+  await p2.waitForSelector('.pass h1');
+  assert.equal(await p2.locator('.pass h1').innerText(), 'LISBON');
+  assert.ok(await p2.locator('main .bag').count() > 3, 'its list');
+  assert.deepEqual(await p2.evaluate(async () => { await document.fonts.ready; return [...document.fonts].filter(f => f.status === 'error').length; }), 0, 'its fonts');
+  await ctx.close();
+}
+
 // ================= The one-file copy =================
 // dist/carry-on.html, the whole app in one file (the copy published as a Claude Artifact), opened from the disk
 // with no weather service to reach. It says what it can't do rather than offering it. Only where esbuild, which
@@ -1033,6 +1060,12 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   execSync('node tools/build.mjs', { cwd: root, stdio: 'ignore' });
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true });
   await ctx.route(/open-meteo\.com/, route => route.abort('internetdisconnected'));
+  // A browser that can share, so leaving Share… out is this copy's doing; and a note of any service worker asked for.
+  await ctx.addInitScript(() => {
+    navigator.share = async () => {};
+    const sw = navigator.serviceWorker;
+    if (sw) { const register = sw.register.bind(sw); sw.register = (...a) => { window.swAsked = a[0]; return register(...a); }; }
+  });
   const page = await ctx.newPage();
   page.on('pageerror', e => problems.push('one-file copy: ' + e.message));
   await page.goto('file://' + join(root, 'dist', 'carry-on.html'));
@@ -1050,6 +1083,30 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   assert.deepEqual(await backup.locator('.btn').allInnerTexts(), ['Restore from a backup']);
   // Its two fonts are inside it, and both load.
   assert.deepEqual(await page.evaluate(async () => { await document.fonts.ready; return [...document.fonts].map(f => `${f.family} ${f.weight} ${f.status}`).sort(); }), ['Barlow Condensed 700 loaded', 'Figtree 400 700 loaded']);
+  // A list sent from here opens on the site, with no Share… (a file has nothing to share).
+  await page.evaluate(() => { location.hash = '#/list'; });
+  await page.click('text=Send my list as a link');
+  await until(() => sheetOpen(page), 'the link sheet');
+  assert.match(await page.locator('.sheet input').inputValue(), /^https:\/\/carry-on\.junkdrawer\.works\/#list=[\w-]+$/);
+  assert.deepEqual(await page.locator('.sheet .sheet-actions .btn').allInnerTexts(), ['Copy the link']);
+  await closeSheet(page);
+  // Place search can't be reached from here: it says so, and how to go on.
+  await page.evaluate(() => { location.hash = '#/new'; });
+  await page.fill('#where', 'Lisbon');
+  await until(async () => /This copy can’t reach/.test(await page.locator('.where-status').innerText()), 'the line under the place box');
+  assert.equal(await page.locator('.where-status').innerText(), 'This copy can’t reach the weather service. Use what you typed and set the weather and abroad by hand, or open carry-on.junkdrawer.works for the forecast.');
+  await page.locator('.results button', { hasText: 'without looking it up' }).click();
+  await page.fill('#start', await page.evaluate(() => window.carryOn.D.add(window.carryOn.D.today(), 3)));
+  await page.fill('#end', await page.evaluate(() => window.carryOn.D.add(window.carryOn.D.today(), 6)));
+  await page.click('text=Make my list');
+  await page.waitForSelector('.wx.none');
+  assert.equal(await page.locator('.wx.none').innerText(), 'This place wasn’t looked up, so there’s no forecast and no check for abroad or plugs. Set them under Change, or open carry-on.junkdrawer.works.');
+  // Served from an address where the site itself would start its service worker, this copy doesn't ask for one.
+  const served = await ctx.newPage();
+  await served.goto(base + 'dist/carry-on.html');
+  await served.waitForSelector('.welcome');
+  await wait(300);
+  assert.equal(await served.evaluate(() => window.swAsked ?? null), null, 'no service worker asked for');
   await ctx.close();
 }
 

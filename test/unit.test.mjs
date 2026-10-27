@@ -2,6 +2,7 @@
 //   node --test test/
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import * as M from '../js/model.js';
 import { plan, conditions, qtyOf, units, grown, whyNot, passes, whenWords, bagComing } from '../js/rules.js';
 import { summarize, stale, tripWeather, tripDays, placeKey, forecastEdge, dayIcon, dayWords, searchPlaces } from '../js/weather.js';
@@ -1468,4 +1469,23 @@ test('qty', () => {
   assert.equal(qtyOf(doc, doc.trips.t1, { per: 'day' }), 3);
   assert.equal(qtyOf(doc, doc.trips.t1, { per: '', qty: 2 }), 2);
   assert.ok(conditions(doc, doc.trips.t1).on.fly);
+});
+
+// The service worker keeps what's needed to open offline: on a first visit the page's own files load before it takes
+// over, so only what sw.js lists is kept. A file left off the list would be missing offline.
+test('sw.js keeps every file the page needs offline, and nothing else', () => {
+  const read = p => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
+  const shell = [...read('sw.js').match(/const SHELL = \[([\s\S]*?)\];/)[1].matchAll(/'([^']+)'/g)].map(m => m[1]);
+  const fonts = [...read('css/app.css').matchAll(/url\(\.\.\/(fonts\/[^)]+)\)/g)].map(m => m[1]);
+  // Every module js/app.js reaches through its imports.
+  const js = new Set(), todo = ['js/app.js'];
+  while (todo.length) {
+    const f = todo.pop();
+    if (js.has(f)) continue;
+    js.add(f);
+    for (const [, rel] of read(f).matchAll(/\bimport\s*(?:[\w*{}\s,]+from\s*)?\(?\s*'(\.\/[\w-]+\.js)'/g)) todo.push('js/' + rel.slice(2));
+  }
+  const want = ['./', 'index.html', 'manifest.webmanifest', 'icon.svg', 'icon-180.png', 'css/app.css', ...fonts, ...js];
+  assert.deepEqual([...shell].sort(), [...new Set(want)].sort());
+  assert.ok(js.size >= 10 && fonts.length === 2, `found ${js.size} modules and ${fonts.length} fonts`);
 });
