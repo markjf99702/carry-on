@@ -291,8 +291,11 @@ function weatherStrip(t, c) {
   if (!t.place) {
     return h('section', { class: 'wx none' }, h('p', { class: 'muted small' }, 'No place for this trip, so no forecast. Add one in ', h('a', { href: `#/edit/${t.id}` }, 'Edit'), ', or set the weather by hand under ', h('b', {}, 'Change'), '.'));
   }
+  // A place typed in without a lookup has no forecast, and no country to say whether it's abroad or which plugs it
+  // has. The one-file copy can't look a place up at all, so it points to the site instead of Edit.
   if (t.place.lat === undefined) {
-    return h('section', { class: 'wx none' }, h('p', { class: 'muted small' }, 'No weather for this trip: its place wasn’t looked up. Set the weather by hand under ', h('b', {}, 'Change'), ', or pick the place again in ', h('a', { href: `#/edit/${t.id}` }, 'Edit'), '.'));
+    return h('section', { class: 'wx none' }, h('p', { class: 'muted small' }, 'This place wasn’t looked up, so there’s no forecast and no check for abroad or plugs. Set them under ', h('b', {}, 'Change'), ', or ',
+      single ? ['open ', h('a', { href: SITE, target: '_blank', rel: 'noopener' }, 'carry-on.junkdrawer.works')] : ['pick the place again in ', h('a', { href: `#/edit/${t.id}` }, 'Edit')], '.'));
   }
   const days = W.tripDays(t.wx, t.start, t.end, t.place);
   const fc = days.some(d => !d.typ), ty = days.some(d => d.typ);
@@ -719,7 +722,9 @@ function condSheet(id, at = '') {
       h('ul', { class: 'auto-list' }, R.AUTO_KEYS.map(k => {
         const info = R.condInfo(doc(), k), set = t.set?.[k]?.v;
         const state = set === true ? 'on' : set === false ? 'off' : 'auto';
-        const autoText = c.auto[k] === undefined ? 'unknown' : c.auto[k] ? 'yes' : 'no';
+        // Abroad and plugs come from the place's country: a place typed in without a lookup has none.
+        const unknown = (k === 'abroad' || k === 'plug') && !t.place?.cc ? (!t.place ? ', no place for this trip' : t.place.lat === undefined ? ', the place wasn’t looked up' : '') : '';
+        const autoText = c.auto[k] === undefined ? 'unknown' + unknown : c.auto[k] ? 'yes' : 'no';
         const pickState = s => { store.apply(d => M.setCond(d, id, k, s === 'auto' ? null : s === 'on')); draw(); render(); };
         return h('li', { 'data-k': k },
           h('span', { class: 'auto-name' }, h('span', { 'aria-hidden': 'true' }, info.icon), ' ', h('b', {}, info.name),
@@ -773,7 +778,7 @@ function tripForm(t, again = false) {
     const typed = input.value.trim();
     const failed = dr.searchErr && typed && dr.searchErr !== NO_PLACES;
     status.className = 'where-status small ' + (failed ? 'err' : 'muted');
-    status.textContent = !typed ? '' : failed && single ? 'This copy can’t reach the weather service. Use what you typed and set the weather by hand, or open carry-on.junkdrawer.works for the forecast.'
+    status.textContent = !typed ? '' : failed && single ? 'This copy can’t reach the weather service. Use what you typed and set the weather and abroad by hand, or open carry-on.junkdrawer.works for the forecast.'
       : dr.searchErr || (dr.results.length ? plural(dr.results.length, 'place') : '');
     // Last, once the search has answered for what's typed, the way through without a lookup: offline, or for a place
     // the search doesn't know. (Not before, so it isn't where the first place lands when the places come.)

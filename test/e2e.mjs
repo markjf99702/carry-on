@@ -385,8 +385,12 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await page.fill('#end', await day(page, 2));
   await page.click('text=Make my list');
   await page.waitForSelector('.wx.none');
+  // A typed place leaves out the forecast and the checks for abroad and plugs, and it says so.
+  assert.match(await page.locator('.wx.none').innerText(), /no forecast and no check for abroad or plugs\. Set them under Change, or pick the place again in Edit\./);
   assert.ok(!(await rowsText(page)).includes('Warm coat'));
   await page.click('.needs .btn');
+  assert.match(await page.locator('.auto-list li', { hasText: 'Abroad' }).innerText(), /Automatic: unknown, the place wasn’t looked up/);
+  assert.match(await page.locator('.auto-list li', { hasText: 'Different plugs' }).innerText(), /Automatic: unknown, the place wasn’t looked up/);
   await page.locator('.auto-list li', { hasText: 'Cold' }).locator('button', { hasText: 'Yes' }).click();
   await page.locator('.auto-list li', { hasText: 'Abroad' }).locator('button', { hasText: 'Yes' }).click();
   await closeSheet(page);
