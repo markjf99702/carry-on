@@ -7,7 +7,7 @@ import * as D from './days.js';
 import { store } from './store.js';
 import { drive } from './sync.js';
 import { starterList } from './starter.js';
-import { tripCalendar } from './calendar.js';
+import { tripCalendar, googleCalendarLink } from './calendar.js';
 import { parsePaste, encodeList, decodeList, guess, bagIcon, sortLoose, listText } from './share.js';
 import { PLUGS, countryName } from './plugs.js';
 import { h, ICONS, toast, toastKeep, toastNext, sheet, closeSheet, setupSheet, confirmBtn, pressedKey, byKey } from './ui.js';
@@ -15,6 +15,8 @@ import { h, ICONS, toast, toastKeep, toastNext, sheet, closeSheet, setupSheet, c
 export const SITE = 'https://carry-on.junkdrawer.works/';
 const main = document.getElementById('app');
 const single = document.documentElement.hasAttribute('data-single');
+// An Android phone: its calendar is usually Google Calendar, which imports a calendar file only on a computer.
+const android = navigator.userAgentData?.platform === 'Android' || /Android/i.test(navigator.userAgent);
 const doc = () => store.doc;
 const today = () => D.today();
 const plural = (n, one, many = one + 's') => `${n} ${n === 1 ? one : many}`;
@@ -608,16 +610,20 @@ function tripView(t) {
     h('div', { class: 'trip-tools' },
       h('button', { type: 'button', class: 'btn small', 'data-key': 'copy-text', onclick: () => copyText(t, mode) }, 'Copy as text'),
       // A trip still to come, where a file can be saved (not the one-file copy).
-      !single && t.start > today() ? h('button', { type: 'button', class: 'btn small', 'data-key': 'calendar', onclick: () => saveCalendar(t) }, 'Add to my calendar') : null),
+      !single && t.start > today() ? h('button', { type: 'button', class: 'btn small', 'data-key': 'calendar', onclick: () => saveCalendar(t) }, 'Add to my calendar') : null,
+      // On an Android phone, whose Google Calendar may not open the file, Google Calendar with the trip filled in too.
+      !single && android && t.start > today() ? h('a', { class: 'btn small', 'data-key': 'google-calendar', href: googleCalendarLink(t, { name: title(t), url: tripLink(t) }), target: '_blank', rel: 'noopener' }, 'Open in Google Calendar') : null),
   ];
 }
+
+// The trip's own address, which a calendar event leads back to.
+const tripLink = t => `${location.origin}${location.pathname}#/trip/${encodeURIComponent(t.id)}`;
 
 // The trip as a calendar file (calendar.js), saved to open in the phone's calendar: the trip's days, with an alert at
 // 7 pm the evening before that leads back to this list. Saved again after a change, it updates the same event.
 function saveCalendar(t) {
   const name = title(t), file = `${name.replace(/[\\/:*?"<>|]+/g, '').trim() || 'Trip'}.ics`;
-  const url = `${location.origin}${location.pathname}#/trip/${encodeURIComponent(t.id)}`;
-  const ics = tripCalendar(t, { name, where: R.legs(t).length > 1 ? route(t).replace(/\u00a0/g, ' ') : t.place ? W.placeLabel(t.place) : '', url });
+  const ics = tripCalendar(t, { name, where: R.legs(t).length > 1 ? route(t).replace(/\u00a0/g, ' ') : t.place ? W.placeLabel(t.place) : '', url: tripLink(t) });
   const a = h('a', { href: URL.createObjectURL(new Blob([ics], { type: 'text/calendar;charset=utf-8' })), download: file });
   document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 60000);

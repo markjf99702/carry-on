@@ -9,7 +9,7 @@ import { summarize, stale, tripWeather, tripDays, placeKey, forecastEdge, dayIco
 import { plugsFor, plugText, localCountry } from '../js/plugs.js';
 import { parsePaste, encodeList, decodeList, guess, bagIcon, bagKind, sortLoose, listText } from '../js/share.js';
 import { starterList } from '../js/starter.js';
-import { tripCalendar } from '../js/calendar.js';
+import { tripCalendar, googleCalendarLink } from '../js/calendar.js';
 import { store } from '../js/store.js'; // in Node there's no localStorage, so it keeps the doc in memory only
 import { add, span, yearsBack, range, weekday, short, long, dayLong } from '../js/days.js';
 
@@ -2273,6 +2273,22 @@ test('a trip as a calendar file: its days, an alert the evening before, and the 
   const long = tripCalendar(moved.trips.t1, { name: 'Reykjavík, Akureyri, Höfn, Vík, Selfoss and the whole of the south coast of Ísland', url });
   for (const l of long.split('\r\n')) assert.ok(new TextEncoder().encode(l).length <= 75);
   assert.match(long.replace(/\r\n /g, ''), /\r\nSUMMARY:Reykjavík\\, Akureyri\\, Höfn\\, Vík\\, Selfoss and the whole of the south coast of Ísland\r\n/);
+});
+
+test('a trip as a Google Calendar link: its name, its days and its link, and nothing else', () => {
+  const d = M.putTrip(M.blankDoc(), { id: 't1', name: 'Sam’s wedding & the weekend', start: '2026-12-30', end: '2027-01-02', place: LISBON });
+  const url = 'https://carry-on.junkdrawer.works/#/trip/t1';
+  const link = new URL(googleCalendarLink(d.trips.t1, { name: 'Sam’s wedding & the weekend', url }));
+  assert.equal(link.origin + link.pathname, 'https://calendar.google.com/calendar/render');
+  assert.deepEqual(Object.fromEntries(link.searchParams), {
+    action: 'TEMPLATE',
+    text: 'Sam’s wedding & the weekend',
+    // All day, the end the day after the last, as in the file; into the next year.
+    dates: '20261230/20270103',
+    details: 'Your packing list: ' + url,
+    crm: 'AVAILABLE',
+  });
+  assert.doesNotMatch(link.href, /Lisbon|Portugal|38\.7/, 'not the place');
 });
 
 test('ticks on too few: a longer trip, a higher laundry limit or a higher How many', () => {

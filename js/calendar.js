@@ -1,6 +1,7 @@
 // A trip as a calendar file, made in the browser, to open in a phone's calendar: an all-day event for the trip's days
 // with its name, an alert at 7 pm the evening before ("Pack for Lisbon"), and the trip's link, so the alert leads to
-// the list. Nothing leaves the browser. No page code, so the tests run it in Node.
+// the list. Nothing leaves the browser. And on an Android phone, the same trip as a link to Google Calendar (below).
+// No page code, so the tests run it in Node.
 // The format is iCalendar (RFC 5545). The event's UID is the trip's own, and its SEQUENCE goes up with every change to
 // the trip, so saving the file again after the dates change updates the event rather than adding a second one.
 import { add } from './days.js';
@@ -48,4 +49,15 @@ export function tripCalendar(trip, { name, where = '', url, now = Date.now() }) 
     'BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${text(`Pack for ${name}`)}`, 'TRIGGER:-PT5H', 'END:VALARM',
     'END:VEVENT', 'END:VCALENDAR',
   ].filter(Boolean).map(fold).join('\r\n') + '\r\n';
+}
+
+// The trip as a link that opens Google Calendar with the event filled in, to save with one tap: for an Android phone
+// whose only calendar is Google Calendar, which imports a calendar file only on a computer. Tapped, it sends Google the
+// trip's name, its days and its link, and nothing else. All day, from the day you leave through the day you're back
+// (the end is the day after, as in the file), and free rather than busy (crm=AVAILABLE). The alert is whatever the
+// calendar gives all-day events. Google doesn't document this link; its form is calendar.google.com/calendar/render
+// with action=TEMPLATE.
+export function googleCalendarLink(trip, { name, url }) {
+  const q = new URLSearchParams({ action: 'TEMPLATE', text: name, dates: `${date(trip.start)}/${date(add(trip.end, 1))}`, details: `Your packing list: ${url}`, crm: 'AVAILABLE' });
+  return `https://calendar.google.com/calendar/render?${q}`;
 }

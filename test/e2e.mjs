@@ -37,8 +37,8 @@ const browser = await pw.chromium.launch();
 const problems = [];
 const ALLOWED = /^https:\/\/(geocoding-api|api|archive-api)\.open-meteo\.com\/|^https:\/\/(accounts\.google\.com|www\.googleapis\.com)\//;
 
-async function phone({ weather = {}, google = null, sw = 'block', mobile = false } = {}) {
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: mobile, serviceWorkers: sw });
+async function phone({ weather = {}, google = null, sw = 'block', mobile = false, userAgent } = {}) {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: mobile, serviceWorkers: sw, ...(userAgent ? { userAgent } : {}) });
   await openMeteo(ctx, weather);
   if (google) await google.install(ctx, { rewrite: { '**/js/sync.js': s => s.replace("['https://carry-on.junkdrawer.works']", `['https://carry-on.junkdrawer.works', '${origin}']`) } });
   const page = await ctx.newPage();
@@ -2505,7 +2505,7 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
 
 // ================= A trip in the calendar =================
 // A trip still to come can be saved as a calendar file, with an alert the evening before and the trip's link; one
-// under way or over has no such button.
+// under way or over has no such button. On an Android phone, it can also open in Google Calendar, filled in.
 {
   const { ctx, page } = await phone();
   await page.click('text=Start with a starter list');
@@ -2519,6 +2519,21 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
     assert.ok(ics.split('\r\n').includes(line), line);
   }
   assert.match(await page.locator('#toast span').innerText(), /^Saved Lisbon\.ics\. Open it to add Lisbon to your calendar, with a reminder at 7 pm the evening before\.$/);
+  assert.deepEqual(await page.locator('main .trip-tools .btn').allInnerTexts(), ['Copy as text', 'Add to my calendar'], 'not an Android phone: the file alone');
+  {
+    const android = await phone({ userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36' });
+    await android.page.click('text=Start with a starter list');
+    await planTrip(android.page, { where: 'Lisb', from: 3, to: 7 });
+    assert.deepEqual(await android.page.locator('main .trip-tools .btn').allInnerTexts(), ['Copy as text', 'Add to my calendar', 'Open in Google Calendar']);
+    const link = android.page.locator('main .trip-tools a.btn');
+    assert.equal(await link.getAttribute('target'), '_blank');
+    const url = new URL(await link.getAttribute('href'));
+    const [aid, s, e] = await android.page.evaluate(() => { const t = Object.values(window.carryOn.store.doc.trips)[0]; return [t.id, ...[t.start, window.carryOn.D.add(t.end, 1)].map(k => k.replace(/-/g, ''))]; });
+    assert.equal(url.origin + url.pathname, 'https://calendar.google.com/calendar/render');
+    assert.deepEqual(Object.fromEntries(url.searchParams), { action: 'TEMPLATE', text: 'Lisbon', dates: `${s}/${e}`, details: `Your packing list: ${base}#/trip/${aid}`, crm: 'AVAILABLE' });
+    await fits(android.page, 'the trip with Open in Google Calendar');
+    await android.ctx.close();
+  }
   // The event's link, opened in a browser that never had the trip (an iPhone's Safari, while Carry On is on its Home
   // Screen with storage of its own): it says so, rather than that the trip was deleted.
   await page.goto(base + '#/trip/t-planned-elsewhere');
