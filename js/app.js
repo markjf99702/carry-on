@@ -1527,7 +1527,9 @@ function tagEditor(g, { added = false, focus = '' } = {}) {
         h('button', { type: 'button', class: 'btn primary', onclick: save }, isNew ? 'Add it' : 'Save')),
     ];
   }, { wide: !isNew });
-  if (focus) byKey(document.getElementById('sheet'), focus)?.focus();
+  // A thing changed so it no longer comes for this occasion has left the list: the focus goes to Add a thing for it,
+  // rather than out of the sheet.
+  if (focus) { const box = document.getElementById('sheet'); (byKey(box, focus) || byKey(box, 'occ-add-thing'))?.focus(); }
 }
 
 // ---------- lists in and out ----------

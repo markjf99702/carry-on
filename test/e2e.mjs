@@ -1582,6 +1582,14 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   await page.click('.sheet .btn.primary');
   assert.match(await page.locator('#sheetTitle').innerText(), /SWIMMING/);
   assert.match(await page.evaluate(() => document.activeElement.innerText), /^Flip-flops/, 'the focus on it');
+  // One changed so it no longer comes for it leaves the list, and the focus stays in the sheet, on Add a thing for it.
+  await page.click('.sheet .edit-row:has-text("Swimsuit")');
+  await page.locator('.sheet .chip.on', { hasText: /Swimming$/ }).click();
+  await page.click('.sheet .btn.primary');
+  assert.match(await page.locator('#sheetTitle').innerText(), /SWIMMING/);
+  assert.deepEqual((await things())[0], ['Sunscreen In the Liquids bag', 'Flip-flops In Clothes']);
+  assert.equal(await page.evaluate(() => document.activeElement.dataset.key), 'occ-add-thing', 'not lost to the page');
+  await page.evaluate(() => { const { store, M } = window.carryOn; store.apply(d => M.putItem(d, { id: 's-clothes-swimsuit', when: ['swim', 'hot'] })); });
   await page.keyboard.press('Escape');
   await page.click('[data-key="occ:work"]');
   assert.deepEqual(await things(), [['💼 Work bag A bag · 3 things']]);
