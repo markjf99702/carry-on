@@ -4,10 +4,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as M from '../js/model.js';
-import { plan, conditions, qtyOf, units, grown, whyNot, passes, whenWords, bagComing, legs, legDays, occasionThings, recentPlaces, lastAdded, usedUp } from '../js/rules.js';
+import { plan, conditions, qtyOf, units, grown, whyNot, passes, whenWords, bagComing, legs, legDays, occasionThings, recentPlaces, lastAdded, usedUp, textGroups } from '../js/rules.js';
 import { summarize, stale, tripWeather, tripDays, placeKey, forecastEdge, dayIcon, dayWords, searchPlaces, uvEstimate } from '../js/weather.js';
 import { plugsFor, plugText, localCountry } from '../js/plugs.js';
-import { parsePaste, encodeList, decodeList, guess, bagIcon, bagKind, sortLoose } from '../js/share.js';
+import { parsePaste, encodeList, decodeList, guess, bagIcon, bagKind, sortLoose, listText } from '../js/share.js';
 import { starterList } from '../js/starter.js';
 import { store } from '../js/store.js'; // in Node there's no localStorage, so it keeps the doc in memory only
 import { add, span, yearsBack, range, weekday, short, long, dayLong } from '../js/days.js';
@@ -1870,6 +1870,36 @@ test('pasted lists: a title line isn’t a thing', () => {
   // Nor the first of several headings that each have a blank line and boxes or bullets under them.
   assert.equal(shape('Toiletries\n\n- Toothbrush\n- Floss\n\nElectronics\n\n- Phone charger'), 'Toiletries: Toothbrush, Floss | Electronics: Phone charger');
   assert.equal(shape('Toiletries\n\n☐ Toothbrush\nElectronics\n☐ Phone charger'), 'Toiletries: Toothbrush | Electronics: Phone charger');
+});
+
+test('a trip copied as text: a checklist by bag, which Paste a list reads back', () => {
+  let d = M.setPref(starter(), 'home', 'US');
+  d = M.putItem(d, { id: 's-electronics-phone-charger', last: true });
+  d = M.putTrip(d, { id: 't1', start: T, end: add(T, 4), travel: 'fly', place: LISBON });
+  d = M.mark(d, 't1', 'p:s-liquids-toothpaste', 1);
+  const groups = textGroups(d, d.trips.t1), text = listText('Lisbon · Nov 2 – 6', groups);
+  assert.match(text, /^Lisbon · Nov 2 – 6\n\nLIQUIDS BAG\n☑ Toothpaste\n☐ Shampoo and conditioner\n/);
+  // The last thing out the door in its own bag, in its place there; a count; the plug adapter's sockets.
+  assert.match(text, /\nELECTRONICS\n☐ Phone charger\n☐ Headphones\n/);
+  assert.match(text, /\n☐ Socks ×5\n/);
+  assert.match(text, /\n☐ Plug adapter \(Type C\/F, 230 V\)\n/);
+  assert.match(text, /\nLEAVING THE HOUSE\n☐ Take out the trash\n/);
+  assert.ok(text.endsWith('☐ Lock the windows and doors\n'));
+  // Read back: the title goes, and each bag, its kind and its things come back as they were.
+  const back = parsePaste(text);
+  assert.deepEqual(back.bags.map(b => [b.name, b.kind]), groups.map(g => [g.name, g.name === 'Leaving the house' ? 'leave' : 'bag']));
+  for (const g of groups) {
+    const b = back.bags.find(x => x.name === g.name);
+    assert.deepEqual(back.items.filter(x => x.bag === b.id).map(x => [x.name, x.qty]), g.rows.map(r => [r.note ? `${r.name} (${r.note})` : r.name, r.qty]), g.name);
+  }
+  // Added to the list it came from, nothing new but the adapter's name with its sockets.
+  assert.deepEqual(M.items(M.addList(d, back)).filter(x => !M.items(d).some(y => y.id === x.id)).map(x => x.name), ['Plug adapter (Type C/F, 230 V)']);
+  // Coming home: the hotel checklist first, what went, and what isn't coming back.
+  d = M.mark(d, 't1', 'r:s-liquids-toothpaste', 2);
+  assert.equal(listText('Lisbon', textGroups(d, d.trips.t1, 'back')), 'Lisbon\n\nLEAVING THE HOTEL\n☐ Chargers out of the outlets\n☐ The safe and the drawers\n☐ The fridge and the hooks on the doors\n☐ The bathroom and the shower\n☐ Under the bed and in the closet\n\nLIQUIDS BAG\n☑ Toothpaste (not coming back)\n');
+  // Capitals as a heading anywhere are a bag in its own case.
+  assert.equal(shape('TOILETRIES:\n- Toothbrush\nELECTRONICS:\n- Phone charger'), 'Toiletries: Toothbrush | Electronics: Phone charger');
+  assert.equal(shape('Weekend\n\nTOILETRIES\n☐ Toothbrush'), 'Toiletries: Toothbrush', 'the title goes');
 });
 
 test('pasted lists: bullets, boxes and numbers under a heading without one', () => {

@@ -136,7 +136,9 @@ export function counted(line) {
 //   - "●" and "○" bullets (Google Docs) count as levels the same way indents do;
 //   - a top-level line with nothing under it is a thing on its own, kept together in "Not in a bag";
 //   - a title line goes: "# Title", or a line on its own above a blank line and a list of boxes or bullets,
-//     unless lines further down look the same (then it's the first heading of several);
+//     unless lines further down look the same (then it's the first heading of several), or above a blank line and
+//     a heading in capitals with boxes under it (a trip copied as text, listText);
+//   - a bag named in capitals ("ELECTRONICS") is named in its own case ("Electronics");
 //   - an emoji in front of a bag's name is its icon;
 //   - only when none of that made a bag: blocks of lines between blank lines, each under its first line, and
 //     short ALL-CAPS lines, are bags.
@@ -172,6 +174,7 @@ function read(lines, blocks = false) {
     let name = heading, icon = '';
     const e = EMOJI.exec(name);
     if (e && e[1].length <= 8 && name.length > e[0].length) { icon = e[1]; name = name.slice(e[0].length); }
+    if (CAPS(name)) name = name[0] + name.slice(1).toLowerCase();
     const kind = bagKind(name), g = guess(name, true);
     const b = { id: uid('b-' + slug(name)), name, icon: kind === 'bag' && icon ? icon : bagIcon(name, kind), kind, when: kind === 'bag' ? g.when : [], unless: [], note: '' };
     bags.push(b);
@@ -242,7 +245,8 @@ export function parsePaste(text) {
   if (first && !/:$/.test(first.body) && (docs
     ? plain(first) && (!second || second.gap || plain(second) || !lines.slice(1).some(plain))
     : first.head === 1 ? !lines.slice(1).some(x => x.head === 1)
-      : !first.head && !first.marked && second?.gap && second.marked && !lines.some((x, i) => i > 0 && !x.head && !x.marked && !x.lead && lines[i + 1]?.marked))) lines = lines.slice(1);
+      : !first.head && !first.marked && second?.gap && (second.marked ? !lines.some((x, i) => i > 0 && !x.head && !x.marked && !x.lead && lines[i + 1]?.marked)
+        : CAPS(second.body) && !!lines[2]?.marked && !lines[2].gap))) lines = lines.slice(1);
   // Levels. A bullet at the margin sits under a line at the margin without one, as if indented a little.
   const mixed = !docs && lines.some(x => !x.lead && x.marked) && lines.some(x => !x.lead && !x.marked && !x.head);
   for (const x of lines) x.level = docs ? (x.bullet ? DOCS_LEVEL[x.bullet] : -1) : x.lead + (mixed && !x.lead && x.marked ? 0.5 : 0);
@@ -266,6 +270,20 @@ export function parsePaste(text) {
   const rank = b => (b.kind === 'leave' ? 2 : b.kind === 'back' ? 3 : b === loose ? 1 : 0);
   full.sort((a, b) => rank(a) - rank(b));
   return { bags: full, items, tags: [] };
+}
+
+// ---------- a trip's list as text ----------
+// A plain checklist for Messages, Keep or Notes: a title line, then each bag's name in capitals with its things under
+// it, ☐ to pack and ☑ done, a count as "×5", and a few words where they matter ("Plug adapter (Type C/F, 230 V)").
+// Paste a list reads it back: the title goes, each bag is a bag again in its own case, and the boxes and counts are
+// read as they are anywhere.
+//   groups: [{ name, rows: [{ name, qty, done, note }] }]
+export function listText(title, groups) {
+  const lines = [title];
+  for (const g of groups.filter(g => g.rows.length)) {
+    lines.push('', g.name.toUpperCase(), ...g.rows.map(r => `${r.done ? '☑' : '☐'} ${r.name}${r.qty > 1 ? ` ×${r.qty}` : ''}${r.note ? ` (${r.note})` : ''}`));
+  }
+  return lines.join('\n') + '\n';
 }
 
 // ---------- sorting what's not in a bag ----------

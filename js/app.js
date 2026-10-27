@@ -7,7 +7,7 @@ import * as D from './days.js';
 import { store } from './store.js';
 import { drive } from './sync.js';
 import { starterList } from './starter.js';
-import { parsePaste, encodeList, decodeList, guess, bagIcon, sortLoose } from './share.js';
+import { parsePaste, encodeList, decodeList, guess, bagIcon, sortLoose, listText } from './share.js';
 import { PLUGS, countryName } from './plugs.js';
 import { h, ICONS, toast, toastKeep, toastNext, sheet, closeSheet, setupSheet, confirmBtn, pressedKey, byKey } from './ui.js';
 
@@ -581,7 +581,22 @@ function tripView(t) {
     p.buy.length ? buyThere(t, p.buy) : null,
     usedUpList(t),
     p.left.length || p.leftBags.length ? leftOff(t, p.left, p.leftBags, mode) : null,
+    // The whole trip, somewhere else.
+    h('div', { class: 'trip-tools' },
+      h('button', { type: 'button', class: 'btn small', 'data-key': 'copy-text', onclick: () => copyText(t, mode) }, 'Copy as text')),
   ];
+}
+
+// The list as it shows, Going or Coming home, as a plain checklist by bag (share.js listText), to paste into Messages,
+// Keep or Notes. Where the browser won't copy (the one-file copy, inside another page), it shows in a box to copy.
+function copyText(t, mode) {
+  const text = listText(`${title(t)} · ${D.span(t.start, t.end, today().slice(0, 4))}${mode === 'back' ? ' · coming home' : ''}`, R.textGroups(doc(), t, mode));
+  const show = () => sheet('Your list as text', () => [
+    h('p', { class: 'muted small' }, 'Select it all and copy it, then paste it into Messages, Keep or Notes.'),
+    h('textarea', { class: 'as-text', rows: 12, readonly: true, autofocus: true, value: text, 'aria-label': 'Your list as text', onfocus: e => e.target.select() }),
+  ], { wide: true });
+  if (!navigator.clipboard?.writeText) { show(); return; }
+  navigator.clipboard.writeText(text).then(() => toast('Copied. Paste it into Messages, Keep or Notes.'), show);
 }
 
 // Where something put back on the list landed, said since it's usually off screen: "Sunscreen is on the list, in the

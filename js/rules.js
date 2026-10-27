@@ -364,6 +364,26 @@ export function plan(doc, trip, mode = 'go') {
   };
 }
 
+// A trip's list by bag, for a copy as text (share.js listText): going, the bags, the last things out the door back in
+// theirs, then the jobs before leaving the house; coming home, the hotel checklist, then the bags. A plug adapter says
+// which sockets it's for, and coming home, a thing not coming back says so. [{ name, rows: [{ name, qty, done, note }] }]
+export function textGroups(doc, trip, mode = 'go') {
+  const p = plan(doc, trip, mode), plugs = (p.cond.why.plug || '').split(' · ')[0].replace(/\u00a0/g, ' ');
+  const bags = p.groups.map(g => ({ bag: g.bag, rows: [...g.rows] }));
+  // Each in its place in My list's order, something just for this trip after.
+  const at = r => (Object.hasOwn(doc.items, r.id) ? doc.items[r.id].order : Infinity);
+  for (const r of p.last?.rows || []) {
+    let g = bags.find(x => x.bag.id === r.goes.id);
+    if (!g) bags.push(g = { bag: r.goes, rows: [] });
+    g.rows.push(r);
+    g.rows.sort((a, b) => at(a) - at(b));
+  }
+  bags.sort((a, b) => a.bag.order - b.bag.order);
+  const note = r => (r.gone ? 'not coming back' : mode === 'go' && r.hits.includes('plug') ? plugs : '');
+  return (mode === 'back' ? [...p.tasks, ...bags] : [...bags, ...p.tasks])
+    .map(g => ({ name: g.bag.name, rows: g.rows.map(r => ({ name: r.name, qty: r.qty, done: r.done, note: note(r) })) }));
+}
+
 // What a trip used up: the things on My list marked Not bringing it back coming home, in My list's order, to buy
 // again before the next trip. [{ id, name, bag }], each with its bag.
 export function usedUp(doc, trip) {

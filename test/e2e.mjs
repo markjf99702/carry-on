@@ -2270,6 +2270,37 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   await ctx.close();
 }
 
+// ================= Copy a trip as text =================
+// A plain checklist by bag, copied for Messages, Keep or Notes; where the browser won't copy, it shows in a box to
+// copy. Pasted back, it's the same bags and things.
+{
+  const { ctx, page } = await phone();
+  await ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin });
+  await page.click('text=Start with a starter list');
+  await planTrip(page, { where: 'Lisb', from: 3, to: 7 });
+  await row(page, 'Toothpaste').locator('.tick').click();
+  await page.click('main >> text=Copy as text');
+  await until(async () => (await page.locator('#toast span').innerText().catch(() => '')) === 'Copied. Paste it into Messages, Keep or Notes.', 'the toast');
+  const text = await page.evaluate(() => navigator.clipboard.readText());
+  assert.match(text, /^Lisbon · \w{3} \d+ – (\w{3} )?\d+\n\nLIQUIDS BAG\n☑ Toothpaste\n☐ Shampoo and conditioner\n/);
+  assert.match(text, /\n☐ Plug adapter \(Type C\/F, 230 V\)\n/);
+  // Where the browser won't copy: in a box, all of it picked out to copy.
+  await page.evaluate(() => { navigator.clipboard.writeText = () => Promise.reject(new Error('no')); });
+  await page.click('main >> text=Copy as text');
+  await until(() => sheetOpen(page), 'the box');
+  assert.equal(await page.locator('#sheet textarea').inputValue(), text);
+  assert.deepEqual(await page.evaluate(() => { const a = document.activeElement; return [a.tagName, a.selectionStart, a.selectionEnd === a.value.length]; }), ['TEXTAREA', 0, true]);
+  await closeSheet(page);
+  // Pasted back.
+  await page.goto(base + '#/list');
+  await page.click('text=Paste a list');
+  await page.fill('#sheet textarea', text);
+  await page.click('#sheet >> text=Next');
+  assert.match(await page.locator('#sheet').innerText(), /6 bags and \d+ things, and 1 list of jobs/);
+  assert.equal(await page.locator('#sheet .preview li').first().innerText(), '🧴 Liquids bag Toothpaste, Shampoo and conditioner, Deodorant, Face wash, Moisturizer, Sunscreen…');
+  await ctx.close();
+}
+
 // ================= From the keyboard =================
 {
   const { ctx, page } = await phone();

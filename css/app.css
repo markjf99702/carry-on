@@ -439,6 +439,11 @@ main > h1 + .card { margin-top: 14px; }
 .left-head .small { font: 14px/1.45 var(--body); text-transform: none; letter-spacing: normal; }
 .left .rows { background: var(--paper); border: 1px solid var(--line); border-radius: 14px; }
 
+/* The trip's own buttons, at its foot. */
+.trip-tools { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 0; }
+/* A trip as text, to copy where the browser won't. */
+.as-text { font-size: 15px; }
+
 /* ---------- my list ---------- */
 .bag.edit .bag-head { padding-right: 10px; }
 .kind-head { margin: 24px 0 10px; font-size: 18px; color: var(--muted); }
