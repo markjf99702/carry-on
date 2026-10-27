@@ -223,6 +223,17 @@ function homeView() {
 }
 
 const title = t => t.name || t.place?.name || 'Trip';
+// A trip with stops, its places in order, each run of places in one country followed by that country unless it's
+// home: "Lisbon → Porto, Portugal", "London, United Kingdom → Paris, France", "Boston → New York".
+function route(t) {
+  const runs = [], home = R.home(doc());
+  for (const { place: p } of R.legs(t)) {
+    if (!p) continue;
+    if (runs.at(-1)?.cc === (p.cc || '')) runs.at(-1).names.push(p.name);
+    else runs.push({ cc: p.cc || '', country: p.country || (p.cc ? countryName(p.cc) : ''), names: [p.name] });
+  }
+  return runs.map(r => r.names.join(' → ') + (r.country && r.cc !== home ? ',\u00a0' + r.country : '')).join(' → ');
+}
 // A trip's name as a heading, sized to fit (css .pass h1, .tag-card h2): --w is its longest word, which sets how big
 // it can be and still fit on a phone without breaking mid-word, and a long name (.wordy) starts smaller.
 const fitted = (tag, t) => {
@@ -252,15 +263,16 @@ function tagCard(t) {
   const w = c.weather, pl = t.place;
   // Under the name: the place and, abroad, its country. A trip named after its place has just the country, or at
   // home the state or region, as the pass has.
+  // A trip with stops has its route.
   const country = pl?.cc && pl.cc !== R.home(doc()) ? pl.country || countryName(pl.cc) : '';
-  const where = (t.name ? [pl?.name, country] : [country || (pl?.admin !== pl?.name ? pl?.admin : '')]).filter(Boolean).join(', ');
+  const where = R.legs(t).length > 1 ? route(t) : (t.name ? [pl?.name, country] : [country || (pl?.admin !== pl?.name ? pl?.admin : '')]).filter(Boolean).join(', ');
   return h('a', { class: 'tag-card' + (now ? ' now' : ''), href: `#/trip/${t.id}` },
     h('span', { class: 'hole', 'aria-hidden': 'true' }),
     h('span', { class: 'when' }, whenText(t)),
     fitted('h2', t),
     where ? h('span', { class: 'where' }, where) : null,
     h('span', { class: 'dates' }, `${D.span(t.start, t.end, t0.slice(0, 4))} · ${n ? plural(n, 'night') : 'day trip'} · ${R.CONDITIONS.find(x => x.k === t.travel).icon}`),
-    w ? h('span', { class: 'glance' }, `${W.dayIcon(W.tripDays(t.wx, t.start, t.end, t.place)[0])} ${W.temp(w.minLo, c.units)}–${W.temp(w.maxHi, c.units)}${w.rain ? ' · rain' + (w.rainDays.length ? ' likely' : ' some days') : ''}${w.snow ? ' · snow' : ''}`) : null,
+    w ? h('span', { class: 'glance' }, `${W.dayIcon(R.legDays(t).flatMap(l => l.days)[0])} ${W.temp(w.minLo, c.units)}–${W.temp(w.maxHi, c.units)}${w.rain ? ' · rain' + (w.rainDays.length ? ' likely' : ' some days') : ''}${w.snow ? ' · snow' : ''}`) : null,
     h('span', { class: 'meter', 'aria-hidden': 'true' }, meter(t.id + ':tag', p.done, p.total)),
     h('span', { class: 'packed' }, p.done === p.total && p.total ? (mode === 'go' ? 'All packed' : 'All back in the bags') : `${p.done} of ${p.total} ${mode === 'go' ? 'packed' : 'back in the bags'}`));
 }
@@ -272,20 +284,26 @@ function tagCard(t) {
 // again straight away. But only once a minute (wxQuick): another phone whose clock runs ahead stamps what it saves
 // later than this phone's lookups, so its cleared weather, or its lookup of the trip's old place, wins every sync
 // until this clock catches up, and the trip would be looked up again every few seconds.
+// Each place on a trip is looked up for all the trip's days: its own place as the trip's weather, and each stop as
+// the stop's. Each lookup goes by its key: the trip's id, or for a stop TRIPID:STOPID.
 const wxBusy = {}, wxErr = {}, wxTried = {}, wxQuick = {};
+const wxKey = (t, l) => (l.id ? `${t.id}:${l.id}` : t.id);
 function maybeWeather(t, force = false) {
-  if (!t.place || t.place.lat === undefined || wxBusy[t.id]) return;
-  if (!force && !W.stale(t.wx, t.start, t.end, today(), undefined, t.place)) return;
-  const soon = Date.now() - (wxTried[t.id] || 0) < 60000;
-  if (!force && soon && (wxErr[t.id] || wxQuick[t.id])) return;
-  wxQuick[t.id] = !force && soon;
-  wxTried[t.id] = Date.now();
-  wxBusy[t.id] = W.tripWeather(t.place, t.start, t.end, today()).then(wx => {
-    delete wxErr[t.id];
-    const cur = doc().trips[t.id];
-    // Only if the trip still goes there on those days.
-    if (cur && cur.start === t.start && cur.end === t.end && cur.place?.lat === t.place.lat) store.apply(d => M.setWx(d, t.id, wx));
-  }, e => { wxErr[t.id] = e.message; }).finally(() => { delete wxBusy[t.id]; redraw(); });
+  for (const l of R.legs(t)) {
+    const k = wxKey(t, l);
+    if (!l.place || l.place.lat === undefined || wxBusy[k]) continue;
+    if (!force && !W.stale(l.wx, t.start, t.end, today(), undefined, l.place)) continue;
+    const soon = Date.now() - (wxTried[k] || 0) < 60000;
+    if (!force && soon && (wxErr[k] || wxQuick[k])) continue;
+    wxQuick[k] = !force && soon;
+    wxTried[k] = Date.now();
+    wxBusy[k] = W.tripWeather(l.place, t.start, t.end, today()).then(wx => {
+      delete wxErr[k];
+      const cur = doc().trips[t.id], at = l.id ? cur?.stops?.[l.id] : cur;
+      // Only if the trip still goes there on those days.
+      if (cur && cur.start === t.start && cur.end === t.end && at?.place?.lat === l.place.lat) store.apply(d => (l.id ? M.setStopWx(d, t.id, l.id, wx) : M.setWx(d, t.id, wx)));
+    }, e => { wxErr[k] = e.message; }).finally(() => { delete wxBusy[k]; redraw(); });
+  }
 }
 
 // A redraw that comes on its own (a forecast arriving, a sync landing, another tab saving). On a trip scrolled down
@@ -317,17 +335,30 @@ const ago = t => {
 // How far each trip's weather was scrolled sideways this visit, so a redraw (a tick, say) leaves it where it was.
 const stripX = new Map();
 function weatherStrip(t, c) {
-  const busy = !!wxBusy[t.id], err = wxErr[t.id], t0 = today();
-  if (!t.place) {
+  const ls = R.legDays(t), multi = ls.length > 1, t0 = today();
+  const keys = ls.map(l => wxKey(t, l)), busy = keys.some(k => wxBusy[k]);
+  // The places that were looked up, and on a trip with stops, the ones typed in without a lookup.
+  const found = ls.filter(l => l.place && l.place.lat !== undefined), typed = ls.filter(l => l.place && l.place.lat === undefined);
+  if (!t.place && !multi) {
     return h('section', { class: 'wx none' }, h('p', { class: 'muted small' }, 'No place for this trip, so no forecast. Add one in ', h('a', { href: `#/edit/${t.id}` }, 'Edit'), ', or set the weather by hand under ', h('b', {}, 'Change'), '.'));
   }
   // A place typed in without a lookup has no forecast, and no country to say whether it's abroad or which plugs it
   // has. The one-file copy can't look a place up at all, so it points to the site instead of Edit.
-  if (t.place.lat === undefined) {
-    return h('section', { class: 'wx none' }, h('p', { class: 'muted small' }, 'This place wasn’t looked up, so there’s no forecast and no check for abroad or plugs. Set them under ', h('b', {}, 'Change'), ', or ',
-      single ? ['open ', h('a', { class: 'nowrap', href: SITE, target: '_blank', rel: 'noopener' }, 'carry-on.junkdrawer.works')] : ['pick the place again in ', h('a', { href: `#/edit/${t.id}` }, 'Edit')], '.'));
+  if (!found.length) {
+    return h('section', { class: 'wx none' }, h('p', { class: 'muted small' }, multi ? 'None of these places was looked up' : 'This place wasn’t looked up', ', so there’s no forecast and no check for abroad or plugs. Set them under ', h('b', {}, 'Change'), ', or ',
+      single ? ['open ', h('a', { class: 'nowrap', href: SITE, target: '_blank', rel: 'noopener' }, 'carry-on.junkdrawer.works')] : [`pick ${multi ? 'them' : 'the place'} again in `, h('a', { href: `#/edit/${t.id}` }, 'Edit')], '.'));
   }
-  const days = W.tripDays(t.wx, t.start, t.end, t.place);
+  // The trip's days, each from its own place.
+  const days = ls.flatMap(l => l.days), legOf = new Map(ls.flatMap(l => l.days.map(d => [d, l])));
+  const firsts = new Set(ls.map(l => l.days[0]).filter(Boolean));
+  // What a failed lookup said, or a lookup's own note. On a trip with stops each says its place, unless every place
+  // says the same.
+  const byPlace = (list, text) => {
+    const said = [...new Set(list.map(text))];
+    return !list.length ? '' : !multi || (said.length === 1 && list.length === found.length) ? said[0] : list.map(l => `${l.place.name}: ${text(l)}`).join(' ');
+  };
+  const err = byPlace(found.filter(l => wxErr[wxKey(t, l)]), l => wxErr[wxKey(t, l)]);
+  const note = byPlace(found.filter(l => l.days.length && l.wx.err), l => l.wx.err);
   const fc = days.some(d => !d.typ), ty = days.some(d => d.typ);
   const label = !days.length ? 'Weather' : fc && ty ? 'Forecast, then typical' : fc ? 'Forecast' : 'Typical weather';
   const u = c.units;
@@ -338,7 +369,7 @@ function weatherStrip(t, c) {
   const chanceOf = d => (W.snowCode(d.code) ? 'snow' : 'rain');
   const said = d => {
     const words = W.dayWords(d), wet = d.typ ? (d.wet >= 0.3 ? `rain in ${Math.round(d.wet * 100)}% of recent years` : '') : d.pop >= 30 ? `${d.pop}% chance of ${chanceOf(d)}` : '';
-    return `${d.d === t0 ? 'Today, ' : ''}${D.dayLong(d.d)}${d.typ ? ', typical for these dates' : ''}: ${[words, `high ${W.temp(d.hi, u)}`, `low ${W.temp(d.lo, u)}`, wet].filter(Boolean).join(', ')}`;
+    return `${d.d === t0 ? 'Today, ' : ''}${D.dayLong(d.d)}${multi ? `, in ${legOf.get(d).place.name}` : ''}${d.typ ? ', typical for these dates' : ''}: ${[words, `high ${W.temp(d.hi, u)}`, `low ${W.temp(d.lo, u)}`, wet].filter(Boolean).join(', ')}`;
   };
   // Each day's weekday, and on a trip of more than a week, where a weekday comes round again, its date under it: "MON"
   // over "2", the first day and each 1st of the month with the month, "NOV 1".
@@ -359,7 +390,9 @@ function weatherStrip(t, c) {
   // No days, nothing on its way and nothing gone wrong: a trip that's over isn't looked up (its dates were changed
   // after it, say, which cleared its weather), and one still to come will be once there's a connection.
   const empty = !days.length && !busy && !err, over = t.end < t0;
-  const strip = !days.length ? null : h('ol', { class: 'wx-days', 'aria-labelledby': 'wxHead', onscroll: () => stripX.set(t.id + t.start, strip.scrollLeft) }, days.map((d, i) => h('li', { class: dayClass(d.d, d.typ) },
+  // On a trip with stops, each place's name over its first day.
+  const strip = !days.length ? null : h('ol', { class: 'wx-days' + (multi ? ' legs' : ''), 'aria-labelledby': 'wxHead', onscroll: () => stripX.set(t.id + t.start, strip.scrollLeft) }, days.map((d, i) => h('li', { class: [dayClass(d.d, d.typ), multi && firsts.has(d) ? 'leg' : ''].filter(Boolean).join(' ') || null },
+    multi && firsts.has(d) ? h('span', { class: 'at', 'aria-hidden': 'true', style: { maxWidth: `${legOf.get(d).days.length * 60 - 8}px` } }, legOf.get(d).place.name) : null,
     h('span', { class: 'sr-only' }, said(d)),
     dayHead(d.d, i),
     h('span', { class: 'wi', 'aria-hidden': 'true' }, W.dayIcon(d)),
@@ -379,9 +412,9 @@ function weatherStrip(t, c) {
     h('div', { class: 'wx-head' },
       h('h2', { id: 'wxHead' }, label),
       h('div', { class: 'wx-at' },
-        h('span', { class: 'muted small' }, busy ? 'Looking it up…' : days.length ? 'Updated ' + ago(t.wx.at) : ''),
+        h('span', { class: 'muted small' }, busy ? 'Looking it up…' : days.length ? 'Updated ' + ago(Math.min(...found.filter(l => l.days.length).map(l => l.wx.at))) : ''),
         // Not disabled while it looks: a disabled button can't keep the focus.
-        empty && over ? null : h('button', { type: 'button', class: 'icon-btn small' + (busy ? ' spin' : ''), 'data-key': 'wx', 'aria-label': 'Look up the weather again', title: 'Look up the weather again', html: ICONS.refresh, 'aria-disabled': busy ? 'true' : null, onclick: () => { if (wxBusy[t.id]) return; maybeWeather(t, true); render(); } }))),
+        empty && over ? null : h('button', { type: 'button', class: 'icon-btn small' + (busy ? ' spin' : ''), 'data-key': 'wx', 'aria-label': 'Look up the weather again', title: 'Look up the weather again', html: ICONS.refresh, 'aria-disabled': busy ? 'true' : null, onclick: () => { if (keys.some(k => wxBusy[k])) return; maybeWeather(t, true); render(); } }))),
     empty ? h('p', { class: 'muted small' }, over ? 'No weather was saved for these days.' : 'Looking it up when you’re online.') : null,
     // A lookup that failed. Offline, that's the reason whatever it said. With days to show it's a quiet line: the
     // days are still there, and it isn't something to fix.
@@ -391,7 +424,8 @@ function weatherStrip(t, c) {
     !days.length && busy ? h('ol', { class: 'wx-days wait', 'aria-hidden': 'true' }, D.range(t.start, t.end).slice(0, W.AHEAD + 1).map((k, i) => h('li', { class: dayClass(k, true) },
       dayHead(k, i), h('span', { class: 'wi' }, '\u00a0'), h('span', { class: 'hi' }, '…'), h('span', { class: 'lo' }, '…'), h('span', { class: 'rp' })))) : null,
     days.length ? strip : null,
-    days.length && t.wx.err ? h('p', { class: 'muted small' }, t.wx.err) : null,
+    note ? h('p', { class: 'muted small' }, note) : null,
+    multi && typed.length ? h('p', { class: 'muted small' }, `${andList(typed.map(l => l.place.name))} ${typed.length > 1 ? 'weren’t' : 'wasn’t'} looked up, so ${typed.length > 1 ? 'their days have' : 'its days have'} no forecast.`) : null,
     typNote || pct ? h('p', { class: 'muted small' }, [typNote, pct].filter(Boolean).join(' ')) : null);
 }
 
@@ -422,7 +456,7 @@ function tripView(t) {
         h('div', {},
           h('p', { class: 'when' + (t.start <= today() && today() <= t.end ? ' now' : '') }, whenText(t)),
           fitted('h1', t),
-          h('p', { class: 'sub' }, t.place ? (t.name ? W.placeLabel(t.place) : W.placeLabel(t.place).split(', ').slice(1).join(', ')) || '\u00a0' : 'No place set')),
+          h('p', { class: 'sub' }, R.legs(t).length > 1 ? route(t) : t.place ? (t.name ? W.placeLabel(t.place) : W.placeLabel(t.place).split(', ').slice(1).join(', ')) || '\u00a0' : 'No place set')),
         h('a', { class: 'icon-btn', href: `#/edit/${t.id}`, 'aria-label': 'Edit this trip', title: 'Edit this trip', html: ICONS.edit })),
       h('dl', { class: 'pass-row' },
         h('div', {}, h('dt', {}, 'Leave'), h('dd', {}, D.long(t.start))),
@@ -782,7 +816,10 @@ function condSheet(id, at = '') {
         const info = R.condInfo(doc(), k), set = t.set?.[k]?.v;
         const state = set === true ? 'on' : set === false ? 'off' : 'auto';
         // Abroad and plugs come from the place's country: a place typed in without a lookup has none.
-        const unknown = (k === 'abroad' || k === 'plug') && !t.place?.cc ? (!t.place ? ', no place for this trip' : t.place.lat === undefined ? ', the place wasn’t looked up' : '') : '';
+        // On a trip with stops, which places weren't.
+        const notLooked = R.legs(t).filter(l => l.place && !l.place.cc).map(l => l.place.name);
+        const unknown = (k === 'abroad' || k === 'plug') && R.legs(t).length > 1 ? (notLooked.length ? `, ${andList(notLooked)} ${notLooked.length > 1 ? 'weren’t' : 'wasn’t'} looked up` : '')
+          : (k === 'abroad' || k === 'plug') && !t.place?.cc ? (!t.place ? ', no place for this trip' : t.place.lat === undefined ? ', the place wasn’t looked up' : '') : '';
         const autoText = c.auto[k] === undefined ? 'unknown' + unknown : c.auto[k] ? 'yes' : 'no';
         const pickState = s => { store.apply(d => M.setCond(d, id, k, s === 'auto' ? null : s === 'on')); draw(); render(); };
         return h('li', { 'data-k': k },
@@ -806,10 +843,88 @@ function condSheet(id, at = '') {
 
 const NO_PLACES = 'No places by that name.';
 
+// A box to find a place in: what's typed is looked up, and the places found come under it to pick from. Picked, the
+// place shows instead, with a way to pick another. fd keeps what's typed and found through a redraw (typed, results,
+// q: what the search last answered for, searchErr), and a search that answers after a redraw shows on the box
+// that's on the page then (fd.draw).
+//   o: { id, help: the id of the line under it, another: the name of its Pick another place button, get(): the
+//        place picked, pick(place), asked(): whether a tap on Make my list has asked something }
+function placeBox(fd, o) {
+  const where = h('div', { class: 'where-field' });
+  const input = h('input', { type: 'search', id: o.id, value: fd.typed || '', placeholder: 'A city or town', autocomplete: 'off', enterkeyhint: 'search', 'aria-describedby': o.help || null });
+  // A plain list of buttons, and a line under the box that says what the search found, which a screen reader reads out.
+  const list = h('ul', { class: 'results', 'aria-label': 'Places' });
+  const status = h('p', { class: 'where-status small', role: 'status' });
+  const draw = () => {
+    const place = o.get();
+    if (place) {
+      where.replaceChildren(h('div', { class: 'picked' },
+        h('span', {}, h('b', {}, place.name), ' ', h('span', { class: 'muted' }, [place.admin, place.country].filter(Boolean).join(', '))),
+        h('button', { type: 'button', class: 'icon-btn small', 'aria-label': o.another, html: ICONS.close, onclick: () => { o.pick(null); draw(); input.focus(); } })));
+      return;
+    }
+    const results = fd.results || [];
+    list.replaceChildren(...results.map(r => h('li', {}, h('button', { type: 'button', onclick: () => choose(r) },
+      h('b', {}, r.name), ' ', h('span', { class: 'muted' }, [r.admin, r.country].filter(Boolean).join(', '))))));
+    const typed = input.value.trim();
+    const failed = fd.searchErr && typed && fd.searchErr !== NO_PLACES;
+    status.className = 'where-status small ' + (failed ? 'err' : 'muted');
+    status.textContent = !typed ? '' : failed && single ? 'This copy can’t reach the weather service. Use what you typed and set the weather and abroad by hand, or open carry-on.junkdrawer.works for the forecast.'
+      : fd.searchErr || (results.length ? plural(results.length, 'place') : '');
+    // Last, once the search has answered for what's typed, the way through without a lookup: offline, or for a place
+    // the search doesn't know. (Not before, so it isn't where the first place lands when the places come.)
+    if (typed && ((typed.length > 1 && fd.q === input.value) || o.asked())) list.append(h('li', {}, h('button', { type: 'button', onclick: () => choose({ name: input.value.trim(), admin: '', country: '', cc: '' }) }, `Use “${typed}” without looking it up`)));
+    // Put back only when coming back from a picked place: taking the box out of the page, even to put it straight
+    // back, takes the cursor out of it.
+    if (input.parentNode !== where) where.replaceChildren(input, status, list);
+  };
+  const choose = r => { o.pick(r); fd.results = []; draw(); };
+  fd.draw = draw;
+  fd.choose = choose;
+  // Enter while the search last answered for something else waits for the new places.
+  const search = q => {
+    clearTimeout(fd.timer);
+    if (fd.ctl) fd.ctl.abort();
+    const ctl = fd.ctl = new AbortController();
+    W.searchPlaces(q, { signal: ctl.signal }).then(r => {
+      fd.results = r; fd.q = q; fd.searchErr = q.trim().length > 1 && !r.length ? NO_PLACES : '';
+      if (fd.enter && r.length) fd.choose(r[0]); else fd.draw();
+      fd.enter = false;
+    }, e => { if (e.name !== 'AbortError') { fd.enter = false; fd.results = []; fd.q = q; fd.searchErr = e.message; fd.draw(); } });
+  };
+  input.addEventListener('input', () => {
+    fd.typed = input.value;
+    fd.enter = false;
+    clearTimeout(fd.timer);
+    if (fd.ctl) fd.ctl.abort();
+    const q = input.value;
+    // Too short to look up: nothing to show.
+    if (q.trim().length < 2) Object.assign(fd, { results: [], searchErr: '', q });
+    else fd.timer = setTimeout(() => search(q), 300);
+    draw();
+  });
+  // Enter picks the first place.
+  input.addEventListener('keydown', e => {
+    if (e.key !== 'Enter' || e.isComposing) return;
+    e.preventDefault();
+    if (fd.q === input.value) { if (fd.results?.length) choose(fd.results[0]); } else if (input.value.trim().length > 1) { fd.enter = true; search(input.value); }
+  });
+  draw();
+  return where;
+}
+
 function tripForm(t, again = false) {
   const editing = t && !again;
   const key = (editing ? 'edit/' : again ? 'again/' : 'new/') + (t ? t.id : '');
-  if (draft?.key !== key) draft = { key, results: [], searchErr: '', typed: '', err: '' };
+  if (draft?.key !== key) {
+    // The stops as the form opens: the trip's, or going again, the old trip's places, each to have its night again.
+    // Those come from Leave once it's picked, as many nights in as last time (after), till one is picked by hand.
+    const was = t ? M.stops(t).sort((a, b) => a.from.localeCompare(b.from) || a.id.localeCompare(b.id)) : [];
+    const stops = was.map((s, i) => (editing ? { key: s.id, id: s.id, place: s.place, from: s.from }
+      : { key: 'n' + i, id: '', place: s.place, from: '', after: D.nights(t.start, s.from), auto: true }));
+    // stops0: what they were, so Save changes only what the form did, and a stop added on another device meanwhile stays.
+    draft = { key, main: {}, err: '', stops, stops0: editing ? stops.map(s => ({ ...s })) : [], n: stops.length };
+  }
   const dr = draft;
   const st = {
     place: t?.place || null, start: editing ? t.start : '', end: editing ? t.end : '', travel: t?.travel || 'fly', name: t?.name || '',
@@ -819,79 +934,75 @@ function tripForm(t, again = false) {
   const errBox = h('p', { class: 'err', role: 'alert' }, dr.err);
   const err = msg => { errBox.textContent = dr.err = msg; };
   // Any change to the form answers what the last tap on Make my list asked.
-  const set = (k, v) => { st[k] = dr[k] = v; if (dr.err) err(''); };
-  const where = h('div', { class: 'where-field' });
-  const input = h('input', { type: 'search', id: 'where', value: dr.typed, placeholder: 'A city or town', autocomplete: 'off', enterkeyhint: 'search', 'aria-describedby': 'whereHelp' });
-  // A plain list of buttons, and a line under the box that says what the search found, which a screen reader reads out.
-  const list = h('ul', { class: 'results', 'aria-label': 'Places' });
-  const status = h('p', { class: 'where-status small', role: 'status' });
-  const drawWhere = () => {
-    if (st.place) {
-      where.replaceChildren(h('div', { class: 'picked' },
-        h('span', {}, h('b', {}, st.place.name), ' ', h('span', { class: 'muted' }, [st.place.admin, st.place.country].filter(Boolean).join(', '))),
-        h('button', { type: 'button', class: 'icon-btn small', 'aria-label': 'Pick another place', html: ICONS.close, onclick: () => { set('place', null); drawWhere(); input.focus(); } })));
-      return;
+  const changed = () => { if (dr.err) err(''); };
+  const set = (k, v) => { st[k] = dr[k] = v; changed(); };
+  const asked = () => !!dr.err;
+  const where = placeBox(dr.main, { id: 'where', help: 'whereHelp', another: 'Pick another place', get: () => st.place, pick: p => { set('place', p); addStop.hidden = !p; }, asked });
+  // The stops after the first place: each a place and the night you get there, which comes after leaving and
+  // before coming back.
+  const stopsBox = h('div', { class: 'stops' });
+  const nightRange = x => { x.min = st.start ? D.add(st.start, 1) : ''; x.max = st.end ? D.add(st.end, -1) : ''; };
+  const nights = () => {
+    for (const s of dr.stops) if (s.auto && st.start) s.from = D.add(st.start, s.after);
+    for (const s of dr.stops) {
+      const x = stopsBox.querySelector('#' + CSS.escape('night-' + s.key));
+      if (x) { x.value = s.from; nightRange(x); }
     }
-    list.replaceChildren(...dr.results.map(r => h('li', {}, h('button', { type: 'button', onclick: () => choose(r) },
-      h('b', {}, r.name), ' ', h('span', { class: 'muted' }, [r.admin, r.country].filter(Boolean).join(', '))))));
-    const typed = input.value.trim();
-    const failed = dr.searchErr && typed && dr.searchErr !== NO_PLACES;
-    status.className = 'where-status small ' + (failed ? 'err' : 'muted');
-    status.textContent = !typed ? '' : failed && single ? 'This copy can’t reach the weather service. Use what you typed and set the weather and abroad by hand, or open carry-on.junkdrawer.works for the forecast.'
-      : dr.searchErr || (dr.results.length ? plural(dr.results.length, 'place') : '');
-    // Last, once the search has answered for what's typed, the way through without a lookup: offline, or for a place
-    // the search doesn't know. (Not before, so it isn't where the first place lands when the places come.)
-    if (typed && ((typed.length > 1 && dr.q === input.value) || dr.err)) list.append(h('li', {}, h('button', { type: 'button', onclick: () => choose({ name: input.value.trim(), admin: '', country: '', cc: '' }) }, `Use “${typed}” without looking it up`)));
-    // Put back only when coming back from a picked place: taking the box out of the page, even to put it straight
-    // back, takes the cursor out of it.
-    if (input.parentNode !== where) where.replaceChildren(input, status, list);
   };
-  const choose = r => { set('place', r); dr.results = []; drawWhere(); };
-  // A search that answers after a redraw shows on the form that's there now.
-  dr.drawWhere = drawWhere;
-  dr.choose = choose;
-  // dr.q is what the search last answered for. Enter while that's something else waits for the new places.
-  const search = q => {
-    clearTimeout(dr.timer);
-    if (dr.ctl) dr.ctl.abort();
-    const ctl = dr.ctl = new AbortController();
-    W.searchPlaces(q, { signal: ctl.signal }).then(r => {
-      dr.results = r; dr.q = q; dr.searchErr = q.trim().length > 1 && !r.length ? NO_PLACES : '';
-      if (dr.enter && r.length) dr.choose(r[0]); else dr.drawWhere();
-      dr.enter = false;
-    }, e => { if (e.name !== 'AbortError') { dr.enter = false; dr.results = []; dr.q = q; dr.searchErr = e.message; dr.drawWhere(); } });
+  const stopRow = s => {
+    const pickNight = e => { s.from = e.target.value; s.auto = false; changed(); };
+    const night = h('input', { type: 'date', id: 'night-' + s.key, value: s.from, oninput: pickNight, onchange: pickNight });
+    nightRange(night);
+    // Each says which stop it takes off: "Take Porto off".
+    const offName = () => `Take ${s.place?.name || 'this stop'} off`;
+    const off = h('button', { type: 'button', class: 'btn small quiet', 'aria-label': offName(), onclick: () => {
+      clearTimeout(s.timer);
+      s.ctl?.abort();
+      dr.stops = dr.stops.filter(x => x !== s);
+      changed();
+      drawStops();
+      addStop.focus();
+    } }, 'Take this stop off');
+    return h('div', { class: 'stop' },
+      h('div', { class: 'field' }, h('label', { for: 'where-' + s.key }, 'Then'),
+        placeBox(s, { id: 'where-' + s.key, another: 'Pick another place for this stop', get: () => s.place, pick: p => { s.place = p; off.setAttribute('aria-label', offName()); changed(); }, asked })),
+      h('div', { class: 'stop-night' },
+        h('div', { class: 'field' }, h('label', { for: 'night-' + s.key }, 'First night there'), night), off));
   };
-  input.addEventListener('input', () => {
-    dr.typed = input.value;
-    dr.enter = false;
-    clearTimeout(dr.timer);
-    if (dr.ctl) dr.ctl.abort();
-    const q = input.value;
-    // Too short to look up: nothing to show.
-    if (q.trim().length < 2) Object.assign(dr, { results: [], searchErr: '', q });
-    else dr.timer = setTimeout(() => search(q), 300);
-    drawWhere();
-  });
-  // Enter picks the first place.
-  input.addEventListener('keydown', e => {
-    if (e.key !== 'Enter' || e.isComposing) return;
-    e.preventDefault();
-    if (dr.q === input.value) { if (dr.results.length) choose(dr.results[0]); } else if (input.value.trim().length > 1) { dr.enter = true; search(input.value); }
-  });
-  drawWhere();
-  const startIn = h('input', { type: 'date', id: 'start', value: st.start, min: editing ? null : D.add(today(), -30), required: true, oninput: e => set('start', e.target.value), onchange: e => { set('start', e.target.value); if (!st.end || st.end < st.start) { set('end', st.start); endIn.value = st.end; } } });
-  const endIn = h('input', { type: 'date', id: 'end', value: st.end, required: true, oninput: e => set('end', e.target.value), onchange: e => set('end', e.target.value) });
+  const addStop = h('button', { type: 'button', class: 'btn small add-stop', hidden: !st.place, onclick: () => {
+    const s = { key: 'n' + dr.n++, id: '', place: null, from: '' };
+    dr.stops.push(s);
+    changed();
+    drawStops();
+    stopsBox.querySelector('#' + CSS.escape('where-' + s.key))?.focus();
+  } }, h('span', { html: ICONS.plus }), 'Add a stop');
+  const drawStops = () => stopsBox.replaceChildren(...dr.stops.map(stopRow), addStop);
+  drawStops();
+  const startIn = h('input', { type: 'date', id: 'start', value: st.start, min: editing ? null : D.add(today(), -30), required: true, oninput: e => { set('start', e.target.value); nights(); }, onchange: e => { set('start', e.target.value); if (!st.end || st.end < st.start) { set('end', st.start); endIn.value = st.end; } nights(); } });
+  const endIn = h('input', { type: 'date', id: 'end', value: st.end, required: true, oninput: e => { set('end', e.target.value); nights(); }, onchange: e => { set('end', e.target.value); nights(); } });
   const nameIn = h('input', { type: 'text', id: 'name', value: st.name, maxlength: 60, placeholder: 'Sam’s wedding', autocomplete: 'off', oninput: e => set('name', e.target.value) });
   const save = () => {
     st.start = startIn.value; st.end = endIn.value;
-    if (!st.place && input.value.trim()) { err('Pick a place from the list, or use what you typed.'); drawWhere(); return; }
+    if (!st.place && dr.main.typed?.trim()) { err('Pick a place from the list, or use what you typed.'); dr.main.draw(); return; }
+    if (!st.place && dr.stops.length) { err('Where to first? Pick the first place, or take the stops off.'); return; }
     // No place at all is allowed, once it's been said what that leaves out.
     if (!st.place && !dr.placeless && !(editing && !t.place)) { dr.placeless = true; err(`Where to? Without a place there’s no forecast and no passport check. Tap ${editing ? 'Save' : 'Make my list'} again to go without one.`); return; }
     if (!st.start || !st.end) { err('When do you leave, and when are you back?'); return; }
     if (st.end < st.start) { err('You’re back before you leave. Check the dates.'); return; }
     if (D.nights(st.start, st.end) > 90) { err('That’s more than 90 nights. Check the dates.'); return; }
+    for (const s of dr.stops) {
+      if (!s.place) { err(s.typed?.trim() ? 'Pick a place for the stop from the list, or use what you typed.' : 'Which place is the stop? Pick one, or take the stop off.'); s.draw?.(); return; }
+      if (!s.from) { err(`When do you get to ${s.place.name}? Pick the first night there.`); return; }
+      if (s.from <= st.start || s.from >= st.end) { err(`${s.place.name}’s first night is outside the trip. Pick a night after you leave and before you’re back.`); return; }
+    }
+    const twice = dr.stops.find((s, i) => dr.stops.findIndex(x => x.from === s.from) !== i);
+    if (twice) { err(`Two stops start the same night. Pick another night for ${twice.place.name}.`); return; }
     const id = editing ? t.id : M.newId('t');
-    const moved = editing && (t.start !== st.start || t.end !== st.end || t.place?.lat !== st.place?.lat || t.place?.name !== st.place?.name);
+    const datesMoved = editing && (t.start !== st.start || t.end !== st.end);
+    const moved = datesMoved || (editing && (t.place?.lat !== st.place?.lat || t.place?.name !== st.place?.name));
+    const before = new Map(dr.stops0.map(s => [s.id, s]));
+    const put = dr.stops.filter(s => { const o = s.id && before.get(s.id); return !o || o.from !== s.from || M.canon(o.place) !== M.canon(s.place); });
+    const off = [...before.keys()].filter(sid => !dr.stops.some(s => s.id === sid));
     applyCounting(d => {
       let next = M.putTrip(d, { id, place: st.place, start: st.start, end: st.end, travel: st.travel, name: nameIn.value.trim() });
       for (const g of M.tags(d)) {
@@ -899,10 +1010,14 @@ function tripForm(t, again = false) {
         if (was !== now) next = M.setCond(next, id, g.id, now ? true : null);
       }
       if (moved) next = M.clearWx(next, id);
+      for (const s of put) next = M.putStop(next, id, { id: s.id || undefined, place: s.place, from: s.from });
+      for (const sid of off) next = M.removeStop(next, id, sid);
+      // Each stop was looked up for the trip's old days too.
+      if (datesMoved) for (const s of M.stops(next.trips[id])) next = M.clearWx(next, id, s.id);
       return next;
     });
     draft = null;
-    if (moved || !editing) delete wxTried[id];
+    if (moved || !editing || put.length || off.length) for (const k of Object.keys(wxTried)) if (k === id || k.startsWith(id + ':')) delete wxTried[k];
     // Back to the trip, as if Back was pressed, when that's where Edit was opened from; otherwise the trip takes the
     // form's place, so Back from it doesn't open the form again.
     if (editing && history.state?.from === `#/trip/${id}`) history.back();
@@ -914,6 +1029,7 @@ function tripForm(t, again = false) {
     h('section', { class: 'card form' },
       h('div', { class: 'field' }, h('label', { for: 'where' }, 'Where to?'), where,
         h('small', { id: 'whereHelp', class: 'muted' }, 'For the forecast, and to know if it’s abroad.')),
+      stopsBox,
       h('div', { class: 'two' },
         h('div', { class: 'field' }, h('label', { for: 'start' }, 'Leave'), startIn),
         h('div', { class: 'field' }, h('label', { for: 'end' }, 'Back'), endIn)),
@@ -1389,7 +1505,7 @@ function settingsView() {
         } })))),
     h('section', { class: 'card' },
       h('h2', {}, 'About'),
-      h('p', { class: 'small' }, 'Forecasts, past weather and place search come from ', h('a', { href: 'https://open-meteo.com/', target: '_blank', rel: 'noopener' }, 'Open-Meteo'), `. Looking up a trip sends its place and dates there; nothing else leaves this browser${drive.ready ? ' unless you turn on Google Drive' : ''}. Plug types are from the IEC’s list of world plugs.`),
+      h('p', { class: 'small' }, 'Forecasts, past weather and place search come from ', h('a', { href: 'https://open-meteo.com/', target: '_blank', rel: 'noopener' }, 'Open-Meteo'), `. Looking up a trip sends its places and dates there; nothing else leaves this browser${drive.ready ? ' unless you turn on Google Drive' : ''}. Plug types are from the IEC’s list of world plugs.`),
       // Every rule in weather.js summarize(), with no break between a number and its unit.
       h('p', { class: 'small muted' }, 'Hot means a high of 28\u00a0°C (82\u00a0°F) or more; cool, a low of 13\u00a0°C (55\u00a0°F) or less; cold, a low of 4\u00a0°C (39\u00a0°F) or less, or highs that average 10\u00a0°C (50\u00a0°F) or less. Rain means a 50% chance of rain or more, or 3\u00a0mm (0.1\u00a0in) or more, on any day; for typical weather, rain on 3 days in 10. Snow means 0.5\u00a0cm (0.2\u00a0in) or more on any day; for typical weather, snow on 3 days in 20. Strong sun means a UV index of 6 or more; for typical weather, it’s estimated from how much sunshine those days had.')),
     zone,

@@ -20,6 +20,7 @@
 - **Every trip starts fresh.** Planning a trip makes a new copy of the list for it, so ticks belong to that trip. Old trips stay as they were, and **Go again** starts a new one from an old one.
 - **It reads the forecast.** For the next 16 days, today included, it uses the forecast. Further off, it uses what the same dates were like in each of the last three years, and it switches over as the trip gets closer. Hot, cool, cold, rain, snow and strong sun each bring their own things: an umbrella when rain is likely on a given day, a coat when the lows are near freezing.
 - **It knows where you're going.** Abroad brings your passport. A plug adapter comes only where your plugs don't fit the sockets, with the socket types and voltage on the list (US plugs fit in Japan and Mexico, not in Portugal).
+- **One place or several.** A trip can go on from one place to the next: **Add a stop**, with the night you get there. Each place's weather counts for its own days, the passport comes when any of them is abroad, and the plug adapter names each country whose sockets your plugs don't fit (London then Paris: type G and type C/E).
 - **And what you'll be doing.** Pick occasions for a trip (work, working out, swimming, dressing up, outdoors, or your own), and things or whole bags come along only for them: the work bag on work trips, the swimsuit when you're swimming or it's hot.
 - **Says why.** Anything that came along for a reason says so under its name ("Rain likely Fri", "Type C/F, 230 V"). **Left off this trip** lists everything that didn't, and why, with a button to pack it anyway. You can also turn any weather or place condition on or off by hand.
 - **Leave things off one trip.** A single thing or job, a whole bag, or a list of jobs (no house jobs when someone's staying home) can be left off one trip from its ⋯ menu. It waits under **Left off this trip**, and stays on your list for other trips.
@@ -29,7 +30,7 @@
 - **On every device, if you like.** Turn on Google Drive in Settings and the list, the trips, their ticks and your settings (home, °F or °C, laundry) are kept in a "Carry On" folder in your own Drive, merged thing by thing, so two phones can pack the same trip. Hide done, folded bags and whether a trip is showing Going or Coming home stay on each device. Without Drive, everything stays in this browser.
 - No account and no server. It works offline once opened and installs to a phone's home screen.
 
-Weather and place search come from [Open-Meteo](https://open-meteo.com/). Looking up a trip sends its place and dates there and nothing else. Plug types are from the IEC's list of world plugs. To stop Drive saving everywhere, remove junkdrawer.works under **Third-party apps & services** in your Google Account.
+Weather and place search come from [Open-Meteo](https://open-meteo.com/). Looking up a trip sends each of its places, and its dates, there and nothing else. Plug types are from the IEC's list of world plugs. To stop Drive saving everywhere, remove junkdrawer.works under **Third-party apps & services** in your Google Account.
 
 ## Running it
 
@@ -48,7 +49,7 @@ To put it online with GitHub Pages: **Settings → Pages → Build and deploymen
 ### Files
 
 - `js/model.js`: the list and trips, and how two copies merge (bag by bag, thing by thing, tick by tick).
-- `js/rules.js`: what a trip calls for, and so what goes on its list.
+- `js/rules.js`: where a trip is each day, what it calls for, and so what goes on its list.
 - `js/weather.js`: place search, the forecast, typical weather, and what counts as hot, cold or rainy.
 - `js/days.js`: dates, nights and weekdays.
 - `js/plugs.js`: plug types and voltage by country, and which plugs fit which sockets.

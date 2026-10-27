@@ -310,6 +310,11 @@ main > h1 + .card { margin-top: 14px; }
 .wx-days .hi { font-weight: 700; }
 .wx-days .lo { color: var(--muted); font-size: 14px; }
 .wx-days .rp { color: var(--sky); font-size: 12px; font-weight: 700; min-height: 15px; }
+/* A trip with stops: each place's name over its first day, in room kept above the days, and a little gap before
+   each new place. */
+.wx-days.legs { padding-top: 18px; }
+.wx-days li.leg:not(:first-child) { margin-left: 8px; }
+.wx-days .at { position: absolute; left: 2px; bottom: 100%; margin-bottom: 3px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font: 700 13px var(--display); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
 .wx.none { padding: 10px 14px; border-radius: 12px; border: 1px dashed var(--line); }
 .wx.none p { margin: 0; }
 
@@ -404,6 +409,13 @@ main > h1 + .card { margin-top: 14px; }
 .where-status:empty { margin: 0; }
 .picked { display: flex; align-items: center; gap: 8px; min-height: 46px; padding: 4px 4px 4px 12px; border: 1.5px solid var(--ok); border-radius: 10px; background: var(--ok-soft); }
 .picked > span { flex: 1; min-width: 0; }
+/* A trip's stops after its first place, each hung off a line, as on a route. */
+.stops { margin: -6px 0 16px; }
+.stop { margin: 0 0 12px 6px; padding: 2px 0 2px 14px; border-left: 3px solid var(--line); }
+.stop .field { margin-bottom: 10px; }
+.stop-night { display: flex; align-items: flex-end; gap: 8px; }
+.stop-night .field { flex: 1; min-width: 0; max-width: 300px; margin-bottom: 0; }
+.add-stop { border-style: dashed; background: none; }
 
 /* ---------- settings ---------- */
 .stepper { display: flex; align-items: center; gap: 8px; }

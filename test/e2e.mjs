@@ -466,6 +466,78 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await ctx.close();
 }
 
+// ================= A trip with more than one stop =================
+{
+  const { ctx, page } = await phone();
+  await page.click('text=Start with a starter list');
+  await page.click('text=Plan a trip');
+  const alert = () => page.locator('[role=alert]').textContent();
+  // Add a stop shows once there's a first place, and puts the cursor in the stop's own place box.
+  assert.equal(await page.locator('.add-stop').isHidden(), true);
+  await page.fill('#where', 'Lond');
+  await page.locator('.results button', { hasText: 'United Kingdom' }).click();
+  await page.click('.add-stop');
+  const stopBox = await page.evaluate(() => document.activeElement.id);
+  assert.match(stopBox, /^where-/);
+  await page.fill('#start', await day(page, 3));
+  await page.fill('#end', await day(page, 9));
+  // Each stop needs a place and a night after leaving and before coming back, no two on one night.
+  await page.click('text=Make my list');
+  assert.equal(await alert(), 'Which place is the stop? Pick one, or take the stop off.');
+  await page.fill('#' + stopBox, 'Pari');
+  await page.locator('.stop .results button', { hasText: 'France' }).click();
+  await page.click('text=Make my list');
+  assert.equal(await alert(), 'When do you get to Paris? Pick the first night there.');
+  await page.fill('.stop input[type=date]', await day(page, 9));
+  await page.click('text=Make my list');
+  assert.equal(await alert(), 'Paris’s first night is outside the trip. Pick a night after you leave and before you’re back.');
+  await page.fill('.stop input[type=date]', await day(page, 6));
+  await page.click('.add-stop');
+  await page.keyboard.type('Port');
+  await page.locator('.stop').nth(1).locator('.results button', { hasText: 'Portugal' }).click();
+  await page.locator('.stop').nth(1).locator('input[type=date]').fill(await day(page, 6));
+  await page.click('text=Make my list');
+  assert.equal(await alert(), 'Two stops start the same night. Pick another night for Porto.');
+  assert.equal(await page.locator('.stop').nth(1).locator('button', { hasText: 'Take this stop off' }).getAttribute('aria-label'), 'Take Porto off');
+  await page.locator('.stop').nth(1).locator('button', { hasText: 'Take this stop off' }).click();
+  assert.equal(await page.evaluate(() => document.activeElement.textContent), 'Add a stop', 'the focus goes on to Add a stop');
+  await fits(page, 'the trip form with a stop');
+  calls.length = 0;
+  await page.click('text=Make my list');
+  await page.waitForSelector('.pass h1');
+  // Each place is looked up, its weather shown for its own days with its name over the first.
+  await until(async () => (await page.locator('.wx-days:not(.wait) li').count()) === 7, 'both places’ days');
+  assert.deepEqual(calls.filter(c => c.startsWith('forecast')).length, 2, 'one lookup for each place');
+  assert.equal(await page.locator('.pass h1').innerText(), 'LONDON');
+  // A place and its country stay on one line.
+  assert.equal(await page.locator('.pass .sub').innerText(), 'London,\u00a0United Kingdom → Paris,\u00a0France');
+  assert.deepEqual(await page.locator('.wx-days .at').allInnerTexts(), ['LONDON', 'PARIS']);
+  assert.match(await page.locator('.wx-days li').nth(3).locator('.sr-only').textContent(), /^[A-Z][a-z]+day, [A-Z][a-z]+ \d+, in Paris: sunny, high \d+°/);
+  // Abroad and plugs for both countries, and Paris's heat and London's rain.
+  assert.match(await row(page, 'Plug adapter').innerText(), /United Kingdom: Type G, 230\u00a0V; France: Type C\/E, 230\u00a0V/);
+  const names = await rowsText(page);
+  for (const n of ['Passport', 'Plug adapter', 'Swimsuit', 'Umbrella', 'Light jacket']) assert.ok(names.includes(n), `${n} is on the list`);
+  assert.match(await page.locator('.needs .chip', { hasText: 'Hot' }).innerText(), /in Paris/);
+  assert.match(await page.locator('.needs .chip', { hasText: 'Rain' }).innerText(), /in London/);
+  await fits(page, 'a trip with stops');
+  await page.click('.crumb');
+  assert.equal(await page.locator('.tag-card .where').innerText(), 'London,\u00a0United Kingdom → Paris,\u00a0France');
+  await page.click('.tag-card');
+  // Edit shows the stop; taken off, the trip is London's alone again.
+  await page.click('[aria-label="Edit this trip"]');
+  assert.equal(await page.locator('.stop .picked b').innerText(), 'Paris');
+  assert.equal(await page.inputValue('.stop input[type=date]'), await day(page, 6));
+  await page.click('text=Take this stop off');
+  await page.click('button:text-is("Save")');
+  await page.waitForSelector('.pass h1');
+  await until(async () => (await page.locator('.wx-days:not(.wait) li').count()) === 7, 'London’s days');
+  assert.equal(await page.locator('.wx-days .at').count(), 0);
+  assert.equal(await page.locator('.pass .sub').innerText(), 'United Kingdom', 'as a trip with one place has it');
+  assert.match(await row(page, 'Plug adapter').innerText(), /🔌 Type G, 230\u00a0V · check/);
+  assert.ok(!(await rowsText(page)).includes('Swimsuit'), 'no Paris heat');
+  await ctx.close();
+}
+
 // ================= Back after planning, saving and deleting =================
 // The browser's Back (a phone's back gesture) never lands on a form that's done with.
 {
@@ -1817,6 +1889,19 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   await b.page.click('#cloud');
   await until(async () => (await row(b.page, 'Wallet').locator('.tick').getAttribute('aria-checked')) === 'true', 'the first phone’s tick on the second');
   assert.equal(g.files().filter(f => f.appProperties?.carryon === 'sync').length, 1, 'one file');
+
+  // A stop added on one phone reaches the other, where it's looked up too.
+  await a.page.click('[aria-label="Edit this trip"]');
+  await a.page.click('.add-stop');
+  await a.page.keyboard.type('Tok');
+  await a.page.locator('.stop .results button', { hasText: 'Japan' }).click();
+  await a.page.fill('.stop input[type=date]', await day(a.page, 3));
+  await a.page.click('button:text-is("Save")');
+  await a.page.waitForSelector('.pass h1');
+  await until(async () => JSON.stringify(Object.values(JSON.parse(g.files().find(f => f.appProperties?.carryon === 'sync').body).trips)[0].stops || {}).includes('Tokyo'), 'the stop in Drive');
+  await b.page.click('#cloud');
+  await until(async () => (await b.page.locator('.wx-days .at').allInnerTexts()).join() === 'CHICAGO,TOKYO', 'the stop on the second phone');
+  assert.match(await b.page.locator('.pass .sub').innerText(), /^Chicago → Tokyo,\u00a0Japan$/);
 
   // One phone deletes Leaving the house. The other, before it has synced, moves Leaving the hotel up. It stays deleted.
   const inDrive = () => JSON.parse(g.files().find(f => f.appProperties?.carryon === 'sync').body);
