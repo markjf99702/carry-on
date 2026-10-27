@@ -29,6 +29,12 @@ export function condInfo(doc, k) {
   const g = Object.hasOwn(doc.tags, k) ? doc.tags[k] : null;
   return g && !M.gone(g) ? { k, icon: g.icon, name: g.name, group: 'Occasions' } : null;
 }
+// An occasion deleted since, by its name and icon, for what still comes for it: it's never on, so what came only for
+// it stays home on every trip, and says so. null for anything else.
+export function goneOccasion(doc, k) {
+  const g = !Object.hasOwn(BY_KEY, k) && Object.hasOwn(doc.tags, k) ? doc.tags[k] : null;
+  return g && M.gone(g) ? { k, icon: g.icon, name: g.name, group: 'Occasions', deleted: true } : null;
+}
 
 export const home = doc => M.pref(doc, 'home', '') || localCountry();
 // Places that count as home for each other, though each has its own country code. US citizens need no passport
@@ -55,14 +61,16 @@ function dayList(list) {
 
 // When something comes along, as words that finish a sentence: a condition by its phrase ("when it's cool", "when
 // abroad"), an occasion by its name ("for work"), and a mix "when it's hot or for swimming". wrap(info, words) can
-// dress each one, with its icon say; parts come back as a list, words as a string.
+// dress each one, with its icon say; parts come back as a list, words as a string. Occasions deleted since are named
+// only when nothing else is left to bring it, as what keeps it home: "for wedding (deleted)".
 export function whenParts(doc, keys, wrap = (info, words) => words) {
-  const infos = keys.map(k => condInfo(doc, k)).filter(Boolean);
+  let infos = keys.map(k => condInfo(doc, k)).filter(Boolean);
+  if (!infos.length) infos = keys.map(k => goneOccasion(doc, k)).filter(Boolean);
   const conds = infos.filter(i => i.phrase), occasions = infos.filter(i => !i.phrase);
   const list = (items, words) => items.flatMap((i, n) => [n ? ' or ' : '', wrap(i, words(i))]);
   const out = [];
   if (conds.length) out.push('when ', ...list(conds, i => i.phrase));
-  if (occasions.length) out.push(conds.length > 1 ? ', or for ' : conds.length ? ' or for ' : 'for ', ...list(occasions, i => i.name.toLowerCase()));
+  if (occasions.length) out.push(conds.length > 1 ? ', or for ' : conds.length ? ' or for ' : 'for ', ...list(occasions, i => i.name.toLowerCase() + (i.deleted ? ' (deleted)' : '')));
   return out.filter(x => x !== '');
 }
 export const whenWords = (doc, keys) => whenParts(doc, keys).join('');
@@ -208,7 +216,8 @@ export function conditions(doc, trip) {
   }
   const on = { ...auto };
   for (const [k, m] of Object.entries(trip.set || {})) {
-    if (m.v === null || m.v === undefined || M.TRAVEL.includes(k)) continue;
+    // An occasion deleted since is off, though it was picked: what came only for it stays home.
+    if (m.v === null || m.v === undefined || M.TRAVEL.includes(k) || goneOccasion(doc, k)) continue;
     on[k] = !!m.v;
     if (m.v && auto[k] !== true) why[k] = BY_KEY[k] ? 'You turned this on' : condInfo(doc, k)?.name || '';
   }

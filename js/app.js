@@ -1381,10 +1381,11 @@ function tripForm(t, again = false) {
 
 // ---------- my list ----------
 
-// "Only when ☔ rain's likely", "Only when 🌡️ it's hot or for 🏊 swimming", "Not when 🚗 you're driving".
+// "Only when ☔ rain's likely", "Only when 🌡️ it's hot or for 🏊 swimming", "Not when 🚗 you're driving". Only for an
+// occasion deleted since: "Only for 💍 wedding (deleted)", as it stays home. One it stayed home for no longer counts.
 function condChips(x) {
   const icon = (i, words) => [h('span', { 'aria-hidden': 'true' }, i.icon), ' ', words];
-  const when = R.whenParts(doc(), x.when, icon), unless = R.whenParts(doc(), x.unless, icon);
+  const when = R.whenParts(doc(), x.when, icon), unless = R.whenParts(doc(), x.unless.filter(k => R.condInfo(doc(), k)), icon);
   if (!when.length && !unless.length) return null;
   return h('span', { class: 'conds' },
     when.length ? h('span', {}, 'Only ', when) : null,

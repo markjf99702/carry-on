@@ -1648,6 +1648,47 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   await ctx.close();
 }
 
+// ================= An occasion you delete =================
+// What came only for it stays home, on every trip, and says so in My list and under Left off this trip.
+{
+  const { ctx, page } = await phone();
+  await page.click('text=Start with a starter list');
+  await page.evaluate(() => {
+    const { store, M, D } = window.carryOn;
+    store.apply(d => {
+      let next = M.putTag(d, { id: 'o-wed', name: 'Wedding', icon: '💍' });
+      next = M.putItem(next, { id: 'i-suit', name: 'Suit', bag: 's-clothes', when: ['o-wed'] });
+      next = M.putItem(next, { id: 'i-tie', name: 'Tie', bag: 's-clothes', when: ['o-wed', 'dressy'] });
+      next = M.putItem(next, { id: 'i-jeans', name: 'Jeans', bag: 's-clothes', unless: ['o-wed'] });
+      next = M.putBag(next, { id: 'b-golf', name: 'Golf bag', icon: '⛳', when: ['o-wed'] });
+      next = M.putItem(next, { id: 'i-clubs', name: 'Clubs', bag: 'b-golf' });
+      next = M.putTrip(next, { id: 'wed', place: { name: 'Sintra' }, start: D.add(D.today(), 3), end: D.add(D.today(), 5), travel: 'drive', name: '' });
+      return M.setCond(next, 'wed', 'o-wed', true);
+    });
+  });
+  await page.goto(base + '#/trip/wed');
+  await page.waitForSelector('.pass h1');
+  for (const n of ['Suit', 'Tie', 'Clubs']) assert.equal(await row(page, n).count(), 1, `picked, it brings ${n}`);
+  await page.evaluate(() => { const { store, M } = window.carryOn; store.apply(d => M.removeTag(d, 'o-wed')); });
+  await page.goto(base + '#/list');
+  const said = async name => (await page.locator('main .edit-row', { has: page.locator('.name', { hasText: new RegExp(`^${name}$`) }) }).innerText()).replace(/\s+/g, ' ');
+  assert.equal(await said('Suit'), 'Suit Only for 💍 wedding (deleted)');
+  assert.equal(await said('Tie'), 'Tie Only for 👔 dressing up', 'what has another way in says that one');
+  assert.equal(await said('Jeans'), 'Jeans', 'it no longer stays home for anything');
+  assert.equal(await page.locator('.bag.edit[data-bag="b-golf"] > .bag-note').innerText(), 'Only for 💍 wedding (deleted)');
+  await fits(page, 'my list with a deleted occasion');
+  // On the trip that had it picked, they stay home, and Left off says why.
+  await page.goto(base + '#/trip/wed');
+  await page.waitForSelector('.pass h1');
+  for (const n of ['Suit', 'Tie', 'Clubs']) assert.equal(await row(page, n).count(), 0, n);
+  assert.equal(await row(page, 'Jeans').count(), 1);
+  await page.click('[data-key="left"]');
+  const left = name => page.locator('.left-row', { has: page.locator('.name', { hasText: new RegExp(`^${name}$`) }) }).locator('small').innerText();
+  assert.equal(await left('Suit'), 'Only for wedding (deleted)');
+  assert.equal(await left('⛳ Golf bag'), '1 thing · Only for wedding (deleted)');
+  await ctx.close();
+}
+
 // ================= A link on a new phone =================
 {
   const { ctx, page } = await phone();

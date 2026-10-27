@@ -306,6 +306,28 @@ test('why something isn’t coming, in words: conditions by their phrase, occasi
   assert.equal(whenWords(doc, ['plug']), 'when the plugs are different');
 });
 
+test('what came only for an occasion deleted since stays home, on every trip, and says which', () => {
+  let doc = M.putTag(starter(), { id: 'o-wed', name: 'Wedding', icon: '💍' });
+  doc = M.putItem(doc, { id: 'i-suit', name: 'Suit', bag: 's-clothes', when: ['o-wed'] });
+  doc = M.putItem(doc, { id: 'i-tie', name: 'Tie', bag: 's-clothes', when: ['o-wed', 'dressy'] });
+  doc = M.putItem(doc, { id: 'i-jeans', name: 'Jeans', bag: 's-clothes', unless: ['o-wed'] });
+  doc = M.putBag(doc, { id: 'b-golf', name: 'Golf bag', icon: '⛳', when: ['o-wed'] });
+  doc = M.putItem(doc, { id: 'i-clubs', name: 'Clubs', bag: 'b-golf' });
+  doc = M.setCond(trip(doc, {}), 't1', 'o-wed', true);
+  const before = plan(doc, doc.trips.t1);
+  assert.ok(['Suit', 'Tie', 'Clubs'].every(n => allNames(before).includes(n)) && !allNames(before).includes('Jeans'), 'picked, it brings them');
+  later();
+  const gone = M.removeTag(doc, 'o-wed'), p = plan(gone, gone.trips.t1);
+  assert.equal(conditions(gone, gone.trips.t1).on['o-wed'], undefined, 'though the trip had it picked');
+  assert.deepEqual(['Suit', 'Tie', 'Clubs', 'Jeans'].map(n => allNames(p).includes(n)), [false, false, false, true]);
+  // Left off this trip says why: only for an occasion that's gone. What has another way in says that one.
+  assert.equal(p.left.find(l => l.item.name === 'Suit').why, 'Only for wedding (deleted)');
+  assert.equal(p.left.find(l => l.item.name === 'Tie').why, 'Only for dressing up');
+  assert.deepEqual(p.leftBags.filter(l => l.bag.id === 'b-golf').map(l => [l.count, l.why]), [[1, 'Only for wedding (deleted)']]);
+  assert.equal(whenWords(gone, ['o-wed', 'hot']), 'when it’s hot');
+  assert.equal(whenWords(gone, ['o-wed', 'o-gone']), 'for wedding (deleted)', 'a key with nothing here isn’t named');
+});
+
 test('each day’s picture has words for a screen reader', () => {
   const words = [0, 2, 3, 45, 53, 63, 73, 81, 85, 95].map(code => [dayIcon({ code }), dayWords({ code })]);
   assert.deepEqual(words, [['☀️', 'sunny'], ['🌤️', 'partly cloudy'], ['☁️', 'cloudy'], ['🌫️', 'fog'], ['🌦️', 'drizzle'], ['🌧️', 'rain'], ['🌨️', 'snow'], ['🌦️', 'showers'], ['🌨️', 'snow showers'], ['⛈️', 'thunderstorms']]);
