@@ -33,7 +33,7 @@
 // t is when a record last changed, del when it was deleted. A deleted record keeps its details, so a deletion
 // on one device reaches the others instead of the record coming back from their copy, and a change made after
 // the deletion brings it back. A bag deleted on one device while a thing was added to it (or changed) on another,
-// after the deletion, is still there while it holds that thing: see bags(). Starter records have t = 0
+// before or after the deletion, is still there while it holds that thing: see bags(). Starter records have t = 0
 // ("untouched"): see mergeDocs for why that matters.
 
 export const APP = 'carry-on';
@@ -230,14 +230,17 @@ export function touched(x) {
 }
 export const gone = x => !!x.del && x.del >= touched(x);
 const byOrder = (a, b) => a.order - b.order || a.name.localeCompare(b.name) || a.id.localeCompare(b.id);
-// The deleted bags still there: each holds a thing added or changed after the bag's deletion (on another device,
-// before the deletion reached it), so that thing has somewhere to show. The bag's other things stay deleted, and
-// it goes again if that thing does. Read from the doc, so merging is the same whatever the order.
+// The deleted bags still there: each holds a thing the device that deleted it never had, so that thing has somewhere
+// to show. Deleting a bag deletes everything in it, so a thing in a deleted bag that isn't deleted itself was added
+// to it, or changed, on another device before the deletion reached that one: before the deletion (a phone that turns
+// Drive on weeks later) or after. The bag's other things stay deleted, and it goes again if that thing does. An
+// untouched starter thing doesn't hold a bag: one left in a starter bag a first merge dropped stays out of sight with
+// it. Read from the doc, so merging is the same whatever the order.
 function held(doc) {
   const out = new Set();
   for (const x of Object.values(doc.items)) {
     const b = own(doc.bags, x.bag);
-    if (b && gone(b) && !gone(x) && x.t > b.del) out.add(b.id);
+    if (b && gone(b) && !gone(x) && x.t > 0) out.add(b.id);
   }
   return out;
 }
@@ -654,8 +657,8 @@ export function replaceList(doc, list) {
 
 // Undoes replaceList: before and after are the doc either side of it. Every bag, thing and occasion it changed
 // goes back to how it was, newer than the replace so the undo reaches other devices too: what it deleted or
-// overwrote comes back, what it added is deleted, and what was deleted before stays deleted. So does a thing that
-// was out of sight in a deleted bag: brought back newer than the bag's deletion, it would bring the bag back.
+// overwrote comes back, what it added is deleted, and what was deleted before stays deleted. So does an untouched
+// starter thing that was out of sight in a deleted bag: brought back as a change, it would bring the bag back.
 export function undoReplace(doc, before, after) {
   const out = { ...doc };
   const shown = (coll, x) => there(before, coll, x) && (coll !== 'items' || bagThere(before, own(before.bags, x.bag)));

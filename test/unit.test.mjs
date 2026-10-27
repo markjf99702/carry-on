@@ -1387,25 +1387,56 @@ test('a thing added on one phone to a bag the other deleted brings the bag back,
   later();
   const undone = M.restoreBag(removed, 's-toiletries', ['i-retainer']);
   assert.deepEqual(M.items(undone, 's-toiletries').map(x => x.name), ['Retainer']);
-  // A thing left in a deleted bag from before the deletion, which the other phone never saw, stays out of sight:
-  // the deletion is the later change. Replacing the list and Undo leave it so.
+  // A thing added to the bag before the deletion, on a phone the deletion hadn't reached yet: the phone that deleted
+  // the bag never had it, so the bag comes back with it too, holding only that.
   const c = M.putItem(b0, { id: 'i-old', name: 'Old comb', bag: 's-toiletries' });
   later();
-  const gone = M.mergeDocs(M.removeBag(a0, 's-toiletries'), c);
-  assert.ok(!M.gone(gone.items['i-old']) && !M.bags(gone).some(x => x.id === 's-toiletries'));
-  assert.ok(!M.items(gone).some(x => x.id === 'i-old'));
-  // Packed for a trip, it still comes home, like anything deleted after it was packed.
-  const packed = M.mark(trip(gone, {}), 't1', 'p:i-old', 1);
-  const home = plan(packed, packed.trips.t1, 'back');
-  assert.deepEqual(home.groups.flatMap(g => g.rows.map(r => [g.bag.name, r.name, r.deleted])), [['Not in a bag', 'Old comb', true]]);
+  const del = M.removeBag(a0, 's-toiletries');
+  const back = M.mergeDocs(del, c);
+  assert.equal(M.canon(back), M.canon(M.mergeDocs(c, del)), 'order of merging does not matter');
+  assert.deepEqual(M.items(back, 's-toiletries').map(x => x.name), ['Old comb']);
+  assert.ok(Object.values(back.items).filter(x => x.bag === 's-toiletries' && x.id !== 'i-old').every(M.gone), 'nothing the other phone deleted comes back');
+  const packed = M.mark(trip(back, {}), 't1', 'p:i-old', 1);
+  assert.deepEqual(plan(packed, packed.trips.t1, 'back').groups.flatMap(g => g.rows.map(r => [g.bag.name, r.name])), [['Toiletries bag', 'Old comb']], 'coming home, in its own bag');
+  // A copy saved before this, where it was out of sight, shows it: the copy is the same, only how it's read changed.
+  const saved = M.cleanDoc(JSON.parse(JSON.stringify(back)));
+  assert.deepEqual(M.items(saved, 's-toiletries').map(x => x.name), ['Old comb']);
+  assert.ok(M.gone(saved.bags['s-toiletries']), 'the bag is still deleted in the copy, so merges come out as before');
+  // An untouched starter thing doesn't hold a bag. A first merge from before starter bags and their things went
+  // together left them in no bag (the bag deleted, at 1): they stay out of sight. Replacing the list and Undo leave
+  // them so.
+  let left = M.mergeDocs(M.blankDoc(), starter(), { first: true });
+  left = { ...left, bags: { ...left.bags, 's-toiletries': { ...left.bags['s-toiletries'], del: 1 } } };
+  assert.ok(!M.bags(left).some(x => x.id === 's-toiletries') && !M.items(left).some(x => x.bag === 's-toiletries'));
+  assert.ok(Object.values(left.items).some(x => x.bag === 's-toiletries' && !M.gone(x)));
+  // Packed for a trip, such a thing still comes home, like anything deleted after it was packed.
+  const comb = Object.values(left.items).find(x => x.bag === 's-toiletries');
+  const went = M.mark(trip(left, {}), 't1', 'p:' + comb.id, 1);
+  const home = plan(went, went.trips.t1, 'back');
+  assert.deepEqual(home.groups.flatMap(g => g.rows.map(r => [g.bag.name, r.name, r.deleted])).filter(r => r[1] === comb.name), [['Not in a bag', comb.name, true]]);
   // (Also when the list coming in has it, in a bag of the same name that's here under another id.)
-  const wash = M.putBag(gone, { id: 'b-wash', name: 'Toiletries bag' });
-  for (const [doc, list] of [[gone, M.listOf(starter())], [wash, { bags: [{ id: 's-toiletries', name: 'Toiletries bag' }], items: [{ id: 'i-old', name: 'Old comb', bag: 's-toiletries' }] }]]) {
+  const wash = M.putBag(left, { id: 'b-wash', name: 'Toiletries bag' });
+  for (const [doc, list] of [[left, M.listOf(starter())], [wash, { bags: [{ id: 's-toiletries', name: 'Toiletries bag' }], items: [{ id: comb.id, name: comb.name, bag: 's-toiletries' }] }]]) {
     later();
     const swapped = M.replaceList(doc, list);
     later();
     assert.deepEqual(M.listOf(M.undoReplace(swapped, doc, swapped)), M.listOf(doc));
   }
+});
+
+test('a thing added on a phone before it turns Drive on keeps its bag, though another phone deleted the bag since', () => {
+  // A tablet, not on Drive yet, adds a Retainer to the Toiletries bag. Later a phone on Drive deletes that bag. The
+  // tablet then turns Drive on: the bag is back on both, holding only the Retainer, which the phone never had.
+  const tablet = M.putItem(starter(), { id: 'i-retainer', name: 'Retainer', bag: 's-toiletries' });
+  later();
+  const drive = M.removeBag(starter(), 's-toiletries');
+  const m = M.mergeDocs(tablet, drive, { first: true });
+  assert.equal(M.canon(m), M.canon(M.mergeDocs(drive, tablet, { first: true })), 'either way round');
+  assert.deepEqual(M.items(m, 's-toiletries').map(x => x.name), ['Retainer']);
+  assert.ok(M.items(m).every(x => M.bags(m).some(b => b.id === x.bag)), 'every thing is in a bag that shows');
+  assert.equal(M.items(m).length, M.items(drive).length + 1, 'the starter things the phone deleted stay deleted');
+  assert.equal(M.canon(M.mergeDocs(m, drive)), M.canon(m), 'the next sync changes nothing');
+  assert.equal(M.canon(M.mergeDocs(drive, m)), M.canon(m));
 });
 
 test('a first merge drops starter bags and their things together, so no thing is left in no bag', () => {
