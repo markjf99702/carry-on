@@ -244,12 +244,15 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   assert.ok(!(await rowsText(page)).includes('Phone charger'));
   await page.locator('.switch input').uncheck();
 
-  // Coming home: only what went.
+  // Coming home: the hotel checklist first, then only what went, without why it went.
+  await row(page, 'Plug adapter').locator('.tick').click();
+  assert.match(await row(page, 'Plug adapter').locator('small.why').innerText(), /Type C\/F/, 'going, it says why');
   await page.click('text=Coming home');
   const back = await rowsText(page);
-  assert.ok(back.includes('Phone charger') && back.includes('Toothpaste'));
+  assert.ok(back.includes('Phone charger') && back.includes('Toothpaste') && back.includes('Plug adapter'));
   assert.ok(!back.includes('Passport'), 'nothing that wasn’t packed');
-  assert.ok(await page.locator('.bag h2', { hasText: 'Leaving the hotel' }).count());
+  assert.deepEqual((await page.locator('main .bag h2').allInnerTexts()).slice(0, 2), ['LEAVING THE HOTEL', 'LIQUIDS BAG'], 'the hotel checklist, then the bags');
+  assert.equal(await row(page, 'Plug adapter').locator('small').count(), 0, 'coming home, no reasons');
   await more(page, 'Toothpaste');
   await page.click('text=Not bringing it back');
   assert.match(await row(page, 'Toothpaste').innerText(), /Not coming back/);

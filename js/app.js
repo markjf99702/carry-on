@@ -451,6 +451,7 @@ function tripView(t) {
   const order = k => { const i = R.CONDITIONS.findIndex(x => x.k === k); return i < 0 ? 100 : i; };
   onKeys.sort((a, b) => order(a) - order(b));
   const hide = store.hide;
+  const jobs = p.tasks.map(g => bagCard(t, g, mode, hide, c.why, true));
   return [
     h('a', { class: 'crumb', href: '#/' }, h('span', { html: ICONS.back }), 'Trips'),
     h('section', { class: 'pass' },
@@ -489,9 +490,11 @@ function tripView(t) {
     mode === 'back' && !Object.keys(t.marks || {}).some(k => k.startsWith('p:') && t.marks[k].v === 1)
       ? h('p', { class: 'muted small hint' }, 'Nothing was ticked going, so this is everything that was on the list.') : null,
     M.hasList(doc()) ? null : h('p', { class: 'muted small hint' }, 'Your list is empty, so nothing from it is on this trip. ', h('a', { href: '#/' }, 'Start a list'), ' and it fills in.'),
+    // Coming home, the hotel checklist (chargers in the wall, the safe) comes first, then the bags.
+    mode === 'back' ? jobs : null,
     p.groups.map(g => bagCard(t, g, mode, hide, c.why)),
     M.bags(doc()).some(b => b.kind === 'bag') ? h('button', { type: 'button', class: 'btn add-extra', 'data-key': 'add-extra', onclick: () => extraSheet(t, null, { home: mode === 'back' }) }, h('span', { html: ICONS.plus }), mode === 'go' ? 'Add something for this trip' : 'Add something to bring home') : null,
-    p.tasks.map(g => bagCard(t, g, mode, hide, c.why, true)),
+    mode === 'go' ? jobs : null,
     p.left.length || p.leftBags.length ? leftOff(t, p.left, p.leftBags, mode) : null,
   ];
 }
@@ -579,19 +582,20 @@ function itemRow(t, g, r, mode, whyMap, jobs, hide) {
     popKey = '';
   };
   // A screen reader hears the tick by its name and how many ("Socks, 5"), then the lines under it, without the
-  // conditions' pictures.
-  const id = 'r_' + r.key.replace(/[^\w-]/g, '_'), lines = [];
+  // conditions' pictures. Coming home, why each thing went ("Rain likely Fri", "Added for this trip") no longer
+  // matters, so only its note, where it is, and whether it's coming back are said.
+  const id = 'r_' + r.key.replace(/[^\w-]/g, '_'), lines = [], going = mode === 'go';
   const line = (cls, ...text) => { const n = `${id}_${lines.length}`; lines.push(n); return h('small', { id: n, class: cls }, ...text); };
-  const why = r.hits.map(k => { const info = R.condInfo(doc(), k); return info ? [h('span', { 'aria-hidden': 'true' }, info.icon), ' ', whyMap[k] || info.name] : null; }).filter(Boolean);
+  const why = !going ? [] : r.hits.map(k => { const info = R.condInfo(doc(), k); return info ? [h('span', { 'aria-hidden': 'true' }, info.icon), ' ', whyMap[k] || info.name] : null; }).filter(Boolean);
   const under = [
     r.gone ? line(null, 'Not coming back') : null,
     r.note ? line(null, r.note) : null,
     why.length ? line('why', why.flatMap((w, i) => (i ? [' · ', ...w] : w))) : null,
-    r.capped ? line('why', `One a day, up to ${R.laundry(doc())}: laundry after that`) : null,
-    r.packedOnly ? line('why', 'Packed, though the trip no longer calls for it') : null,
-    r.added ? line('why', 'Added for this trip') : null,
+    going && r.capped ? line('why', `One a day, up to ${R.laundry(doc())}: laundry after that`) : null,
+    going && r.packedOnly ? line('why', 'Packed, though the trip no longer calls for it') : null,
+    going && r.added ? line('why', 'Added for this trip') : null,
     r.moved ? line('why', 'In this bag for this trip') : null,
-    r.extra ? line('why', 'Just for this trip') : null,
+    going && r.extra ? line('why', 'Just for this trip') : null,
     r.deleted ? line('why', 'No longer on your list') : null,
   ];
   return h('li', { class: 'row' + (r.done ? ' done' : '') + (r.done && r.key === popKey ? ' just' : '') + (r.gone ? ' gone' : '') },
