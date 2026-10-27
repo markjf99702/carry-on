@@ -876,6 +876,53 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await page.click('.crumb');
   await page.waitForSelector('.tag-card');
   assert.equal(await page.locator('.tag-card .when').innerText(), 'NOW · BACK TODAY');
+  // The tag counts the way the trip opens: Coming home, here.
+  assert.match(await page.locator('.tag-card .packed').innerText(), /^\d+ of \d+ back in the bags$/);
+  await ctx.close();
+}
+
+// ================= A trip under way =================
+// On its last day a trip opens on Coming home, and its luggage tag counts the same way. Its weather shows today,
+// with the days gone by faint, and a strip that scrolls sideways starts at today and stays where it's put.
+{
+  const { ctx, page } = await phone();
+  await page.click('text=Start with a starter list');
+  await page.evaluate(() => {
+    const { store, M, D } = window.carryOn, t0 = D.today(), tok = { name: 'Tokyo', admin: 'Tokyo', country: 'Japan', cc: 'JP', lat: 35.6895, lon: 139.6917 };
+    store.apply(d => M.putTrip(d, { id: 'last', place: tok, start: D.add(t0, -4), end: t0, travel: 'fly', name: '' }));
+    store.apply(d => M.putTrip(d, { id: 'long', place: tok, start: D.add(t0, -10), end: D.add(t0, 5), travel: 'fly', name: 'The long way round' }));
+    window.carryOn.render();
+  });
+  await page.waitForSelector('.tag-card');
+  const tag = name => page.locator('.tag-card', { has: page.locator('h2', { hasText: name }) });
+  // Once the weather's in, which can bring things.
+  await tag('Tokyo').locator('.glance').waitFor();
+  const onTag = await tag('Tokyo').locator('.packed').innerText();
+  assert.match(onTag, /^0 of \d+ back in the bags$/, 'nothing ticked going, so all of it to bring back');
+  assert.match(await tag('The long way round').locator('.packed').innerText(), /^0 of \d+ packed$/, 'not its last day: going');
+  await tag('Tokyo').click();
+  await page.waitForSelector('.wx-days:not(.wait) li');
+  assert.equal(await page.locator('.seg.mode [aria-pressed="true"]').innerText(), 'Coming home');
+  assert.equal(await page.locator('.progress p').innerText(), onTag, 'the tag and the trip agree');
+  // Four days gone by, and today.
+  const strip = page.locator('.wx-days:not(.wait)');
+  assert.equal(await strip.locator('li.before').count(), 4);
+  assert.equal(await strip.locator('li.today .wd').innerText(), 'TODAY');
+  assert.match(await strip.locator('li.today .sr-only').textContent(), /^Today, [A-Z][a-z]+day, [A-Z][a-z]+ \d+: /);
+  assert.equal(await strip.evaluate(el => el.scrollLeft), 0, 'it all fits, so nothing to scroll');
+  // Sixteen days, ten of them gone: the strip starts at today.
+  await page.goto(base + '#/trip/long');
+  await page.waitForSelector('.wx-days:not(.wait) li.today');
+  await until(() => strip.evaluate(el => el.scrollLeft > 0), 'the strip to scroll to today');
+  const todayAt = () => strip.evaluate(el => Math.round(el.querySelector('li.today').getBoundingClientRect().left - el.getBoundingClientRect().left));
+  assert.equal(await todayAt(), 16, 'today first, where the first day would be');
+  assert.equal(await strip.locator('li.before').count(), 10);
+  // Scrolled back to the start by hand, it stays there when the page is drawn again.
+  await strip.evaluate(el => { el.scrollLeft = 0; });
+  await until(() => strip.evaluate(el => el.scrollLeft === 0), 'the strip at its start');
+  await row(page, 'Toothbrush').locator('.tick').click();
+  assert.equal(await row(page, 'Toothbrush').locator('.tick').getAttribute('aria-checked'), 'true');
+  assert.equal(await strip.evaluate(el => el.scrollLeft), 0, 'still at its start after a tick');
   await ctx.close();
 }
 

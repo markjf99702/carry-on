@@ -244,9 +244,3 @@ export function grown(before, after, tripId) {
   const was = new Map(rows(before, a).map(r => [r.key, r.qty]));
   return rows(after, b).filter(r => r.done && r.qty > (was.get(r.key) ?? Infinity)).map(r => r.key);
 }
-
-// For the trip cards: how far along packing is.
-export function progress(doc, trip) {
-  const p = plan(doc, trip, 'go');
-  return { done: p.done, total: p.total };
-}

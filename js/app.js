@@ -223,9 +223,13 @@ const title = t => t.name || t.place?.name || 'Trip';
 // A bag by name in a sentence: "the Day bag", but "Electronics".
 const theBag = b => (/\b(bag|case|pack|backpack|suitcase|pouch|kit|box|tote|purse)\b/i.test(b.name) ? 'the ' + b.name : b.name);
 
+// Which way a trip opens: the way it was last shown on this device, or else from its last day on, Coming home. Its
+// luggage tag counts the same way.
+const tripMode = t => store.mode(t.id) || (today() >= t.end ? 'back' : 'go');
+
 function tagCard(t) {
   const t0 = today(), n = D.nights(t.start, t.end);
-  const p = R.progress(doc(), t), c = R.conditions(doc(), t);
+  const mode = tripMode(t), p = R.plan(doc(), t, mode), c = p.cond;
   const now = t.start <= t0;
   const when = now ? `Now · back ${t.end === t0 ? 'today' : D.weekday(t.end)}` : t.start === D.add(t0, 1) ? 'Tomorrow' : `In ${plural(D.num(t.start) - D.num(t0), 'day')}`;
   const w = c.weather, pl = t.place;
@@ -241,7 +245,7 @@ function tagCard(t) {
     h('span', { class: 'dates' }, `${D.span(t.start, t.end, t0.slice(0, 4))} · ${n ? plural(n, 'night') : 'day trip'} · ${R.CONDITIONS.find(x => x.k === t.travel).icon}`),
     w ? h('span', { class: 'glance' }, `${W.dayIcon(W.tripDays(t.wx, t.start, t.end, t.place)[0])} ${W.temp(w.minLo, c.units)}–${W.temp(w.maxHi, c.units)}${w.rain ? ' · rain' + (w.rainDays.length ? ' likely' : ' some days') : ''}${w.snow ? ' · snow' : ''}`) : null,
     h('span', { class: 'meter', 'aria-hidden': 'true' }, meter(t.id + ':tag', p.done, p.total)),
-    h('span', { class: 'packed' }, p.done === p.total && p.total ? 'All packed' : `${p.done} of ${p.total} packed`));
+    h('span', { class: 'packed' }, p.done === p.total && p.total ? (mode === 'go' ? 'All packed' : 'All back in the bags') : `${p.done} of ${p.total} ${mode === 'go' ? 'packed' : 'back in the bags'}`));
 }
 
 // ---------- weather lookups ----------
@@ -289,8 +293,10 @@ const ago = t => {
   return new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 };
 
+// How far each trip's weather was scrolled sideways this visit, so a redraw (a tick, say) leaves it where it was.
+const stripX = new Map();
 function weatherStrip(t, c) {
-  const busy = !!wxBusy[t.id], err = wxErr[t.id];
+  const busy = !!wxBusy[t.id], err = wxErr[t.id], t0 = today();
   if (!t.place) {
     return h('section', { class: 'wx none' }, h('p', { class: 'muted small' }, 'No place for this trip, so no forecast. Add one in ', h('a', { href: `#/edit/${t.id}` }, 'Edit'), ', or set the weather by hand under ', h('b', {}, 'Change'), '.'));
   }
@@ -311,13 +317,16 @@ function weatherStrip(t, c) {
   const chanceOf = d => (W.snowCode(d.code) ? 'snow' : 'rain');
   const said = d => {
     const words = W.dayWords(d), wet = d.typ ? (d.wet >= 0.3 ? `rain in ${Math.round(d.wet * 100)}% of recent years` : '') : d.pop >= 30 ? `${d.pop}% chance of ${chanceOf(d)}` : '';
-    return `${D.dayLong(d.d)}${d.typ ? ', typical for these dates' : ''}: ${[words, `high ${W.temp(d.hi, u)}`, `low ${W.temp(d.lo, u)}`, wet].filter(Boolean).join(', ')}`;
+    return `${d.d === t0 ? 'Today, ' : ''}${D.dayLong(d.d)}${d.typ ? ', typical for these dates' : ''}: ${[words, `high ${W.temp(d.hi, u)}`, `low ${W.temp(d.lo, u)}`, wet].filter(Boolean).join(', ')}`;
   };
   // Each day's weekday, and on a trip of more than a week, where a weekday comes round again, its date under it: "MON"
   // over "2", the first day and each 1st of the month with the month, "NOV 1".
   const dated = D.nights(t.start, t.end) > 6;
+  const under = t.start <= t0 && t0 <= t.end;
+  const dayClass = (k, typ) => [typ ? 'typ' : '', under && k < t0 ? 'before' : k === t0 ? 'today' : ''].filter(Boolean).join(' ') || null;
+  // On a trip under way, today reads "Today" and stands out, and the days gone by are faint.
   const dayHead = (k, i) => [
-    h('span', { class: 'wd', 'aria-hidden': 'true' }, D.weekday(k)),
+    h('span', { class: 'wd', 'aria-hidden': 'true' }, k === t0 ? 'Today' : D.weekday(k)),
     dated ? h('span', { class: 'dm', 'aria-hidden': 'true' }, i === 0 || k.endsWith('-01') ? D.short(k) : String(+k.slice(8))) : null,
   ];
   // What the blue % means, which is different on typical days.
@@ -325,10 +334,26 @@ function weatherStrip(t, c) {
   const of = [...new Set(fcPct.map(chanceOf))].sort().join(' or ');
   const pct = fcPct.length && pctTy ? `Blue % is the chance of ${of}, or on the dashed days, how many recent years had rain that day.` : fcPct.length ? `Blue % is the chance of ${of}.` : pctTy ? 'Blue % is how many recent years had rain that day.' : '';
   // Unless typical weather is standing in for a forecast that didn't come back, why there's typical weather at all.
-  const typNote = ty && !days.some(d => d.typ && d.d <= W.forecastEdge(today())) ? (fc ? 'Past the forecast, the days show what the same dates were like in recent years.' : 'Too far off for a forecast, so these are the same dates in recent years. It switches to the forecast about two weeks out.') : '';
+  const typNote = ty && !days.some(d => d.typ && d.d <= W.forecastEdge(t0)) ? (fc ? 'Past the forecast, the days show what the same dates were like in recent years.' : 'Too far off for a forecast, so these are the same dates in recent years. It switches to the forecast about two weeks out.') : '';
   // No days, nothing on its way and nothing gone wrong: a trip that's over isn't looked up (its dates were changed
   // after it, say, which cleared its weather), and one still to come will be once there's a connection.
-  const empty = !days.length && !busy && !err, over = t.end < today();
+  const empty = !days.length && !busy && !err, over = t.end < t0;
+  const strip = !days.length ? null : h('ol', { class: 'wx-days', 'aria-labelledby': 'wxHead', onscroll: () => stripX.set(t.id + t.start, strip.scrollLeft) }, days.map((d, i) => h('li', { class: dayClass(d.d, d.typ) },
+    h('span', { class: 'sr-only' }, said(d)),
+    dayHead(d.d, i),
+    h('span', { class: 'wi', 'aria-hidden': 'true' }, W.dayIcon(d)),
+    h('span', { class: 'hi', 'aria-hidden': 'true' }, W.temp(d.hi, u)),
+    h('span', { class: 'lo', 'aria-hidden': 'true' }, W.temp(d.lo, u)),
+    h('span', { class: 'rp', 'aria-hidden': 'true' }, d.typ ? (d.wet >= 0.3 ? `${Math.round(d.wet * 100)}%` : '') : (d.pop >= 30 ? `${d.pop}%` : '')))));
+  // Once it's on the page: where it was, or the first time, on a trip under way, at today. Nothing to do when it all
+  // fits.
+  if (strip) {
+    queueMicrotask(() => {
+      if (!strip.isConnected || strip.scrollWidth <= strip.clientWidth) return;
+      const now = strip.querySelector('li.today');
+      strip.scrollLeft = stripX.has(t.id + t.start) ? stripX.get(t.id + t.start) : now ? now.offsetLeft - strip.firstElementChild.offsetLeft : 0;
+    });
+  }
   return h('section', { class: 'wx' },
     h('div', { class: 'wx-head' },
       h('h2', { id: 'wxHead' }, label),
@@ -342,15 +367,9 @@ function weatherStrip(t, c) {
     err ? h('p', { class: days.length ? 'muted small' : 'err small' }, navigator.onLine === false ? 'No connection right now. The forecast comes in when you’re back online.' : err, ' ', days.length ? 'Showing the last lookup.' : 'You can set the weather by hand under Change.') : null,
     // While the first lookup is on its way, the days' room is kept, so they don't push everything down when they come,
     // with a faint tile for each day (as far as the forecast reaches) waiting for its numbers.
-    !days.length && busy ? h('ol', { class: 'wx-days wait', 'aria-hidden': 'true' }, D.range(t.start, t.end).slice(0, W.AHEAD + 1).map((k, i) => h('li', { class: 'typ' },
+    !days.length && busy ? h('ol', { class: 'wx-days wait', 'aria-hidden': 'true' }, D.range(t.start, t.end).slice(0, W.AHEAD + 1).map((k, i) => h('li', { class: dayClass(k, true) },
       dayHead(k, i), h('span', { class: 'wi' }, '\u00a0'), h('span', { class: 'hi' }, '…'), h('span', { class: 'lo' }, '…'), h('span', { class: 'rp' })))) : null,
-    days.length ? h('ol', { class: 'wx-days', 'aria-labelledby': 'wxHead' }, days.map((d, i) => h('li', { class: d.typ ? 'typ' : '' },
-      h('span', { class: 'sr-only' }, said(d)),
-      dayHead(d.d, i),
-      h('span', { class: 'wi', 'aria-hidden': 'true' }, W.dayIcon(d)),
-      h('span', { class: 'hi', 'aria-hidden': 'true' }, W.temp(d.hi, u)),
-      h('span', { class: 'lo', 'aria-hidden': 'true' }, W.temp(d.lo, u)),
-      h('span', { class: 'rp', 'aria-hidden': 'true' }, d.typ ? (d.wet >= 0.3 ? `${Math.round(d.wet * 100)}%` : '') : (d.pop >= 30 ? `${d.pop}%` : ''))))) : null,
+    days.length ? strip : null,
     days.length && t.wx.err ? h('p', { class: 'muted small' }, t.wx.err) : null,
     typNote || pct ? h('p', { class: 'muted small' }, [typNote, pct].filter(Boolean).join(' ')) : null);
 }
@@ -361,8 +380,7 @@ let packedSeen = null; // the trip and way of packing last drawn, and whether it
 
 function tripView(t) {
   maybeWeather(t);
-  const t0 = today();
-  const mode = store.mode(t.id) || (t0 >= t.end ? 'back' : 'go');
+  const mode = tripMode(t);
   const p = R.plan(doc(), t, mode), c = p.cond;
   shownTrip = t.id + ':' + mode;
   const complete = p.total > 0 && p.done === p.total;

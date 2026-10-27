@@ -282,6 +282,10 @@ ul.chips .chip small { font-weight: 500; color: var(--muted); font-size: 13px; }
 .wx-days.wait { min-height: 129px; }
 .wx-days.wait li { opacity: .5; }
 .wx-days .wd { font: 700 13px var(--display); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+/* On a trip under way: the days gone by are faint, and today has a red edge and says so. */
+.wx-days li.before { opacity: .45; }
+.wx-days li.today { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.wx-days li.today .wd { color: var(--accent-text); }
 .wx-days .dm { margin-top: -2px; font: 700 13px var(--display); text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
 .wx-days .wi { font-size: 22px; line-height: 1.2; }
 .wx-days .hi { font-weight: 700; }
