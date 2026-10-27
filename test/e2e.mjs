@@ -95,6 +95,8 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
 
   await planTrip(page, { where: 'Lisb', from: 3, to: 7, on: ['Work'] });
   assert.equal(await page.locator('.pass h1').innerText(), 'LISBON');
+  // The pass says when, as the luggage tag does.
+  assert.equal(await page.locator('.pass .when').innerText(), 'IN 3 DAYS');
   // Each screen names the page, and a new screen puts the focus on its heading, so a screen reader says where it is.
   assert.equal(await page.title(), 'Lisbon · Carry On');
   assert.deepEqual(await page.evaluate(() => [document.activeElement.tagName, document.activeElement.textContent]), ['H1', 'Lisbon']);
@@ -663,6 +665,7 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await page.goto(base + '#/trip/past');
   await page.waitForSelector('.pass h1');
   assert.match(await page.locator('.wx').innerText(), /^WEATHER\n+No weather was saved for these days\.$/);
+  assert.equal(await page.locator('.pass .when').innerText(), 'PAST TRIP');
   assert.equal(await page.locator('.wx button').count(), 0, 'no ↻ on a trip that’s over');
   await ctx.close();
 }
@@ -890,7 +893,7 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await page.evaluate(() => {
     const { store, M, D } = window.carryOn, t0 = D.today(), tok = { name: 'Tokyo', admin: 'Tokyo', country: 'Japan', cc: 'JP', lat: 35.6895, lon: 139.6917 };
     store.apply(d => M.putTrip(d, { id: 'last', place: tok, start: D.add(t0, -4), end: t0, travel: 'fly', name: '' }));
-    store.apply(d => M.putTrip(d, { id: 'long', place: tok, start: D.add(t0, -10), end: D.add(t0, 5), travel: 'fly', name: 'The long way round' }));
+    store.apply(d => M.putTrip(d, { id: 'long', place: tok, start: D.add(t0, -10), end: D.add(t0, 9), travel: 'fly', name: 'The long way round' }));
     window.carryOn.render();
   });
   await page.waitForSelector('.tag-card');
@@ -904,18 +907,22 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await page.waitForSelector('.wx-days:not(.wait) li');
   assert.equal(await page.locator('.seg.mode [aria-pressed="true"]').innerText(), 'Coming home');
   assert.equal(await page.locator('.progress p').innerText(), onTag, 'the tag and the trip agree');
+  assert.equal(await page.locator('.pass .when').innerText(), 'NOW · BACK TODAY');
+  assert.equal(await page.locator('.pass .when').evaluate(el => getComputedStyle(el).color), await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--accent-text').trim()).then(hex => `rgb(${hex.match(/\w\w/g).map(x => parseInt(x, 16)).join(', ')})`), 'red, under way');
   // Four days gone by, and today.
   const strip = page.locator('.wx-days:not(.wait)');
   assert.equal(await strip.locator('li.before').count(), 4);
   assert.equal(await strip.locator('li.today .wd').innerText(), 'TODAY');
   assert.match(await strip.locator('li.today .sr-only').textContent(), /^Today, [A-Z][a-z]+day, [A-Z][a-z]+ \d+: /);
   assert.equal(await strip.evaluate(el => el.scrollLeft), 0, 'it all fits, so nothing to scroll');
-  // Sixteen days, ten of them gone: the strip starts at today.
+  // Twenty days, ten of them gone: the strip starts at today.
   await page.goto(base + '#/trip/long');
   await page.waitForSelector('.wx-days:not(.wait) li.today');
   await until(() => strip.evaluate(el => el.scrollLeft > 0), 'the strip to scroll to today');
   const todayAt = () => strip.evaluate(el => Math.round(el.querySelector('li.today').getBoundingClientRect().left - el.getBoundingClientRect().left));
   assert.equal(await todayAt(), 16, 'today first, where the first day would be');
+  // Back more than a week from now: back on a date, as a weekday alone could be either of two.
+  assert.equal(await page.locator('.pass .when').innerText(), `NOW · BACK ${await page.evaluate(() => window.carryOn.D.short(window.carryOn.D.add(window.carryOn.D.today(), 9)).toUpperCase())}`);
   assert.equal(await strip.locator('li.before').count(), 10);
   // Scrolled back to the start by hand, it stays there when the page is drawn again.
   await strip.evaluate(el => { el.scrollLeft = 0; });

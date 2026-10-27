@@ -258,6 +258,8 @@ ul.chips .chip small { font-weight: 500; color: var(--muted); font-size: 13px; }
 .pass { position: relative; background: var(--paper); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); margin-bottom: 14px; overflow: hidden; }
 .pass-top { display: flex; align-items: flex-start; gap: 8px; padding: 16px 10px 14px 18px; border-bottom: 2px dashed var(--line); }
 .pass-top > div { flex: 1; min-width: 0; }
+.pass .when { margin: 0 0 6px; font: 700 14px var(--display); text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
+.pass .when.now { color: var(--accent-text); }
 .pass h1 { font-size: 46px; line-height: .95; overflow-wrap: anywhere; }
 .pass .sub { margin: 4px 0 0; color: var(--muted); font-weight: 600; }
 /* The notches either side of the tear line. */

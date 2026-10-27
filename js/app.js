@@ -227,11 +227,19 @@ const theBag = b => (/\b(bag|case|pack|backpack|suitcase|pouch|kit|box|tote|purs
 // luggage tag counts the same way.
 const tripMode = t => store.mode(t.id) || (today() >= t.end ? 'back' : 'go');
 
+// When a trip is, in a few words, on its luggage tag and its boarding pass: "In 3 days", "Tomorrow", "Now · back
+// Wed", "Past trip". Back more than six days on, it's a date, as a weekday alone could be either of two.
+function whenText(t) {
+  const t0 = today();
+  if (t.end < t0) return 'Past trip';
+  if (t.start <= t0) return `Now · back ${t.end === t0 ? 'today' : D.num(t.end) - D.num(t0) > 6 ? D.short(t.end) : D.weekday(t.end)}`;
+  return t.start === D.add(t0, 1) ? 'Tomorrow' : `In ${plural(D.num(t.start) - D.num(t0), 'day')}`;
+}
+
 function tagCard(t) {
   const t0 = today(), n = D.nights(t.start, t.end);
   const mode = tripMode(t), p = R.plan(doc(), t, mode), c = p.cond;
   const now = t.start <= t0;
-  const when = now ? `Now · back ${t.end === t0 ? 'today' : D.weekday(t.end)}` : t.start === D.add(t0, 1) ? 'Tomorrow' : `In ${plural(D.num(t.start) - D.num(t0), 'day')}`;
   const w = c.weather, pl = t.place;
   // Under the name: the place and, abroad, its country. A trip named after its place has just the country, or at
   // home the state or region, as the pass has.
@@ -239,7 +247,7 @@ function tagCard(t) {
   const where = (t.name ? [pl?.name, country] : [country || (pl?.admin !== pl?.name ? pl?.admin : '')]).filter(Boolean).join(', ');
   return h('a', { class: 'tag-card' + (now ? ' now' : ''), href: `#/trip/${t.id}` },
     h('span', { class: 'hole', 'aria-hidden': 'true' }),
-    h('span', { class: 'when' }, when),
+    h('span', { class: 'when' }, whenText(t)),
     h('h2', {}, title(t)),
     where ? h('span', { class: 'where' }, where) : null,
     h('span', { class: 'dates' }, `${D.span(t.start, t.end, t0.slice(0, 4))} · ${n ? plural(n, 'night') : 'day trip'} · ${R.CONDITIONS.find(x => x.k === t.travel).icon}`),
@@ -399,6 +407,7 @@ function tripView(t) {
     h('section', { class: 'pass' },
       h('div', { class: 'pass-top' },
         h('div', {},
+          h('p', { class: 'when' + (t.start <= today() && today() <= t.end ? ' now' : '') }, whenText(t)),
           h('h1', {}, title(t)),
           h('p', { class: 'sub' }, t.place ? (t.name ? W.placeLabel(t.place) : W.placeLabel(t.place).split(', ').slice(1).join(', ')) || '\u00a0' : 'No place set')),
         h('a', { class: 'icon-btn', href: `#/edit/${t.id}`, 'aria-label': 'Edit this trip', title: 'Edit this trip', html: ICONS.edit })),
