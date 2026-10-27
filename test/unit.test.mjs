@@ -1796,6 +1796,32 @@ test('cleaning keeps junk out', () => {
   assert.deepEqual(doc.prefs, {});
 });
 
+test('a list coming in with its own Wedding ties what comes for it to your Wedding', () => {
+  let mine = M.putTag(starter(), { id: 'o-mine', name: 'Wedding', icon: '💍' });
+  mine = M.putItem(mine, { id: 'i-tux', name: 'Tux', bag: 's-clothes', when: ['o-mine'] });
+  const list = {
+    bags: [{ id: 'w1', name: 'Clothes', kind: 'bag' }, { id: 'w2', name: 'Wedding things', icon: '💍', kind: 'bag', when: ['o-theirs'] }],
+    items: [{ id: 'v1', name: 'Suit', bag: 'w1', when: ['o-theirs'] }, { id: 'v2', name: 'Gift', bag: 'w2' }, { id: 'v3', name: 'Jeans', bag: 'w1', unless: ['o-theirs'] }],
+    tags: [{ id: 'o-theirs', name: 'wedding', icon: '💒' }],
+  };
+  const named = (doc, n) => M.items(doc).find(x => x.name === n);
+  for (const [how, doc] of [['added', M.addList(mine, list)], ['used instead', M.replaceList(mine, list)]]) {
+    assert.deepEqual(M.tags(doc).filter(g => g.name.toLowerCase() === 'wedding').map(g => g.id), ['o-mine'], `${how}: one Wedding, yours`);
+    assert.deepEqual(named(doc, 'Suit').when, ['o-mine'], how);
+    assert.deepEqual(named(doc, 'Jeans').unless, ['o-mine'], how);
+    assert.deepEqual(M.bags(doc).find(b => b.name === 'Wedding things').when, ['o-mine'], how);
+    const d = M.setCond(trip(doc, {}), 't1', 'o-mine', true), p = plan(d, d.trips.t1);
+    assert.ok(['Suit', 'Gift'].every(n => allNames(p).includes(n)) && !allNames(p).includes('Jeans'), `${how}: picking your Wedding brings them`);
+    assert.equal(M.canon(how === 'added' ? M.addList(doc, list) : M.replaceList(doc, list)), M.canon(doc), `${how} again changes nothing`);
+  }
+  // Yours deleted, with the same id as theirs (your own list, sent back): theirs comes in as a new one, and what comes
+  // for it follows.
+  const gone = M.removeTag(M.putTag(starter(), { id: 'o-theirs', name: 'Wedding' }), 'o-theirs');
+  const doc = M.addList(gone, list), wed = M.tags(doc).find(g => g.name === 'wedding');
+  assert.ok(wed && wed.id !== 'o-theirs' && M.gone(doc.tags['o-theirs']));
+  assert.deepEqual(named(doc, 'Suit').when, [wed.id]);
+});
+
 test('ids that are names every JavaScript object has can’t stop a trip opening or a sync saving', async () => {
   const JS = ['__proto__', 'constructor', 'toString', 'hasOwnProperty', 'valueOf'];
   // A link thing that stays home "unless __proto__", and an occasion called "toString" that a suit comes for.

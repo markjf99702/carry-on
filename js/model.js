@@ -596,12 +596,20 @@ export function startWith(doc, list) {
 }
 
 // What's on both lists keeps this one's ids: a bag coming in takes the id of a bag here with the same name and
-// kind, and a thing the id of one with the same name in that bag. A pasted list, or someone else's, has ids of
-// its own, and a trip's ticks, skips and moves are kept by id. An id already here counts first.
+// kind, a thing the id of one with the same name in that bag, and an occasion the id of one with the same name, so
+// what comes for its Wedding comes for yours. A pasted list, or someone else's, has ids of its own, and a trip's
+// ticks, skips, moves and occasions are kept by id. An id already here counts first.
 function sameIds(doc, list) {
   const live = (coll, id) => there(doc, coll, doc[coll][id]);
-  const bagMap = {}, itemMap = {};
-  const bagsIn = list.bags || [], itemsIn = list.items || [];
+  const bagMap = {}, itemMap = {}, tagMap = {};
+  const bagsIn = list.bags || [], itemsIn = list.items || [], tagsIn = list.tags || [];
+  const takenT = new Set(tagsIn.filter(g => live('tags', g.id)).map(g => g.id));
+  for (const g of tagsIn) {
+    if (live('tags', g.id)) continue;
+    const hit = tags(doc).find(x => !takenT.has(x.id) && norm(x.name) === norm(g.name));
+    if (hit) { takenT.add(hit.id); tagMap[g.id] = hit.id; }
+  }
+  const tie = x => ({ ...x, when: (x.when || []).map(k => tagMap[k] || k), unless: (x.unless || []).map(k => tagMap[k] || k) });
   const takenB = new Set(bagsIn.filter(b => live('bags', b.id)).map(b => b.id));
   for (const b of bagsIn) {
     if (live('bags', b.id)) continue;
@@ -617,8 +625,9 @@ function sameIds(doc, list) {
   }
   return {
     ...list,
-    bags: bagsIn.map(b => (bagMap[b.id] ? { ...b, id: bagMap[b.id] } : b)),
-    items: itemsIn.map(x => ({ ...x, id: itemMap[x.id] || x.id, bag: bagMap[x.bag] || x.bag })),
+    bags: bagsIn.map(b => tie(bagMap[b.id] ? { ...b, id: bagMap[b.id] } : b)),
+    items: itemsIn.map(x => tie({ ...x, id: itemMap[x.id] || x.id, bag: bagMap[x.bag] || x.bag })),
+    tags: tagsIn.map(g => (tagMap[g.id] ? { ...g, id: tagMap[g.id] } : g)),
   };
 }
 
@@ -670,27 +679,31 @@ export function undoReplace(doc, before, after) {
 // Adds another list to this one. A bag with the same name as one already here is that bag ("Toiletries" is the
 // Toiletries bag); a thing already on the list stays as it is and where it is, in whichever bag (a job, in a list
 // of jobs of the same kind); everything else comes in after what's here. A new bag comes only with something new
-// in it, so adding the same list twice changes nothing.
+// in it, so adding the same list twice changes nothing. An occasion with the same name as one here is that one (its
+// Wedding is your Wedding), so what comes for it, or stays home for it, does for yours.
 const bagKey = name => norm(name).replace(/ (bag|kit|pouch|case)$/, '');
 export function addList(doc, list) {
   const fresh = listDoc(list, 0);
   let next = doc;
   const free = (coll, id, prefix) => (next[coll][id] ? newId(prefix) : id);
   const onList = (it, kind) => items(next).some(x => norm(x.name) === norm(it.name) && next.bags[x.bag].kind === kind);
+  const tagMap = {};
+  for (const g of Object.values(fresh.tags).sort(byOrder)) {
+    const here = tags(next).find(x => x.id === g.id) || tags(next).find(x => norm(x.name) === norm(g.name));
+    tagMap[g.id] = here?.id || free('tags', g.id, 'o');
+    if (!here) next = putTag(next, { ...g, id: tagMap[g.id], order: undefined });
+  }
+  const tie = x => ({ ...x, when: x.when.map(k => tagMap[k] || k), unless: x.unless.map(k => tagMap[k] || k) });
   for (const b of Object.values(fresh.bags).sort(byOrder)) {
     let bag = bags(next).find(x => bagKey(x.name) === bagKey(b.name) && x.kind === b.kind)?.id;
     const its = Object.values(fresh.items).filter(x => x.bag === b.id).sort(byOrder);
-    const make = () => { bag = free('bags', b.id, 'b'); next = putBag(next, { ...b, id: bag, order: undefined }); };
+    const make = () => { bag = free('bags', b.id, 'b'); next = putBag(next, { ...tie(b), id: bag, order: undefined }); };
     for (const it of its) {
       if (onList(it, b.kind)) continue;
       if (!bag) make();
-      next = putItem(next, { ...it, id: free('items', it.id, 'i'), bag, order: undefined, last: it.last?.v });
+      next = putItem(next, { ...tie(it), id: free('items', it.id, 'i'), bag, order: undefined, last: it.last?.v });
     }
     if (!its.length && !bag) make();
-  }
-  for (const g of Object.values(fresh.tags)) {
-    if (tags(next).some(x => x.id === g.id || norm(x.name) === norm(g.name))) continue;
-    next = putTag(next, { ...g, id: free('tags', g.id, 'o'), order: undefined });
   }
   return next;
 }
