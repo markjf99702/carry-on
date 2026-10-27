@@ -250,9 +250,11 @@ export function whyNot(doc, rule, res) {
 // A thing goes in the bag it's in this trip: its own, or the one it was moved to ('b:ID'). It comes along when
 // either of those does, so moving it out of a bag that's left off brings it.
 // Going, a thing packed last (My list's Pack it last, or 'l:ID' for this trip) waits in a group of its own, the last
-// things out the door, rather than in its bag, which counts without it.
+// things out the door, rather than in its bag, which counts without it. One to buy there ('x:ID' 'buy') is on a list
+// of its own, which doesn't count as packing; coming home it isn't listed, unless it was packed after all.
 // Returns { groups: [{ bag, rows }], last: { bag: LAST, rows } or null, tasks: [{ bag, rows }], left: [{ item, why,
-//   skipped }] (things, then jobs), leftBags: [{ bag, why, skipped, count, more }], done, total, morning, cond }
+//   skipped }] (things, then jobs), leftBags: [{ bag, why, skipped, count, more }], buy: [{ id, name, bag (the bag it
+//   would go in), extra? }] (going), done, total, morning, cond }
 //   count: how many of the bag's things its line stands for. more: some things in it are on the list anyway (moved
 //   or added to it, or packed already), so those are more.
 //   morning: going, with everything in the bags packed, how many of the last things out the door and the jobs
@@ -275,7 +277,7 @@ export function plan(doc, trip, mode = 'go') {
   const anyPacked = Object.entries(marks).some(([k, m]) => k.startsWith('p:') && m.v === 1);
   const allBags = M.bags(doc);
   const coming = b => bagComing(trip, b, on);
-  const groups = new Map(), tasks = [], left = [], leftBags = [], last = [];
+  const groups = new Map(), tasks = [], left = [], leftBags = [], last = [], buy = [];
   const groupOf = bag => { if (!groups.has(bag.id)) groups.set(bag.id, { bag, rows: [] }); return groups.get(bag.id); };
   const going = mode === 'go';
   // Going, a row packed last goes in its own group, saying which bag it goes in.
@@ -291,6 +293,7 @@ export function plan(doc, trip, mode = 'go') {
     const to = bagFor(mv(it.id)), bag = to || home;
     const res = passes(it, on), bagIn = coming(home) || (!!to && coming(to));
     const p = pick(it.id), packed = isPacked(it.id);
+    if (p === 'buy' && (going || !packed)) { if (going) buy.push({ id: it.id, name: it.name, bag }); continue; }
     if (!(p === 'add' || packed || (p !== 'skip' && res.ok && bagIn))) {
       // Things in a bag that isn't coming are covered by the bag's own line.
       if (bagIn) left.push({ item: it, skipped: p === 'skip', why: p === 'skip' ? 'You left it off this trip' : whyNot(doc, it, res) });
@@ -306,8 +309,9 @@ export function plan(doc, trip, mode = 'go') {
   }
   for (const x of M.extras(trip)) {
     const packed = isPacked(x.id);
-    if (mode === 'back' && anyPacked && !packed) continue;
     const bag = bagFor(mv(x.id)) || bagFor(x.bag) || fallback;
+    if (pick(x.id) === 'buy' && (going || !packed)) { if (going) buy.push({ id: x.id, name: x.name, bag, extra: true }); continue; }
+    if (mode === 'back' && anyPacked && !packed) continue;
     put(bag, { id: x.id, name: x.name, note: '', qty: 1, hits: [], key: (mode === 'go' ? 'p:' : 'r:') + x.id, extra: true });
   }
   // Coming home, what went comes back, though it's been deleted from My list since, alone or with its bag: in the
@@ -354,7 +358,7 @@ export function plan(doc, trip, mode = 'go') {
   if (mode === 'back') for (const r of all) r.gone = marks[r.key]?.v === 2;
   const inBags = list.flatMap(g => g.rows), later = [...last, ...tasks.flatMap(g => g.rows)].filter(r => !r.done).length;
   return {
-    groups: list, last: lastGroup, tasks, left: mode === 'go' ? [...left, ...leftJobs] : leftJobs, leftBags, cond,
+    groups: list, last: lastGroup, tasks, left: mode === 'go' ? [...left, ...leftJobs] : leftJobs, leftBags, buy, cond,
     done: all.filter(r => r.done).length, total: all.length,
     morning: going && inBags.length && inBags.every(r => r.done) ? later : 0,
   };

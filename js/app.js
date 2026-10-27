@@ -578,8 +578,32 @@ function tripView(t) {
     // Going, what's still in use the night before, to pack on the way out, then the jobs before leaving the house.
     p.last && !oneLine ? bagCard(t, p.last, mode, hide, c.why) : null,
     mode === 'go' && !oneLine ? jobs : null,
+    p.buy.length ? buyThere(t, p.buy) : null,
     p.left.length || p.leftBags.length ? leftOff(t, p.left, p.leftBags, mode) : null,
   ];
+}
+
+// Where something put back on the list landed, said since it's usually off screen: "Sunscreen is on the list, in the
+// Liquids bag.", or what still keeps it off. Undo puts back how it was.
+function saidWhere(t, id, name, mode, undo) {
+  const p = R.plan(doc(), doc().trips[t.id], mode);
+  const g = goingGroups(p).find(x => x.bag.id === id || x.rows.some(r => r.id === id));
+  const still = !g && (p.left.find(l => l.item.id === id) || p.leftBags.find(l => l.bag.id === id));
+  toast(still ? `${name} is still off: ${still.why.charAt(0).toLowerCase() + still.why.slice(1)}.` : g && g.bag.id !== id ? `${name} is on the list, in ${theBag(g.bag)}.` : `${name} is on the list.`,
+    { label: 'Undo', run: undo });
+}
+
+// Going, what's to be bought there rather than packed, at the foot of the list, each with a way to pack it after all.
+// It doesn't count as packing.
+function buyThere(t, list) {
+  return h('section', { class: 'aside' },
+    h('h2', {}, 'To buy there'),
+    h('ul', { class: 'rows' }, list.map(x => h('li', { class: 'row left-row' },
+      h('div', { class: 'what' }, h('span', { class: 'name' }, x.name)),
+      h('button', { type: 'button', class: 'btn small', 'data-key': 'buy:' + x.id, 'aria-label': `Pack it after all, ${x.name}`, onclick: () => {
+        apply(d => M.mark(d, t.id, 'x:' + x.id, 0));
+        saidWhere(t, x.id, x.name, 'go', () => apply(d => M.mark(d, t.id, 'x:' + x.id, 'buy')));
+      } }, 'Pack it')))));
 }
 
 // Packing keeps both hands busy, and a phone that locks itself between ticks wants Face ID or a passcode for the
@@ -757,11 +781,7 @@ function leftOff(t, left, leftBags, mode) {
   const put = (id, skipped, name) => {
     const was = t.marks?.['x:' + id]?.v;
     apply(d => M.mark(d, t.id, 'x:' + id, skipped ? 0 : 'add'));
-    const p = R.plan(doc(), doc().trips[t.id], mode);
-    const g = goingGroups(p).find(x => x.bag.id === id || x.rows.some(r => r.id === id));
-    const still = !g && (p.left.find(l => l.item.id === id) || p.leftBags.find(l => l.bag.id === id));
-    toast(still ? `${name} is still off: ${still.why.charAt(0).toLowerCase() + still.why.slice(1)}.` : g && g.bag.id !== id ? `${name} is on the list, in ${theBag(g.bag)}.` : `${name} is on the list.`,
-      { label: 'Undo', run: () => apply(d => M.mark(d, t.id, 'x:' + id, was || 0)) });
+    saidWhere(t, id, name, mode, () => apply(d => M.mark(d, t.id, 'x:' + id, was || 0)));
   };
   return h('section', { class: 'left' },
     // The heading holds the button, so it's found among the headings.
@@ -835,6 +855,12 @@ function itemSheet(t, r, mode, jobs) {
           ? h('button', { type: 'button', class: 'btn', onclick: () => { done(); apply(d => M.removeExtra(d, t.id, id)); toast(`${r.name} is off this trip.`, { label: 'Undo', run: () => apply(d => M.putExtra(d, t.id, { id: `${id}`, name: r.name, bag: cur })) }); } }, 'Take it off this trip')
           : h('button', { type: 'button', class: 'btn', onclick: () => { done(); apply(d => M.mark(d, t.id, 'x:' + id, 'skip')); toast(`${r.name} is off this trip.`, { label: 'Undo', run: () => apply(d => M.mark(d, t.id, 'x:' + id, pick || 0)) }); } }, 'Leave it off this trip'),
         jobs ? null : h('button', { type: 'button', class: 'btn', onclick: packLast }, lastNow ? 'Pack it with the rest' : 'Pack it in the morning'),
+        // Sunscreen, an adapter: bought on arrival rather than packed.
+        jobs ? null : h('button', { type: 'button', class: 'btn', onclick: () => {
+          done();
+          apply(d => M.mark(d, t.id, 'x:' + id, 'buy'));
+          toast(`${r.name} is under To buy there, at the foot of the list.`, { label: 'Undo', run: () => apply(d => M.mark(d, t.id, 'x:' + id, pick || 0)) });
+        } }, 'Buy it there'),
         jobs ? null : h('label', { class: 'field' }, h('span', {}, 'Which bag, this trip'),
           h('select', {
             onpointerdown: () => { keyed = false; },

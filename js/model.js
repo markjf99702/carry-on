@@ -18,8 +18,9 @@
 //   set     condition key → { v: true | false | null, t }. Occasions picked, and anything the person turned on
 //           or off by hand over what the weather and place say (null puts it back to automatic).
 //   marks   'p:ID' packed (1), 'r:ID' back in the bag coming home (1) or not coming back (2), 'x:ID' 'skip' or
-//           'add' for this trip only, 'b:ID' the bag it goes in this trip, 'l:ID' packed last this trip (true) or
-//           with the rest (false) over what My list says → { v, t }
+//           'add' for this trip only, or 'buy' (bought there instead of packed), 'b:ID' the bag it goes in this trip,
+//           'l:ID' packed last this trip (true) or with the rest (false) over what My list says → { v, t }. A copy of
+//           Carry On from before 'buy' reads it as neither, so the thing is on its list as it would be anyway.
 //   extras  things added for this trip only: { id: { name, bag, t, del? } }
 //   wx      the weather looked up for it (weather.js), the newest lookup wins. for: the place it was looked up
 //           for, so a lookup of a trip's old place, landing from another device, doesn't count for the new one.

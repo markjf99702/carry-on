@@ -651,6 +651,33 @@ test('skipping, adding, moving, extras, and what shows coming home', () => {
   assert.ok(p.groups.flatMap(g => g.rows).find(r => r.name === 'Umbrella').packedOnly);
 });
 
+test('bought there: on a list of its own that isn’t packing', () => {
+  let doc = M.setPref(starter(), 'home', 'US');
+  doc = trip(doc, { place: { name: 'Denver', cc: 'US' } });
+  doc = M.putExtra(doc, 't1', { id: 'e1', name: 'Flowers for the hosts', bag: 's-daybag' });
+  const before = plan(doc, doc.trips.t1);
+  doc = M.mark(doc, 't1', 'x:s-liquids-shampoo-and-conditioner', 'buy');
+  doc = M.mark(doc, 't1', 'x:e1', 'buy');
+  let p = plan(doc, doc.trips.t1);
+  assert.deepEqual(p.buy.map(x => [x.name, x.bag.name, !!x.extra]), [['Shampoo and conditioner', 'Liquids bag', false], ['Flowers for the hosts', 'Day bag', true]]);
+  assert.equal(p.total, before.total - 2, 'not counted as packing');
+  assert.ok(!allNames(p).includes('Shampoo and conditioner') && !allNames(p).includes('Flowers for the hosts'));
+  assert.ok(!p.left.some(l => l.item.name === 'Shampoo and conditioner'), 'nor left off');
+  // Coming home it isn't listed, unless it was packed after all.
+  doc = M.mark(doc, 't1', 'p:s-clothes-shoes', 1);
+  assert.deepEqual(allNames(plan(doc, doc.trips.t1, 'back')), ['Shoes']);
+  assert.deepEqual(plan(doc, doc.trips.t1, 'back').buy, []);
+  doc = M.mark(doc, 't1', 'p:e1', 1);
+  assert.deepEqual(allNames(plan(doc, doc.trips.t1, 'back')).sort(), ['Flowers for the hosts', 'Shoes']);
+  // Packed after all: back on the list.
+  doc = M.mark(doc, 't1', 'x:s-liquids-shampoo-and-conditioner', 0);
+  p = plan(doc, doc.trips.t1);
+  assert.ok(names(p, 'Liquids bag').includes('Shampoo and conditioner'));
+  assert.deepEqual(p.buy.map(x => x.name), ['Flowers for the hosts']);
+  // A copy of Carry On from before reads 'buy' as neither skip nor add, so the thing is on its list as usual.
+  assert.equal(M.cleanTrip(doc.trips.t1).marks['x:e1'].v, 'buy');
+});
+
 test('coming home lists what went, though it was deleted from My list since, alone or with its bag', () => {
   let doc = trip(starter(), { travel: 'drive' });
   const rowsOf = p => p.groups.flatMap(g => g.rows.map(r => `${g.bag.name}: ${r.name}${r.deleted ? ' (deleted)' : ''}`));

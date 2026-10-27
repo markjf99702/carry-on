@@ -2207,6 +2207,44 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   await ctx.close();
 }
 
+// ================= Buy it there =================
+// From a thing's ⋯, Buy it there moves it to a short list at the foot of the trip that isn't packing; Pack it puts it
+// back.
+{
+  const { ctx, page } = await phone();
+  await page.click('text=Start with a starter list');
+  await planTrip(page, { where: 'Lisb', from: 3, to: 7 });
+  const said = () => page.locator('#toast span').innerText();
+  const total = +(await page.locator('.progress p').innerText()).match(/of (\d+)/)[1];
+  await more(page, 'Sunscreen');
+  await page.click('#sheet >> text=Buy it there');
+  assert.equal(await said(), 'Sunscreen is under To buy there, at the foot of the list.');
+  assert.equal(await row(page, 'Sunscreen').count(), 0, 'not in its bag');
+  const buy = page.locator('main .aside', { has: page.locator('h2', { hasText: 'To buy there' }) });
+  assert.deepEqual(await buy.locator('.name').allInnerTexts(), ['Sunscreen']);
+  assert.match(await page.locator('.progress p').innerText(), new RegExp(`^0 of ${total - 1} packed`), 'not counted as packing');
+  // At the foot: after the jobs, before Left off.
+  assert.ok(await page.evaluate(() => { const b = [...document.querySelectorAll('main .aside')][0], j = document.querySelector('main .bag.jobs'), l = document.querySelector('main .left'); return !!(j.compareDocumentPosition(b) & 4) && !!(b.compareDocumentPosition(l) & 4); }));
+  await toastUndo(page);
+  assert.equal(await buy.count(), 0, 'Undo puts it back');
+  await more(page, 'Sunscreen');
+  await page.click('#sheet >> text=Buy it there');
+  await wait(500);
+  await buy.getByRole('button', { name: 'Pack it after all, Sunscreen' }).click();
+  assert.equal(await said(), 'Sunscreen is on the list, in the Liquids bag.');
+  assert.equal(await row(page, 'Sunscreen').count(), 1);
+  assert.equal(await buy.count(), 0);
+  // Something just for this trip can be bought there too.
+  await page.click('text=Add something for this trip');
+  await page.fill('#sheet input[type=text]', 'Flowers for the hosts');
+  await page.click('#sheet >> text=Add it');
+  await more(page, 'Flowers for the hosts');
+  await page.click('#sheet >> text=Buy it there');
+  assert.deepEqual(await buy.locator('.name').allInnerTexts(), ['Flowers for the hosts']);
+  await fits(page, 'the trip with things to buy there');
+  await ctx.close();
+}
+
 // ================= From the keyboard =================
 {
   const { ctx, page } = await phone();
