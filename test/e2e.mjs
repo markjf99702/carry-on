@@ -1720,6 +1720,21 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   await page.click('.sheet .btn.primary');
   assert.equal(await said('Suit'), 'Suit Only for 👔 dressing up');
   assert.deepEqual(await page.evaluate(() => window.carryOn.store.doc.items['i-suit'].when), ['dressy']);
+  // A job that comes only for an occasion is a job, not a thing.
+  await page.evaluate(() => {
+    const { store, M } = window.carryOn;
+    store.apply(d => {
+      let next = M.putTag(d, { id: 'o-gala', name: 'Gala', icon: '🎭' });
+      next = M.putItem(next, { id: 'i-tux', name: 'Tuxedo', bag: 's-clothes', when: ['o-gala'] });
+      return M.putItem(next, { id: 'i-tailor', name: 'Pick up the tux', bag: 's-leave', when: ['o-gala'] });
+    });
+  });
+  await page.reload();
+  await page.click('[data-key="occ:o-gala"]');
+  await until(() => sheetOpen(page), 'the occasion');
+  await page.click('.sheet .btn.danger-quiet');
+  assert.equal(await page.locator('.sheet .btn.danger-quiet').innerText(), 'Delete it? 1 thing and 1 job only come for it');
+  await closeSheet(page);
   await ctx.close();
 }
 

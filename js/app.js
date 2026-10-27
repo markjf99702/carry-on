@@ -1611,12 +1611,13 @@ function bagEditor(b, { then = null } = {}) {
 }
 
 // What Delete asks on its first tap: what comes only for the occasion, which stays home once it's gone. "Delete it?
-// 2 things and the Golf bag only come for it"
+// 2 things and the Golf bag only come for it", "1 job" for one in a list of jobs.
 function occasionAsk(g) {
   const only = R.onlyFor(doc(), g.id);
   if (!only.length) return 'Tap again to delete';
-  const things = only.filter(x => x.item).length, bs = only.filter(x => x.bag).map(x => x.bag), jobs = bs.filter(b => b.kind !== 'bag').length;
-  const parts = [[things, 'thing'], ...(bs.length > 2 ? [[bs.length - jobs, 'bag'], [jobs, 'list of jobs', 'lists of jobs']] : [])]
+  const its = only.filter(x => x.item), things = its.filter(x => doc().bags[x.item.bag]?.kind === 'bag').length;
+  const bs = only.filter(x => x.bag).map(x => x.bag), jobs = bs.filter(b => b.kind !== 'bag').length;
+  const parts = [[things, 'thing'], [its.length - things, 'job'], ...(bs.length > 2 ? [[bs.length - jobs, 'bag'], [jobs, 'list of jobs', 'lists of jobs']] : [])]
     .filter(([n]) => n).map(([n, one, many]) => plural(n, one, many));
   if (bs.length <= 2) parts.push(...bs.map(theBag));
   return `Delete it? ${cap(andList(parts))} only ${only.length === 1 ? 'comes' : 'come'} for it`;
