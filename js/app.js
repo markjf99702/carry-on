@@ -1243,14 +1243,16 @@ function tripForm(t, again = false) {
   // before coming back.
   const stopsBox = h('div', { class: 'stops' });
   const nightRange = x => { x.min = st.start ? D.add(st.start, 1) : ''; x.max = st.end ? D.add(st.end, -1) : ''; };
-  // Editing, when Leave and Back both move (the trip pushed back a week, or a week later and a night longer), the
-  // stops move by as many days as Leave did, as going again does: the first place keeps its nights and the last
-  // gains or loses any. When only one moves (leaving a day early, staying longer), or moving would put a stop
-  // outside the new dates (a much shorter trip), they keep their nights.
+  // Editing, when Leave and Back both move later or both earlier (the trip pushed back a week, or a week later and a
+  // night longer), the stops move by as many days as Leave did, as going again does: the first place keeps its
+  // nights and the last gains or loses any. When only one moves (leaving a day early, staying longer), they move in
+  // opposite directions (leaving earlier and back later, or later and sooner), or moving would put a stop outside
+  // the new dates (a much shorter trip), they keep their nights: the first place gets or loses the nights at the
+  // start and the last place those at the end.
   const movedBy = () => {
     if (!dr.dates0 || !D.isDay(st.start) || !D.isDay(st.end)) return 0;
-    const by = D.num(st.start) - D.num(dr.dates0[0]);
-    if (!by || D.num(st.end) === D.num(dr.dates0[1])) return 0;
+    const by = D.num(st.start) - D.num(dr.dates0[0]), back = D.num(st.end) - D.num(dr.dates0[1]);
+    if (Math.sign(by) !== Math.sign(back)) return 0;
     const inside = s => { const at = D.add(s.was, by); return at > st.start && at < st.end; };
     return dr.stops.every(s => !s.moves || inside(s)) ? by : 0;
   };
