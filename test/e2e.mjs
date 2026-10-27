@@ -1028,6 +1028,14 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await howMany.selectOption({ label: 'Two for each day (up to 10)' });
   await page.click('.sheet .btn.primary');
   assert.equal(await page.locator('.edit-row', { hasText: 'Socks' }).locator('.name').innerText(), 'Socks · two a day');
+  // A count over 6, as a pasted "Hangers x10" has, shows in How many and stays when something else is changed.
+  await page.evaluate(() => { const { store, M, render } = window.carryOn; store.apply(d => M.putItem(d, { id: 'i-hangers', name: 'Hangers', bag: 's-clothes', qty: 10 })); render(); });
+  await page.locator('.edit-row', { hasText: 'Hangers' }).click();
+  assert.equal(await howMany.evaluate(s => s.options[s.selectedIndex].text), '10');
+  await page.fill('.sheet input[type="text"] >> nth=0', 'Travel hangers');
+  await page.click('.sheet .btn.primary');
+  assert.equal(await page.locator('.edit-row', { hasText: 'Travel hangers' }).locator('.name').innerText(), 'Travel hangers ×10');
+  await page.evaluate(() => { const { store, M, render } = window.carryOn; store.apply(d => M.removeItem(d, 'i-hangers')); render(); });
   await page.goto(trip);
   assert.equal(await row(page, 'Socks').locator('.name').innerText(), 'Socks ×10');
   await page.goto(base + '#/settings');

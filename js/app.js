@@ -1404,7 +1404,8 @@ function itemEditor(x, { when: when0 = [], then = null } = {}) {
       h('div', { class: 'two' },
         h('label', { class: 'field' }, h('span', {}, 'Bag'), bag = h('select', {}, bagsAll.map(b => h('option', { value: b.id, selected: b.id === bag0 }, `${b.icon} ${b.name}`)))),
         h('label', { class: 'field' }, h('span', {}, 'How many'), qty = h('select', {},
-          [1, 2, 3, 4, 5, 6].map(n => h('option', { value: n, selected: x?.per !== 'day' && (x?.qty || 1) === n }, n === 1 ? 'Just one' : String(n))),
+          // Just one to 6, and more where a pasted list ("Socks x10") or a link had it, so Save keeps it.
+          [...new Set([1, 2, 3, 4, 5, 6, x?.per !== 'day' ? x?.qty || 1 : 1])].map(n => h('option', { value: n, selected: x?.per !== 'day' && (x?.qty || 1) === n }, n === 1 ? 'Just one' : String(n))),
           // One, two or three for each day, and more where a list from a link had it.
           [...new Set([1, 2, 3, x?.per === 'day' ? x.qty || 1 : 1])].map(n => h('option', { value: n === 1 ? 'day' : 'day' + n, selected: x?.per === 'day' && (x.qty || 1) === n },
             `${cap(perDay(n))} for each day (up to ${R.laundry(doc()) * n})`))))),
