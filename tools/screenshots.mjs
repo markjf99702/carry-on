@@ -49,7 +49,7 @@ async function setUp(page) {
     await page.fill('#start', from); await page.fill('#end', to);
     for (const c of chips) await page.locator('.form .chip', { hasText: new RegExp(` ${c}$`) }).click();
     await page.click('text=Make my list');
-    await page.waitForSelector('.wx-days li');
+    await page.waitForSelector('.wx-days:not(.wait) li');
   };
   await plan('Reyk', '2026-12-11', '2026-12-14');
   await plan('Lisb', '2026-10-29', '2026-11-02', ['Work']);

@@ -332,8 +332,10 @@ function weatherStrip(t, c) {
     // A lookup that failed. Offline, that's the reason whatever it said. With days to show it's a quiet line: the
     // days are still there, and it isn't something to fix.
     err ? h('p', { class: days.length ? 'muted small' : 'err small' }, navigator.onLine === false ? 'No connection right now. The forecast comes in when you’re back online.' : err, ' ', days.length ? 'Showing the last lookup.' : 'You can set the weather by hand under Change.') : null,
-    // While the first lookup is on its way, the days' room is kept, so they don't push everything down when they come.
-    !days.length && busy ? h('ol', { class: 'wx-days wait', 'aria-hidden': 'true' }) : null,
+    // While the first lookup is on its way, the days' room is kept, so they don't push everything down when they come,
+    // with a faint tile for each day (as far as the forecast reaches) waiting for its numbers.
+    !days.length && busy ? h('ol', { class: 'wx-days wait', 'aria-hidden': 'true' }, D.range(t.start, t.end).slice(0, W.AHEAD + 1).map(k => h('li', { class: 'typ' },
+      h('span', { class: 'wd' }, D.weekday(k)), h('span', { class: 'wi' }, '\u00a0'), h('span', { class: 'hi' }, '…'), h('span', { class: 'lo' }, '…'), h('span', { class: 'rp' })))) : null,
     days.length ? h('ol', { class: 'wx-days', 'aria-labelledby': 'wxHead' }, days.map(d => h('li', { class: d.typ ? 'typ' : '' },
       h('span', { class: 'sr-only' }, said(d)),
       h('span', { class: 'wd', 'aria-hidden': 'true' }, D.weekday(d.d)),

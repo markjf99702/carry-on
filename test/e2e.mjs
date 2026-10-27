@@ -98,11 +98,11 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   // Each screen names the page, and a new screen puts the focus on its heading, so a screen reader says where it is.
   assert.equal(await page.title(), 'Lisbon · Carry On');
   assert.deepEqual(await page.evaluate(() => [document.activeElement.tagName, document.activeElement.textContent]), ['H1', 'Lisbon']);
-  await page.waitForSelector('.wx-days li');
-  assert.equal(await page.locator('.wx-days li').count(), 5, 'five days of forecast');
+  await page.waitForSelector('.wx-days:not(.wait) li');
+  assert.equal(await page.locator('.wx-days:not(.wait) li').count(), 5, 'five days of forecast');
   assert.equal(await page.locator('.wx-head h2').innerText(), 'FORECAST');
   // A screen reader hears each day as a sentence, and the short words and numbers shown are hidden from it.
-  const wet = page.locator('.wx-days li').nth(1);
+  const wet = page.locator('.wx-days:not(.wait) li').nth(1);
   assert.match(await wet.locator('.sr-only').textContent(), /^[A-Z][a-z]+day: rain, high \d+°, low \d+°, 70% chance of rain$/);
   assert.equal(await wet.locator('[aria-hidden="true"]').count(), 5);
   assert.match(await page.locator('.wx').innerText(), /Blue % is the chance of rain\./);
@@ -258,9 +258,9 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
 
   // ---------- a trip too far off for a forecast: typical weather ----------
   await planTrip(page, { where: 'Reyk', from: 40, to: 43, by: 'Flying' });
-  await page.waitForSelector('.wx-days li.typ');
+  await page.waitForSelector('.wx-days:not(.wait) li.typ');
   assert.equal(await page.locator('.wx-head h2').innerText(), 'TYPICAL WEATHER');
-  assert.match(await page.locator('.wx-days li .sr-only').first().textContent(), /^[A-Z][a-z]+day, typical for these dates: snowy, high \d+°, low -?\d+°/);
+  assert.match(await page.locator('.wx-days:not(.wait) li .sr-only').first().textContent(), /^[A-Z][a-z]+day, typical for these dates: snowy, high \d+°, low -?\d+°/);
   assert.match(await page.locator('.wx').innerText(), /Blue % is how many recent years had rain that day\./);
   assert.equal(calls.filter(c => c.startsWith('archive')).length, 3, 'three past years');
   names = await rowsText(page);
@@ -314,7 +314,7 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await page.locator('.seg button', { hasText: '°C' }).click();
   await fits(page, 'settings');
   await page.goto(base + '#/trip/' + await page.evaluate(() => Object.values(window.carryOn.store.doc.trips).find(t => t.place?.cc === 'PT').id));
-  assert.match(await page.locator('.wx-days').innerText(), /2[6-8]°/, 'Celsius now');
+  assert.match(await page.locator('.wx-days:not(.wait)').innerText(), /2[6-8]°/, 'Celsius now');
 
   // Works offline once it has been opened (with the service worker this time).
   const ctx2 = await browser.newContext({ viewport: { width: 390, height: 844 } });
@@ -559,10 +559,15 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await planTrip(page, { where: 'Lisb', from: 3, to: 7 });
   assert.match(await page.locator('.wx-head').innerText(), /Looking it up/);
   assert.ok((await page.locator('.wx-days.wait').boundingBox()).height >= 120, 'room kept for the days');
+  // Filled with a tile for each day, by its weekday, while the numbers are on their way.
+  const firstDay = await page.evaluate(() => window.carryOn.D.weekday(window.carryOn.D.add(window.carryOn.D.today(), 3)).toUpperCase());
+  assert.equal(await page.locator('.wx-days.wait li').count(), 5);
+  assert.deepEqual(await page.locator('.wx-days.wait li').first().locator('.wd, .hi, .lo').allInnerTexts(), [firstDay, '…', '…']);
+  assert.equal(await page.locator('.wx-days.wait').getAttribute('aria-hidden'), 'true');
   await row(page, 'Prescriptions').evaluate(el => el.scrollIntoView({ block: 'center' }));
   const atMiddle = () => page.evaluate(() => document.elementFromPoint(innerWidth / 2, innerHeight / 2)?.closest('li.row')?.querySelector('.name')?.textContent);
   const before = [await atMiddle(), (await row(page, 'Prescriptions').boundingBox()).y];
-  await page.waitForSelector('.wx-days li');
+  await page.waitForSelector('.wx-days:not(.wait) li');
   assert.ok((await rowsText(page)).includes('Sunscreen'), 'the forecast brought things above');
   const after = [await atMiddle(), (await row(page, 'Prescriptions').boundingBox()).y];
   assert.equal(after[0], before[0], 'the same row in the middle of the screen');
@@ -589,9 +594,9 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   // days the chance is of snow.
   await page.click('header.bar a.brand');
   await planTrip(page, { where: 'Reyk', from: 2, to: 11 });
-  await page.waitForSelector('.wx-days li');
+  await page.waitForSelector('.wx-days:not(.wait) li');
   await fits(page, 'a trip with ten days of weather');
-  assert.match(await page.locator('.wx-days li .sr-only').first().textContent(), /: snow, high \d+°, low -?\d+°, 40% chance of snow$/);
+  assert.match(await page.locator('.wx-days:not(.wait) li .sr-only').first().textContent(), /: snow, high \d+°, low -?\d+°, 40% chance of snow$/);
   assert.match(await page.locator('.wx').innerText(), /Blue % is the chance of snow\./);
   await ctx.close();
 }
@@ -618,8 +623,8 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   assert.equal(await line.first().innerText(), 'No connection right now. The forecast comes in when you’re back online. You can set the weather by hand under Change.');
   assert.match(await line.first().getAttribute('class'), /\berr\b/, 'red, with nothing to show');
   await offline(false);
-  await page.waitForSelector('.wx-days li');
-  assert.equal(await page.locator('.wx-days li').count(), 5, 'the forecast came in by itself');
+  await page.waitForSelector('.wx-days:not(.wait) li');
+  assert.equal(await page.locator('.wx-days:not(.wait) li').count(), 5, 'the forecast came in by itself');
   assert.equal(await page.locator('.wx .err').count(), 0);
   // Offline again with the days kept: a lookup that fails says so quietly under them.
   await offline(true);
@@ -628,7 +633,7 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   const kept = page.locator('.wx p', { hasText: 'No connection' });
   assert.equal(await kept.innerText(), 'No connection right now. The forecast comes in when you’re back online. Showing the last lookup.');
   assert.doesNotMatch(await kept.getAttribute('class'), /\berr\b/, 'not red, with days to show');
-  assert.equal(await page.locator('.wx-days li').count(), 5);
+  assert.equal(await page.locator('.wx-days:not(.wait) li').count(), 5);
   await offline(false);
   await until(async () => !/No connection/.test(await page.locator('.wx').innerText()), 'the line to go once back online');
   // Its weather cleared elsewhere (its dates changed on another phone, say) a moment after a lookup here: it's
@@ -636,8 +641,8 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await page.click('[aria-label="Look up the weather again"]');
   await until(async () => /Updated just now/.test(await page.locator('.wx-head').innerText()), 'a lookup here');
   await page.evaluate(id => { const { store, M, render } = window.carryOn; store.apply(d => M.clearWx(d, id)); render(); }, id);
-  assert.equal(await page.locator('.wx-days li').count(), 0);
-  await page.waitForSelector('.wx-days li', { timeout: 5000 });
+  assert.equal(await page.locator('.wx-days:not(.wait) li').count(), 0);
+  await page.waitForSelector('.wx-days:not(.wait) li', { timeout: 5000 });
   await ctx.close();
 }
 
@@ -1295,7 +1300,7 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   const { ctx, page } = await phone({ mobile: true });
   await page.click('text=Start with a starter list');
   await planTrip(page, { where: 'Lisb', from: 3, to: 7 });
-  await page.waitForSelector('.wx-days li');
+  await page.waitForSelector('.wx-days:not(.wait) li');
   // A finger dragged up the screen, as Chrome on a phone gets it.
   const cdp = await ctx.newCDPSession(page);
   const drag = async (y0, y1) => {
@@ -1459,7 +1464,7 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   const { ctx, page } = await phone();
   await page.click('text=Start with a starter list');
   await planTrip(page, { where: 'Lisb', from: 3, to: 7 });
-  await page.waitForSelector('.wx-days li');
+  await page.waitForSelector('.wx-days:not(.wait) li');
   await page.click('.left-head');
   const under = (sel, w, h) => page.evaluate(([sel, w, h]) => [...document.querySelectorAll(sel)].filter(el => el.getClientRects().length)
     .map(el => { const r = el.getBoundingClientRect(); return [el.getAttribute('aria-label') || el.textContent.trim(), Math.round(r.width), Math.round(r.height)]; })
