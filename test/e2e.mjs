@@ -2236,6 +2236,22 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   assert.equal(await said(), 'Sunscreen is on the list, in the Liquids bag.');
   assert.equal(await row(page, 'Sunscreen').count(), 1);
   assert.equal(await buy.count(), 0);
+  // Something the trip doesn't call for, packed anyway, then to be bought there: Pack it packs it, not Left off.
+  if ((await page.locator('.left-head').getAttribute('aria-expanded')) !== 'true') await page.click('.left-head');
+  await page.locator('.left .row', { hasText: 'Bug spray' }).locator('button', { hasText: 'Pack it' }).click();
+  await more(page, 'Bug spray');
+  await page.click('#sheet >> text=Buy it there');
+  assert.deepEqual(await buy.locator('.name').allInnerTexts(), ['Bug spray']);
+  await wait(500);
+  await buy.getByRole('button', { name: 'Pack it after all, Bug spray' }).click();
+  assert.match(await said(), /^Bug spray is on the list, in /);
+  assert.equal(await row(page, 'Bug spray').count(), 1);
+  assert.equal(await page.locator('.left .row', { hasText: 'Bug spray' }).count(), 0);
+  await toastUndo(page);
+  assert.deepEqual(await buy.locator('.name').allInnerTexts(), ['Bug spray'], 'Undo: to be bought there again');
+  await wait(500);
+  await buy.getByRole('button', { name: 'Pack it after all, Bug spray' }).click();
+  assert.equal(await buy.count(), 0);
   // Something just for this trip can be bought there too.
   await page.click('text=Add something for this trip');
   await page.fill('#sheet input[type=text]', 'Flowers for the hosts');

@@ -642,7 +642,12 @@ function buyThere(t, list) {
     h('ul', { class: 'rows' }, list.map(x => h('li', { class: 'row left-row' },
       h('div', { class: 'what' }, h('span', { class: 'name' }, x.name)),
       h('button', { type: 'button', class: 'btn small', 'data-key': 'buy:' + x.id, 'aria-label': `Pack it after all, ${x.name}`, onclick: () => {
-        apply(d => M.mark(d, t.id, 'x:' + x.id, 0));
+        // Back on the list: as the trip has it, or brought anyway where it wouldn't bring it now (an umbrella brought
+        // anyway before it was to be bought, sunscreen once the forecast has cooled).
+        apply(d => {
+          const n = M.mark(d, t.id, 'x:' + x.id, 0);
+          return goingGroups(R.plan(n, n.trips[t.id], 'go')).some(g => g.rows.some(r => r.id === x.id)) ? n : M.mark(d, t.id, 'x:' + x.id, 'add');
+        });
         saidWhere(t, x.id, x.name, 'go', () => apply(d => M.mark(d, t.id, 'x:' + x.id, 'buy')));
       } }, 'Pack it')))));
 }
