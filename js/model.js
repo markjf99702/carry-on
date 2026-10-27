@@ -16,7 +16,8 @@
 //           'add' for this trip only, 'b:ID' the bag it goes in this trip → { v, t }
 //   extras  things added for this trip only: { id: { name, bag, t, del? } }
 //   wx      the weather looked up for it (weather.js), the newest lookup wins. for: the place it was looked up
-//           for, so a lookup of a trip's old place, landing from another device, doesn't count for the new one
+//           for, so a lookup of a trip's old place, landing from another device, doesn't count for the new one.
+//           fcAt: when a lookup couldn't update the forecast and kept the last one's days, when that one was from
 //   stops   the places a trip goes on to after its first one (place): { id: { place, from, t, del?, wx? } }, from
 //           the night you get there. Each has its own wx, its place's weather for the trip's days. A trip with one
 //           place has none. A copy of Carry On from before stops drops them when it reads a trip, so they merge
@@ -129,12 +130,12 @@ function cleanDay(d) {
   }
   return out;
 }
-// for: the place it was looked up for, "lat,lon" (weather.js placeKey).
+// for: the place it was looked up for, "lat,lon" (weather.js placeKey). fcAt: when a kept forecast is from.
 export function cleanWx(w) {
   if (!w || typeof w !== 'object' || !Array.isArray(w.days)) return null;
   const days = w.days.map(cleanDay).filter(Boolean).slice(0, 120);
   const where = typeof w.for === 'string' && w.for.length <= 30 && /^-?\d+(\.\d+)?,-?\d+(\.\d+)?$/.test(w.for) ? w.for : '';
-  return { at: tOk(w.at), ...(where ? { for: where } : {}), days, ...(w.err ? { err: str(w.err, 140) } : {}) };
+  return { at: tOk(w.at), ...(where ? { for: where } : {}), days, ...(w.err ? { err: str(w.err, 140) } : {}), ...(tOk(w.fcAt) ? { fcAt: tOk(w.fcAt) } : {}) };
 }
 
 const cleanMark = m => {

@@ -408,6 +408,76 @@ test('a lookup that half fails says so, fills its gaps with typical weather, and
   } finally { stub.restore(); }
 });
 
+test('a forecast that can’t be updated keeps the last one for up to a day, and says when it’s from', async () => {
+  const now = Date.parse('2026-11-02T12:00:00Z'), today = '2026-11-02', soon = 31 * 60e3;
+  const time = t => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  // The last lookup: the forecast to its edge (17 November), warm, and typical weather after it.
+  const last = (at, to = '2026-11-17') => ({
+    at, for: placeKey(PLACE),
+    days: [...range('2026-11-12', to).map(d => day(d, 23, 14, { uv: 5, code: 1 })), ...range(add(to, 1), '2026-11-22').map(d => ({ d, typ: 1, hi: 15, lo: 5, mm: 0, wet: 0, sn: 0, rad: 12 }))],
+  });
+  const busy = kind => (kind === 'forecast' ? { status: 503, reason: 'Busy' } : {});
+  const look = async (prev, at = now) => {
+    const stub = weatherStub(at, busy);
+    try { return { wx: await tripWeather(PLACE, '2026-11-12', '2026-11-22', today, { now: at, prev }), calls: stub.calls }; } finally { stub.restore(); }
+  };
+  // From two hours ago: its forecast days stay, and only the days past the forecast are looked up in the archive.
+  const was = now - 2 * 3600e3;
+  let { wx, calls } = await look(last(was));
+  assert.deepEqual(wx.days.map(d => [d.d, d.hi, !!d.typ]), [...range('2026-11-12', '2026-11-17').map(d => [d, 23, false]), ...range('2026-11-18', '2026-11-22').map(d => [d, 15, true])]);
+  assert.equal(wx.err, `Couldn’t update the forecast; this one is from ${time(was)}.`);
+  assert.equal(wx.fcAt, was);
+  assert.ok(!calls.some(c => c.startsWith('archive 2025-11-12')), calls.join(', '));
+  assert.equal(summarize(wx).hot, false, 'the kept forecast counts as a forecast');
+  assert.equal(M.cleanWx(wx).fcAt, was, 'the saved copy keeps when it’s from');
+  assert.equal(stale(wx, '2026-11-12', '2026-11-22', today, now + soon, PLACE), true, 'and it tries again after half an hour');
+  const kept = wx;
+  // A day the last forecast didn't reach shows typical weather, and the note says so.
+  ({ wx } = await look(last(was, '2026-11-15')));
+  assert.deepEqual(wx.days.filter(d => !d.typ).map(d => d.d), range('2026-11-12', '2026-11-15'));
+  assert.equal(wx.err, `Couldn’t update the forecast; this one is from ${time(was)}. Days it didn’t reach show typical weather.`);
+  // From the day before, it says so.
+  ({ wx } = await look(last(now - 13 * 3600e3)));
+  assert.match(wx.err, /^Couldn’t update the forecast; this one is from yesterday, /);
+  // A day old or more, or none at all, or another place's: typical weather, as before.
+  for (const prev of [last(now - 25 * 3600e3), null, { ...last(was), for: '1,1' }]) {
+    ({ wx } = await look(prev));
+    assert.ok(wx.days.every(d => d.typ));
+    assert.equal(wx.err, 'Couldn’t get the forecast, so these days show typical weather.');
+    assert.equal(wx.fcAt, undefined);
+  }
+  // Failing again, it's kept only as long as a day from when the forecast came, not from the last try.
+  ({ wx } = await look(kept, was + 20 * 3600e3));
+  assert.equal(wx.fcAt, was);
+  ({ wx } = await look(kept, was + 25 * 3600e3));
+  assert.ok(wx.days.every(d => d.typ), 'a day after it came, it goes');
+  // One that a copy of Carry On from before this saved without saying when it's from isn't kept again.
+  const { fcAt, ...stripped } = kept;
+  ({ wx } = await look(stripped, now + 3600e3));
+  assert.ok(wx.days.every(d => d.typ));
+  // A trip the forecast reaches all of, when the service has had too many lookups today: its days are all kept, and
+  // nothing is asked of the archive.
+  let stub = weatherStub(now, kind => (kind === 'forecast' ? { status: 429, reason: 'Daily API request limit exceeded. Please try again tomorrow.' } : {}));
+  try {
+    wx = await tripWeather(PLACE, '2026-11-12', '2026-11-15', today, { now, prev: last(was) });
+    assert.deepEqual(wx.days.map(d => [d.d, d.hi, !!d.typ]), range('2026-11-12', '2026-11-15').map(d => [d, 23, false]));
+    assert.equal(wx.err, `Couldn’t update the forecast; this one is from ${time(was)}.`);
+    assert.deepEqual(stub.calls, ['forecast 2026-11-12 2026-11-15']);
+  } finally { stub.restore(); }
+  // No connection at all: nothing new came back, so the lookup fails as a whole and the last one stays as it was.
+  stub = weatherStub(now, () => new TypeError('Failed to fetch'));
+  try {
+    await assert.rejects(tripWeather(PLACE, '2026-11-12', '2026-11-22', today, { now, prev: last(was) }), { message: 'Couldn’t reach the weather service.' });
+  } finally { stub.restore(); }
+  // A forecast that comes back takes over, with no note.
+  stub = weatherStub(now);
+  try {
+    wx = await tripWeather(PLACE, '2026-11-12', '2026-11-22', today, { now, prev: kept });
+    assert.equal(wx.err, undefined);
+    assert.equal(wx.fcAt, undefined);
+  } finally { stub.restore(); }
+});
+
 test('Open-Meteo’s out-of-range answer reads as plain words', async () => {
   const now = Date.parse('2026-10-26T20:00:00Z');
   const stub = weatherStub(now, kind => (kind === 'forecast' ? { status: 400, reason: "Parameter 'end_date' is out of allowed range from 2026-07-25 to 2026-11-10" } : { status: 500, reason: 'Down' }));

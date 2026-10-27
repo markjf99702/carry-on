@@ -117,13 +117,28 @@ export const SHORT = {
   forecast: 'Couldn’t get the forecast, so these days show typical weather.',
   gaps: 'The forecast left out some days, so they show typical weather.',
   years: 'Couldn’t get every past year, so typical weather comes from fewer of them.',
+  // The last forecast kept, from when it was: "this one is from 9:40 AM", or "from yesterday, 9:40 PM".
+  kept: (at, now) => {
+    const day = t => new Date(t).toDateString(), time = new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    return `Couldn’t update the forecast; this one is from ${day(at) === day(now) ? '' : 'yesterday, '}${time}.`;
+  },
+  keptGaps: ' Days it didn’t reach show typical weather.',
 };
+const KEPT = /^Couldn’t update the forecast;/;
+// A forecast is kept for a day at most: past that, typical weather is closer.
+const KEEP_MS = 86400e3;
+// When a saved lookup's forecast is from: when it was looked up, or for one that kept an earlier forecast, that
+// one's time. One that kept an earlier forecast without saying when (a copy of Carry On from before forecasts were
+// kept saved it) is too old to keep again.
+const forecastAt = wx => wx.fcAt || (KEPT.test(wx.err || '') ? 0 : wx.at || 0);
 
 // The weather for each day of a trip: the forecast for the days it reaches, and for the rest the average of
 // the same days in the last three years. Days long gone get nothing (a past trip keeps what it had).
 // Days the forecast should have had but didn't (it failed, or left a day out) get typical weather instead, and a
-// lookup that didn't all come back says so in err.
-export async function tripWeather(place, start, end, today, { signal, now = Date.now() } = {}) {
+// lookup that didn't all come back says so in err. When the forecast fails, the last lookup (prev) keeps the days its
+// forecast had, if that forecast is less than a day old, and fcAt says when it's from. With no connection and nothing
+// new to go with them, it fails as a whole.
+export async function tripWeather(place, start, end, today, { signal, now = Date.now(), prev = null } = {}) {
   if (!place || place.lat === undefined) throw new Error('This trip has no place to look up.');
   const days = range(start, end);
   const last = forecastEdge(today, now), first = add(today, -60);
@@ -148,13 +163,25 @@ export async function tripWeather(place, start, end, today, { signal, now = Date
   });
   if (ty.length) Object.assign(out, await typical(place, ty, today, signal, errors));
   await forecast;
+  // The forecast failed: the last one's days, while it's fresh enough.
+  let kept = 0;
+  const was = fcErr && prev && forPlace(prev, place) ? forecastAt(prev) : 0;
+  if (was && now - was < KEEP_MS) {
+    const old = new Map((prev.days || []).filter(d => !d.typ).map(d => [d.d, d]));
+    for (const k of fc) if (!out[k] && old.has(k)) { out[k] = old.get(k); kept++; }
+  }
   const gaps = fc.filter(k => !out[k]);
   if (gaps.length && !signal?.aborted) Object.assign(out, await typical(place, gaps, today, signal, errors));
   if (signal?.aborted) throw new DOMException('Stopped', 'AbortError');
   const list = days.map(k => out[k]).filter(Boolean);
-  if (!list.length) throw fcErr || errors[0] || new Error('No weather came back for those days.');
+  // Nothing new, and the weather service couldn't be reached at all (no connection, say): the last lookup stays as it
+  // is, and the page says why. One that answered with an error (busy, or a day's lookups used up) keeps its days.
+  if (!list.length || (list.length === kept && !fcErr.status)) throw fcErr || errors[0] || new Error('No weather came back for those days.');
   const wx = { at: now, for: placeKey(place), days: list };
-  const err = days.some(k => k >= first && !out[k]) ? SHORT.missing : fcErr ? SHORT.forecast : gaps.length ? SHORT.gaps : errors.length ? SHORT.years : '';
+  if (kept) wx.fcAt = was;
+  const err = days.some(k => k >= first && !out[k]) ? SHORT.missing
+    : kept ? SHORT.kept(was, now) + (gaps.length ? SHORT.keptGaps : '')
+      : fcErr ? SHORT.forecast : gaps.length ? SHORT.gaps : errors.length ? SHORT.years : '';
   if (err) wx.err = err;
   return wx;
 }

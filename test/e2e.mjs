@@ -43,7 +43,7 @@ async function phone({ weather = {}, google = null, sw = 'block', mobile = false
   if (google) await google.install(ctx, { rewrite: { '**/js/sync.js': s => s.replace("['https://carry-on.junkdrawer.works']", `['https://carry-on.junkdrawer.works', '${origin}']`) } });
   const page = await ctx.newPage();
   page.on('pageerror', e => problems.push(e.message));
-  page.on('console', m => { if (m.type() === 'error' && !/status of 401|ERR_INTERNET_DISCONNECTED/.test(m.text())) problems.push(m.text()); });
+  page.on('console', m => { if (m.type() === 'error' && !/status of 401|status of 429|ERR_INTERNET_DISCONNECTED/.test(m.text())) problems.push(m.text()); });
   page.on('request', r => { const u = r.url(); if (!u.startsWith(base) && !u.startsWith('blob:') && !u.startsWith('data:') && !ALLOWED.test(u)) problems.push('left the site: ' + u); });
   await page.goto(base);
   await page.evaluate(() => document.fonts.ready);
@@ -406,6 +406,36 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   const names = await rowsText(page);
   assert.ok(names.includes('Warm coat') && names.includes('Passport'));
   assert.match(await row(page, 'Warm coat').innerText(), /You turned this on/);
+  await ctx.close();
+}
+
+// ================= A forecast that can't be updated =================
+// Looked up again when Open-Meteo has had too many lookups today, a trip keeps its last forecast (it's less than a
+// day old) and says when it's from, instead of turning to typical weather.
+{
+  const { ctx, page } = await phone();
+  await ctx.route('https://api.open-meteo.com/**', route => route.fulfill({ status: 429, headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' }, body: JSON.stringify({ error: true, reason: 'Daily API request limit exceeded. Please try again tomorrow.' }) }));
+  await page.click('text=Start with a starter list');
+  const at = await page.evaluate(() => {
+    const { store, M, D } = window.carryOn, t0 = D.today(), at = Date.now() - 2 * 3600e3;
+    const place = { name: 'Lisbon', admin: 'Lisbon District', country: 'Portugal', cc: 'PT', lat: 38.7251, lon: -9.1498 };
+    const days = D.range(D.add(t0, 2), D.add(t0, 4)).map(d => ({ d, hi: 30, lo: 20, mm: 0, pop: 10, uv: 8, code: 0 }));
+    store.apply(x => M.putTrip(x, { id: 'kept', place, start: D.add(t0, 2), end: D.add(t0, 4), travel: 'fly', name: '' }));
+    store.apply(x => M.setWx(x, 'kept', { at, for: '38.7251,-9.1498', days }));
+    location.hash = '#/trip/kept';
+    return at;
+  });
+  await page.waitForSelector('.wx-days:not(.wait) li');
+  assert.equal(await page.locator('.wx-at').innerText(), 'Updated 2 h ago');
+  await page.click('[aria-label="Look up the weather again"]');
+  await until(async () => /Couldn’t update the forecast/.test(await page.locator('.wx').innerText()), 'the note');
+  const time = await page.evaluate(at => new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }), at);
+  assert.match(await page.locator('.wx').innerText(), new RegExp(`Couldn’t update the forecast; this one is from ${time}\\.`));
+  assert.equal(await page.locator('.wx-head h2').innerText(), 'FORECAST', 'still the forecast');
+  assert.equal(await page.locator('.wx-days li.typ').count(), 0);
+  assert.equal(await page.locator('.wx-at').innerText(), 'Updated 2 h ago', 'as new as the forecast it kept');
+  const chips = await page.locator('.needs .chip').allInnerTexts();
+  assert.ok(chips.some(x => /Strong sun\s+UV up to 8/.test(x)), chips.join(' | '));
   await ctx.close();
 }
 

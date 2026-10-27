@@ -297,7 +297,8 @@ function maybeWeather(t, force = false) {
     if (!force && soon && (wxErr[k] || wxQuick[k])) continue;
     wxQuick[k] = !force && soon;
     wxTried[k] = Date.now();
-    wxBusy[k] = W.tripWeather(l.place, t.start, t.end, today()).then(wx => {
+    // The last lookup goes along: should the forecast fail, its forecast's days can stand in for a while.
+    wxBusy[k] = W.tripWeather(l.place, t.start, t.end, today(), { prev: l.wx }).then(wx => {
       delete wxErr[k];
       const cur = doc().trips[t.id], at = l.id ? cur?.stops?.[l.id] : cur;
       // Only if the trip still goes there on those days.
@@ -412,7 +413,8 @@ function weatherStrip(t, c) {
     h('div', { class: 'wx-head' },
       h('h2', { id: 'wxHead' }, label),
       h('div', { class: 'wx-at' },
-        h('span', { class: 'muted small' }, busy ? 'Looking it up…' : days.length ? 'Updated ' + ago(Math.min(...found.filter(l => l.days.length).map(l => l.wx.at))) : ''),
+        // A forecast kept from an earlier lookup is as new as that one.
+        h('span', { class: 'muted small' }, busy ? 'Looking it up…' : days.length ? 'Updated ' + ago(Math.min(...found.filter(l => l.days.length).map(l => l.wx.fcAt || l.wx.at))) : ''),
         // Not disabled while it looks: a disabled button can't keep the focus.
         empty && over ? null : h('button', { type: 'button', class: 'icon-btn small' + (busy ? ' spin' : ''), 'data-key': 'wx', 'aria-label': 'Look up the weather again', title: 'Look up the weather again', html: ICONS.refresh, 'aria-disabled': busy ? 'true' : null, onclick: () => { if (keys.some(k => wxBusy[k])) return; maybeWeather(t, true); render(); } }))),
     empty ? h('p', { class: 'muted small' }, over ? 'No weather was saved for these days.' : 'Looking it up when you’re online.') : null,
