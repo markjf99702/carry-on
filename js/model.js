@@ -402,13 +402,15 @@ export function putBag(doc, fields) {
   const order = there(doc, 'bags', doc.bags[id]) ? doc.bags[id].order : nextOrder(bags(doc));
   return put(doc, 'bags', cleanBag, { ...fields, order: fields.order ?? order, id });
 }
-// A bag goes with everything in it. It counts as changed too, as it's gone on purpose: a list of jobs deleted from
-// My list is told from an untouched starter one a list of the person's own took the place of (jobsTakenOff).
+// A bag goes with everything in it. An untouched starter bag counts as touched once it's deleted (t 1, older than
+// any real change), as it went on purpose: a list of jobs deleted from My list is told from an untouched starter one
+// a list of the person's own took the place of (jobsTakenOff). Its details keep their time otherwise, so a rename
+// made on another phone before the deletion still wins where a first merge keeps the bag (mergeDocs).
 export function removeBag(doc, id) {
   const old = doc.bags[id];
   if (!bagThere(doc, old)) return doc;
-  const t = stamp(old);
-  let next = { ...doc, bags: { ...doc.bags, [id]: { ...old, t, del: t } } };
+  let next = remove(doc, 'bags', id);
+  if (!old.t) next = { ...next, bags: { ...next.bags, [id]: { ...next.bags[id], t: 1 } } };
   for (const x of items(doc, id)) next = remove(next, 'items', x.id);
   return next;
 }

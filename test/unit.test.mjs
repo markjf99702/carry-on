@@ -1498,6 +1498,15 @@ test('a list of jobs taken off on purpose is told from an untouched starter one 
   // Dropped by a first merge with a phone that has a list of its own: not.
   const merged = M.mergeDocs(starter(), M.replaceList(M.blankDoc(), pasted), { first: true });
   assert.ok(M.gone(merged.bags['s-back']) && !M.jobsTakenOff(merged, 'back'));
+  // Telling them apart doesn't make a deletion newer than an edit made before it: one phone renames the Work bag,
+  // the other deletes it later, and the first merge, which keeps what one side still has, keeps the new name.
+  const renamed = M.putBag(starter(), { id: 's-work', name: 'Office bag' });
+  later();
+  const deleted = M.removeBag(starter(), 's-work');
+  for (const m of [M.mergeDocs(deleted, renamed, { first: true }), M.mergeDocs(renamed, deleted, { first: true })]) {
+    assert.ok(!M.gone(m.bags['s-work']));
+    assert.equal(m.bags['s-work'].name, 'Office bag');
+  }
 });
 
 test('replacing a list can be undone, everywhere, without bringing back what was deleted before', () => {
