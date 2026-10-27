@@ -691,10 +691,35 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await page.click('.crumb');
   assert.equal(await page.locator('.tag-card .where').innerText(), 'London,\u00a0United Kingdom → Paris,\u00a0France');
   await page.click('.tag-card');
-  // Edit shows the stop; taken off, the trip is London's alone again.
+  // Edit shows the stop.
   await page.click('[aria-label="Edit this trip"]');
   assert.equal(await page.locator('.stop .picked b').innerText(), 'Paris');
   assert.equal(await page.inputValue('.stop input[type=date]'), await day(page, 6));
+  // Leave and Back moved by the same number of days, the stop moves with them; with only one moved, it keeps its
+  // night. One picked by hand stays as picked.
+  const night = () => page.inputValue('.stop input[type=date]');
+  await page.fill('#start', await day(page, 5));
+  assert.equal(await night(), await day(page, 6), 'leaving two days later, Paris keeps its night');
+  await page.fill('#end', await day(page, 11));
+  assert.equal(await night(), await day(page, 8), 'the whole trip two days later: so is Paris');
+  await page.fill('#end', await day(page, 12));
+  assert.equal(await night(), await day(page, 6), 'staying a night longer too: Paris’s own night again');
+  await page.fill('#end', await day(page, 11));
+  await page.click('button:text-is("Save")');
+  await page.waitForSelector('.pass h1');
+  const saved = () => page.evaluate(() => { const t = Object.values(window.carryOn.store.doc.trips)[0]; return [t.start, t.end, ...Object.values(t.stops).map(s => s.from)]; });
+  assert.deepEqual(await saved(), [await day(page, 5), await day(page, 11), await day(page, 8)]);
+  await until(async () => (await page.locator('.wx-days:not(.wait) li').count()) === 7 && (await page.locator('.wx-days .at').allInnerTexts()).join() === 'LONDON,PARIS', 'both places’ days again');
+  await page.click('[aria-label="Edit this trip"]');
+  await page.fill('.stop input[type=date]', await day(page, 7));
+  await page.fill('#start', await day(page, 3));
+  await page.fill('#end', await day(page, 9));
+  assert.equal(await night(), await day(page, 7), 'picked by hand, it stays');
+  await page.click('button:text-is("Save")');
+  await page.waitForSelector('.pass h1');
+  assert.deepEqual(await saved(), [await day(page, 3), await day(page, 9), await day(page, 7)]);
+  // Taken off, the trip is London's alone again.
+  await page.click('[aria-label="Edit this trip"]');
   await page.click('text=Take this stop off');
   await page.click('button:text-is("Save")');
   await page.waitForSelector('.pass h1');

@@ -1212,11 +1212,13 @@ function tripForm(t, again = false) {
   if (draft?.key !== key) {
     // The stops as the form opens: the trip's, or going again, the old trip's places, each to have its night again.
     // Those come from Leave once it's picked, as many nights in as last time (after), till one is picked by hand.
+    // Editing, each moves with the trip from the night it had (was), till one is picked by hand: see nights().
     const was = t ? M.stops(t).sort((a, b) => a.from.localeCompare(b.from) || a.id.localeCompare(b.id)) : [];
-    const stops = was.map((s, i) => (editing ? { key: s.id, id: s.id, place: s.place, from: s.from }
+    const stops = was.map((s, i) => (editing ? { key: s.id, id: s.id, place: s.place, from: s.from, was: s.from, moves: true }
       : { key: 'n' + i, id: '', place: s.place, from: '', after: D.nights(t.start, s.from), auto: true }));
     // stops0: what they were, so Save changes only what the form did, and a stop added on another device meanwhile stays.
-    draft = { key, main: {}, err: '', stops, stops0: editing ? stops.map(s => ({ ...s })) : [], n: stops.length };
+    // dates0: the trip's days as the form opened, which the stops move from.
+    draft = { key, main: {}, err: '', stops, stops0: editing ? stops.map(s => ({ ...s })) : [], n: stops.length, dates0: editing ? [t.start, t.end] : null };
   }
   const dr = draft;
   const st = {
@@ -1235,15 +1237,24 @@ function tripForm(t, again = false) {
   // before coming back.
   const stopsBox = h('div', { class: 'stops' });
   const nightRange = x => { x.min = st.start ? D.add(st.start, 1) : ''; x.max = st.end ? D.add(st.end, -1) : ''; };
+  // Editing, when Leave and Back move by the same number of days (the trip pushed back a week), the stops move with
+  // them, as going again does; when only one moves (leaving a day early, staying longer), they keep their nights.
+  const movedBy = () => {
+    if (!dr.dates0 || !D.isDay(st.start) || !D.isDay(st.end)) return 0;
+    const by = D.num(st.start) - D.num(dr.dates0[0]);
+    return by === D.num(st.end) - D.num(dr.dates0[1]) ? by : 0;
+  };
   const nights = () => {
     for (const s of dr.stops) if (s.auto && st.start) s.from = D.add(st.start, s.after);
+    const by = movedBy();
+    for (const s of dr.stops) if (s.moves) s.from = D.add(s.was, by);
     for (const s of dr.stops) {
       const x = stopsBox.querySelector('#' + CSS.escape('night-' + s.key));
       if (x) { x.value = s.from; nightRange(x); }
     }
   };
   const stopRow = s => {
-    const pickNight = e => { s.from = e.target.value; s.auto = false; changed(); };
+    const pickNight = e => { s.from = e.target.value; s.auto = s.moves = false; changed(); };
     const night = h('input', { type: 'date', id: 'night-' + s.key, value: s.from, oninput: pickNight, onchange: pickNight });
     nightRange(night);
     // Each says which stop it takes off: "Take Porto off".
