@@ -345,6 +345,13 @@ main > h1 + .card { margin-top: 14px; }
 .bag.all { background: color-mix(in srgb, var(--ok-soft) 45%, var(--paper)); }
 .bag.jobs { border-style: dashed; box-shadow: none; }
 .bag-done { display: block; width: 100%; padding: 12px 14px; border: 0; background: none; text-align: left; font-weight: 650; color: var(--ok); cursor: pointer; }
+/* Everything packed: the bags folded into one line. */
+.all-bags {
+  display: flex; align-items: center; gap: 6px; width: 100%; min-height: 52px; margin: 0 0 12px; padding: 12px 14px;
+  border: 1px solid var(--line); border-radius: 16px; background: color-mix(in srgb, var(--ok-soft) 45%, var(--paper)); box-shadow: var(--shadow);
+  text-align: left; font-weight: 650; color: var(--ok); cursor: pointer;
+}
+.all-bags svg { flex: none; display: block; width: 18px; height: 18px; }
 
 .rows { list-style: none; margin: 0; padding: 4px 0; }
 .row { display: flex; align-items: center; min-height: 52px; }

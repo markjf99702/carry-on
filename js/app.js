@@ -87,7 +87,7 @@ function around(el) {
   if (!el) return [];
   const step = list => { const i = list.indexOf(el); return i < 0 ? [] : [...list.slice(i + 1), ...list.slice(0, i).reverse()].map(x => x.dataset.key); };
   const box = el.closest('.bag, .left');
-  const own = !box ? [] : box.dataset.bag ? ['fold:' + box.dataset.bag, 'bagmore:' + box.dataset.bag] : ['left'];
+  const own = !box ? [] : box.dataset.bag ? ['fold:' + box.dataset.bag, 'bagmore:' + box.dataset.bag, 'all-bags'] : ['left'];
   return [...(box ? step([...box.querySelectorAll('.rows [data-key]')]) : []), ...own, ...step([...main.querySelectorAll('[data-key]')])];
 }
 function focusFirst(keys) {
@@ -447,6 +447,11 @@ function tripView(t) {
   const finished = packedSeen?.key === t.id + mode && !packedSeen.complete && complete;
   if (finished) toastKeep(mode === 'go' ? `Everything for ${title(t)} is packed.` : 'All back in the bags. Safe trip home.');
   packedSeen = { key: t.id + mode, complete };
+  // Everything packed: once the moment after the last tick has passed, the bags fold into one line until it's
+  // tapped. Unticking something opens them again, and Hide done goes while there's nothing left to hide.
+  const allKey = `${t.id}:bags:${mode}`;
+  if (!complete && store.isOpen(allKey)) store.setOpen(allKey, false);
+  const oneLine = complete && !linger.size && !store.isOpen(allKey);
   const n = D.nights(t.start, t.end);
   const onKeys = Object.keys(c.on).filter(k => c.on[k] && R.condInfo(doc(), k));
   const order = k => { const i = R.CONDITIONS.findIndex(x => x.k === k); return i < 0 ? 100 : i; };
@@ -487,15 +492,20 @@ function tripView(t) {
     h('div', { class: 'progress' },
       h('div', { class: 'meter', 'aria-hidden': 'true' }, meter(t.id + ':' + mode, p.done, p.total)),
       h('p', { class: complete ? 'all' + (finished ? ' just' : '') : null }, complete ? h('span', { html: ICONS.check }) : null, h('b', {}, complete ? (mode === 'go' ? 'All packed' : 'All back in the bags') : `${p.done} of ${p.total}`), complete ? '' : mode === 'go' ? ' packed' : ' back in the bags'),
-      h('label', { class: 'switch' }, h('input', { type: 'checkbox', 'data-key': 'hide', checked: hide, onchange: e => { store.hide = e.target.checked; render(); } }), h('span', {}, 'Hide done'))),
+      complete ? null : h('label', { class: 'switch' }, h('input', { type: 'checkbox', 'data-key': 'hide', checked: hide, onchange: e => { store.hide = e.target.checked; render(); } }), h('span', {}, 'Hide done'))),
     mode === 'back' && !Object.keys(t.marks || {}).some(k => k.startsWith('p:') && t.marks[k].v === 1)
       ? h('p', { class: 'muted small hint' }, 'Nothing was ticked going, so this is everything that was on the list.') : null,
     M.hasList(doc()) ? null : h('p', { class: 'muted small hint' }, 'Your list is empty, so nothing from it is on this trip. ', h('a', { href: '#/' }, 'Start a list'), ' and it fills in.'),
     // Coming home, the hotel checklist (chargers in the wall, the safe) comes first, then the bags.
-    mode === 'back' ? jobs : null,
-    p.groups.map(g => bagCard(t, g, mode, hide, c.why)),
+    oneLine ? h('button', { type: 'button', class: 'all-bags', 'data-key': 'all-bags', onclick: () => {
+      store.setOpen(allKey, true);
+      render();
+      main.querySelector('.bag [data-key]')?.focus({ preventScroll: true });
+    } }, h('span', { html: ICONS.check }), h('span', {}, mode === 'go' ? `All ${p.total} packed` : 'All back in the bags', h('span', { class: 'muted' }, mode === 'go' ? ' · show the bags' : ' · show'))) : null,
+    mode === 'back' && !oneLine ? jobs : null,
+    oneLine ? null : p.groups.map(g => bagCard(t, g, mode, hide, c.why)),
     M.bags(doc()).some(b => b.kind === 'bag') ? h('button', { type: 'button', class: 'btn add-extra', 'data-key': 'add-extra', onclick: () => extraSheet(t, null, { home: mode === 'back' }) }, h('span', { html: ICONS.plus }), mode === 'go' ? 'Add something for this trip' : 'Add something to bring home') : null,
-    mode === 'go' ? jobs : null,
+    mode === 'go' && !oneLine ? jobs : null,
     p.left.length || p.leftBags.length ? leftOff(t, p.left, p.leftBags, mode) : null,
   ];
 }

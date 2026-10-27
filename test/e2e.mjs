@@ -1606,6 +1606,53 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   await ctx.close();
 }
 
+// ================= Everything packed: one line =================
+// Once the moment after the last tick has passed, the bags fold into one line, and Hide done goes. Tapping the line
+// shows the bags; unticking something opens them, and the next time it's all packed they fold again.
+{
+  const { ctx, page } = await phone();
+  await page.click('text=Start with a starter list');
+  await planTrip(page, { where: 'Chic', from: 2, to: 4, by: 'Driving' });
+  const allBut = (mode, name, v = 1) => page.evaluate(([mode, name, v]) => {
+    const { store, M, R, render } = window.carryOn, t = Object.values(store.doc.trips)[0], p = R.plan(store.doc, t, mode);
+    store.apply(d => M.markAll(d, t.id, p.groups.concat(p.tasks).flatMap(g => g.rows).filter(r => r.name !== name).map(r => r.key), v));
+    render();
+  }, [mode, name, v]);
+  const line = page.locator('main .all-bags');
+  await allBut('go', 'Shoes');
+  assert.equal(await line.count(), 0);
+  assert.equal(await page.locator('main .switch').count(), 1);
+  await row(page, 'Shoes').locator('.tick').click();
+  const total = +(await page.locator('main .count .sr-only').allTextContents()).reduce((n, x) => n + +x.match(/of (\d+)/)[1], 0);
+  assert.equal(await row(page, 'Shoes').count(), 1, 'the last tick shows where it was tapped');
+  assert.equal(await page.locator('main .switch').count(), 0, 'nothing left to hide');
+  await until(async () => (await line.count()) === 1, 'the one line');
+  assert.equal(await line.innerText(), `All ${total} packed · show the bags`);
+  assert.equal(await page.locator('main .bag').count(), 0, 'no bags under it');
+  assert.equal(await page.locator('main .add-extra').count(), 1, 'Add something stays');
+  assert.equal(await page.evaluate(() => document.activeElement.dataset.key), 'all-bags', 'the focus on the line');
+  await line.click();
+  assert.equal(await line.count(), 0);
+  assert.match(await page.locator('main .bag').first().innerText(), /All \d+ packed · show/, 'the bags, folded as before');
+  await page.reload();
+  await page.waitForSelector('.pass h1');
+  assert.equal(await line.count(), 0, 'shown, they stay shown');
+  // Something unticked: the bags and Hide done are back, and packed again, it's one line again.
+  await page.evaluate(() => { const { store, M, render } = window.carryOn, t = Object.values(store.doc.trips)[0]; store.apply(d => M.mark(d, t.id, Object.keys(t.marks).find(k => k.startsWith('p:')), 0)); render(); });
+  assert.equal(await page.locator('main .switch').count(), 1);
+  assert.ok(await page.locator('main .bag').count() > 1);
+  await allBut('go', '');
+  assert.equal(await line.count(), 1, 'one line again');
+  // Coming home too.
+  await page.click('text=Coming home');
+  await allBut('back', '');
+  assert.equal(await line.innerText(), 'All back in the bags · show');
+  await line.click();
+  assert.equal(await page.locator('main .bag h2').first().innerText(), 'LEAVING THE HOTEL');
+  await fits(page, 'the trip, all packed');
+  await ctx.close();
+}
+
 // ================= From the keyboard =================
 {
   const { ctx, page } = await phone();
