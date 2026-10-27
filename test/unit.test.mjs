@@ -370,6 +370,9 @@ test('a busy or broken weather service says so in plain words, with no status co
   };
   // What Open-Meteo answers when its daily limit is used up.
   assert.equal(await said({ status: 429, reason: 'Daily API request limit exceeded. Please try again tomorrow.' }), 'The weather service has had too many lookups today. It tries again later.');
+  // Its limits for an hour and a minute (600 a minute, 5,000 an hour, 10,000 a day on the free API) aren't "today".
+  assert.equal(await said({ status: 429, reason: 'Minutely API request limit exceeded. Please try again in one minute.' }), 'The weather service has had too many lookups just now. It tries again later.');
+  assert.equal(await said({ status: 429 }), 'The weather service has had too many lookups just now. It tries again later.');
   assert.equal(await said({ status: 503, reason: 'Service Unavailable' }), 'The weather service isn’t answering right now.');
   assert.equal(await said({ status: 500 }), 'The weather service isn’t answering right now.');
   // Anything else gives its own words, without a doubled full stop.

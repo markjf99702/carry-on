@@ -34,9 +34,10 @@ async function reach(url, signal, what) {
     let reason = '';
     try { reason = (await res.json()).reason || ''; } catch { /* not JSON */ }
     const What = what[0].toUpperCase() + what.slice(1);
-    // 429 is Open-Meteo's daily limit used up. A trip's weather is looked up again by itself; place search, when
-    // something's typed.
-    const msg = res.status === 429 ? `${What} has had too many lookups today. ${what === 'place search' ? 'Try again later.' : 'It tries again later.'}`
+    // 429 is one of Open-Meteo's limits used up: a day's lookups, or an hour's or a minute's, and only the first is
+    // "today". A trip's weather is looked up again by itself; place search, when something's typed.
+    const many = /daily/i.test(reason) ? 'too many lookups today' : 'too many lookups just now';
+    const msg = res.status === 429 ? `${What} has had ${many}. ${what === 'place search' ? 'Try again later.' : 'It tries again later.'}`
       : res.status >= 500 ? `${What} isn’t answering right now.`
         : `${What} said no (${res.status}${reason ? `: ${String(reason).replace(/\.$/, '')}` : ''}).`;
     throw Object.assign(new Error(msg), { status: res.status, reason });
