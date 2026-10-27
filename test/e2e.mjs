@@ -1034,6 +1034,19 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   assert.equal(await page.locator('.tag-card .when').innerText(), 'NOW · BACK TODAY');
   // The tag counts the way the trip opens: Coming home, here.
   assert.match(await page.locator('.tag-card .packed').innerText(), /^\d+ of \d+ back in the bags$/);
+  // Going, picked today, lasts the day. Picked on an earlier day, or kept from before a pick had its day, it doesn't
+  // count, so the last day opens on Coming home.
+  const opensOn = async () => { await page.reload(); await page.waitForSelector('.pass h1'); return page.locator('.seg.mode [aria-pressed="true"]').innerText(); };
+  await page.goto(tripAt);
+  await page.click('text=Going');
+  assert.equal(await opensOn(), 'Going', 'picked today');
+  const id = tripAt.split('/').at(-1);
+  await page.evaluate(id => { const d = JSON.parse(localStorage.getItem('carry-on.device')); (d.modeOn ||= {})[id] = window.carryOn.D.add(window.carryOn.D.today(), -1); localStorage.setItem('carry-on.device', JSON.stringify(d)); }, id);
+  assert.equal(await opensOn(), 'Coming home', 'picked yesterday');
+  await page.evaluate(id => localStorage.setItem('carry-on.device', JSON.stringify({ hide: false, open: {}, mode: { [id]: 'go' } })), id);
+  assert.equal(await opensOn(), 'Coming home', 'kept from before a pick had its day');
+  await page.click('text=Going');
+  assert.equal(await opensOn(), 'Going', 'picked again today');
   await ctx.close();
 }
 

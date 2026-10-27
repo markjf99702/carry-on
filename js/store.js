@@ -3,7 +3,7 @@
 import * as M from './model.js';
 
 export const KEY = 'carry-on';
-const DEVICE = 'carry-on.device'; // this device only: hide packed, folded bags, which way each trip is showing
+const DEVICE = 'carry-on.device'; // this device only: hide packed, folded bags, which way each trip is showing today
 
 function text(k) { try { return localStorage.getItem(k); } catch { return null; } }
 function parse(s) { try { return JSON.parse(s); } catch { return null; } }
@@ -12,11 +12,13 @@ function put(k, v) {
   try { localStorage.setItem(k, typeof v === 'string' ? v : JSON.stringify(v)); return true; } catch { return false; }
 }
 
-// This device's own settings, keeping only what's well formed, so junk left in storage can't stop the page.
+// This device's own settings, keeping only what's well formed, so junk left in storage can't stop the page. mode is
+// which way each trip was shown, Going or Coming home ('go', 'back'), and modeOn the day each was picked: a pick
+// lasts its own day. (modeOn is a map of its own, so a copy of the page from before still reads mode.)
 function readDevice() {
   const d = get(DEVICE);
   const map = x => (x && typeof x === 'object' && !Array.isArray(x) ? x : {});
-  return { hide: !!d?.hide, open: map(d?.open), mode: map(d?.mode) };
+  return { hide: !!d?.hide, open: map(d?.open), mode: map(d?.mode), modeOn: map(d?.modeOn) };
 }
 let device = readDevice();
 let last = text(KEY); // what this tab last read from storage or wrote there
@@ -52,8 +54,16 @@ export const store = {
   set hide(v) { device.hide = !!v; put(DEVICE, device); },
   isOpen: id => !!device.open[id],
   setOpen(id, v) { if (v) device.open[id] = 1; else delete device.open[id]; put(DEVICE, device); },
-  mode: id => device.mode[id],
-  setMode(id, v) { device.mode[id] = v; put(DEVICE, device); },
+  // Which way a trip was shown, if it was picked on day ('YYYY-MM-DD'). One picked on an earlier day, or saved before
+  // picks had a day, doesn't count. Picking one lets go of those.
+  mode: (id, day) => (device.modeOn[id] === day ? device.mode[id] : undefined),
+  setMode(id, v, day) {
+    for (const k of Object.keys(device.mode)) if (device.modeOn[k] !== day) delete device.mode[k];
+    for (const k of Object.keys(device.modeOn)) if (device.modeOn[k] !== day) delete device.modeOn[k];
+    device.mode[id] = v;
+    device.modeOn[id] = day;
+    put(DEVICE, device);
+  },
 
   backup() { fresh(); return JSON.stringify({ ...M.cleanDoc(doc), saved: new Date().toISOString() }, null, 1); },
   // Merges a backup in, record by record, so nothing here is lost. Returns how many of each it brought back or

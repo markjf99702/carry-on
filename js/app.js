@@ -243,9 +243,10 @@ const fitted = (tag, t) => {
 // A bag by name in a sentence: "the Day bag", but "Electronics".
 const theBag = b => (/\b(bag|case|pack|backpack|suitcase|pouch|kit|box|tote|purse)\b/i.test(b.name) ? 'the ' + b.name : b.name);
 
-// Which way a trip opens: the way it was last shown on this device, or else from its last day on, Coming home. Its
-// luggage tag counts the same way.
-const tripMode = t => store.mode(t.id) || (today() >= t.end ? 'back' : 'go');
+// Which way a trip opens: the way it was picked on this device today, or else Going, and from its last day on,
+// Coming home. A pick lasts the day, so a trip switched back to Going while packing opens on Coming home the morning
+// you leave the hotel. Its luggage tag counts the same way.
+const tripMode = t => store.mode(t.id, today()) || (today() >= t.end ? 'back' : 'go');
 
 // When a trip is, in a few words, on its luggage tag and its boarding pass: "In 3 days", "Tomorrow", "Now · back
 // Wed", "Past trip". Back more than six days on, it's a date, as a weekday alone could be either of two.
@@ -481,8 +482,8 @@ function tripView(t) {
           h('span', { 'aria-hidden': 'true' }, info.icon), h('span', {}, h('b', {}, info.name), why ? h('small', { id: wid }, why) : null)));
       }))),
     h('div', { class: 'seg mode', role: 'group', 'aria-label': 'Packing to leave or to come home' },
-      h('button', { type: 'button', 'data-key': 'mode:go', 'aria-pressed': String(mode === 'go'), onclick: () => { store.setMode(t.id, 'go'); render(); } }, 'Going'),
-      h('button', { type: 'button', 'data-key': 'mode:back', 'aria-pressed': String(mode === 'back'), onclick: () => { store.setMode(t.id, 'back'); render(); } }, 'Coming home')),
+      h('button', { type: 'button', 'data-key': 'mode:go', 'aria-pressed': String(mode === 'go'), onclick: () => { store.setMode(t.id, 'go', today()); render(); } }, 'Going'),
+      h('button', { type: 'button', 'data-key': 'mode:back', 'aria-pressed': String(mode === 'back'), onclick: () => { store.setMode(t.id, 'back', today()); render(); } }, 'Coming home')),
     h('div', { class: 'progress' },
       h('div', { class: 'meter', 'aria-hidden': 'true' }, meter(t.id + ':' + mode, p.done, p.total)),
       h('p', { class: complete ? 'all' + (finished ? ' just' : '') : null }, complete ? h('span', { html: ICONS.check }) : null, h('b', {}, complete ? (mode === 'go' ? 'All packed' : 'All back in the bags') : `${p.done} of ${p.total}`), complete ? '' : mode === 'go' ? ' packed' : ' back in the bags'),
