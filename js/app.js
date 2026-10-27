@@ -470,7 +470,10 @@ function tripView(t) {
         h('button', { type: 'button', class: 'btn small', 'data-key': 'conds', onclick: () => condSheet(t.id) }, 'Change')),
       // Each chip opens the sheet at its own row, to see why or to change it.
       h('ul', { class: 'chips' }, onKeys.map(k => {
-        const info = R.condInfo(doc(), k), why = c.why[k] && c.why[k] !== info.name ? c.why[k] : '', wid = 'why-' + k.replace(/[^\w-]/g, '_');
+        const info = R.condInfo(doc(), k);
+        // Abroad says too when only some of your plugs fit there.
+        const said = c.why[k] && c.why[k] !== info.name ? c.why[k] : '', note = k === 'abroad' ? c.plugNote : '';
+        const why = [said, note].filter(Boolean).join(' · '), wid = 'why-' + k.replace(/[^\w-]/g, '_');
         return h('li', {}, h('button', { type: 'button', class: 'chip on', 'data-key': 'chip:' + k, 'aria-label': `${info.name}: change`, 'aria-describedby': why ? wid : null, onclick: () => condSheet(t.id, k) },
           h('span', { 'aria-hidden': 'true' }, info.icon), h('span', {}, h('b', {}, info.name), why ? h('small', { id: wid }, why) : null)));
       }))),

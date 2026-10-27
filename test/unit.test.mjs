@@ -93,6 +93,34 @@ test('Puerto Rico, Guam, the US Virgin Islands and the Northern Mariana Islands 
   assert.equal(go('US', chicago).cond.no.abroad, 'In your home country');
 });
 
+test('where only some of your plugs fit, it says which, and the adapter stays for you to bring', () => {
+  assert.equal(plugsFor('DE', 'CH').some, 'Two-pin plugs fit; grounded ones may need an adapter', 'a Schuko plug isn’t a Swiss one');
+  assert.equal(plugsFor('US', 'CN').some, 'Two-pin plugs fit; grounded ones may need an adapter');
+  assert.equal(plugsFor('US', 'JP').some, 'Two-pin plugs with blades the same width fit; others may need an adapter', 'older Japanese sockets are unpolarised');
+  assert.equal(plugsFor('BZ', 'GB').some, 'Type G plugs fit; type A/B may need an adapter', 'a grounded plug that fits, and two-pin ones that don’t');
+  for (const [a, b] of [['DE', 'FR'], ['GB', 'IE'], ['JP', 'US'], ['US', 'MX'], ['US', 'GB']]) assert.equal(plugsFor(a, b).some, '', `${a} to ${b}`);
+  const go = (home, ...places) => {
+    let doc = trip(M.setPref(starter(), 'home', home), { place: places[0] });
+    if (places[1]) doc = M.putStop(doc, 't1', { place: places[1], from: add(T, 2) });
+    return plan(doc, doc.trips.t1);
+  };
+  const zurich = { name: 'Zürich', cc: 'CH', country: 'Switzerland' }, paris = { name: 'Paris', cc: 'FR', country: 'France' };
+  let p = go('DE', zurich);
+  assert.equal(p.cond.auto.plug, false);
+  assert.ok(!allNames(p).includes('Plug adapter'), 'no adapter on its own');
+  assert.equal(p.cond.plugNote, 'Two-pin plugs fit; grounded ones may need an adapter');
+  assert.equal(p.cond.no.plug, 'Two-pin plugs fit; grounded ones may need an adapter');
+  assert.equal(p.cond.why.abroad, 'Switzerland', 'the passport’s reason is still the country');
+  // With stops, each country that only partly fits is named, after the ones that fit.
+  p = go('DE', paris, zurich);
+  assert.equal(p.cond.plugNote, 'Switzerland: two-pin plugs fit; grounded ones may need an adapter');
+  assert.equal(p.cond.no.plug, 'Your plugs fit in France · Switzerland: two-pin plugs fit; grounded ones may need an adapter');
+  // Where every plug fits, nothing more to say.
+  p = go('DE', paris);
+  assert.equal(p.cond.plugNote, '');
+  assert.equal(p.cond.no.plug, 'Your plugs fit there');
+});
+
 test('the first guess at home, from the browser’s languages', () => {
   const cases = [
     [['de'], 'DE'], [['fr'], 'FR'], [['ja'], 'JP'], [['zh-Hant-TW'], 'TW'], [['sr-Latn-RS'], 'RS'],
@@ -208,8 +236,9 @@ test('the conditions sheet says why the place or weather says no', () => {
   const far = no([typ('2027-03-01', 14, 8, { wet: 0.2, sn: 0 }), typ('2027-03-02', 13, 7, { wet: 0.2, sn: 0.1 })]);
   assert.deepEqual([far.rain, far.snow, far.sun], ['Rain on about 2 days in 10', 'Snow on about 1 day in 10', 'Not much sun then']);
   assert.equal(no([typ('2027-03-01', 14, 8, { wet: 0.02 })]).rain, 'Hardly any rain then');
-  // Abroad where the plugs fit.
-  assert.equal(no([day('2026-11-02', 15, 8)], { name: 'Tokyo', cc: 'JP', country: 'Japan' }).plug, 'Your plugs fit there');
+  // Abroad where the plugs fit, and where only some do.
+  assert.equal(no([day('2026-11-02', 15, 8)], { name: 'Mexico City', cc: 'MX', country: 'Mexico' }).plug, 'Your plugs fit there');
+  assert.equal(no([day('2026-11-02', 15, 8)], { name: 'Tokyo', cc: 'JP', country: 'Japan' }).plug, 'Two-pin plugs with blades the same width fit; others may need an adapter');
 });
 
 test('snow isn’t rain: no umbrella on a snow day, both on a day of sleet', () => {

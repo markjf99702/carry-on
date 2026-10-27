@@ -39,13 +39,27 @@ const FITS = {
   A: 'AB', B: 'B', C: 'CEFJKLN', D: 'D', E: 'EF', F: 'EF', G: 'G', H: 'H', I: 'I', J: 'J', K: 'K', L: 'L', M: 'M', N: 'N', O: 'O',
 };
 
-// What someone from `home` needs in `dest`: whether their plugs fit, and the sockets and voltage there.
+// What someone from `home` needs in `dest`: whether their plugs fit, and the sockets and voltage there. Their plugs
+// are the kinds home's sockets take, and any one that fits is enough for an adapter to stay home. When only some fit,
+// some says which (no adapter comes for it): a German grounded plug (F) doesn't go into Swiss sockets, which take
+// only Swiss plugs and the two-pin Europlug. Japan's sockets take US plugs, but older ones are unpolarised and take
+// only plugs whose two blades are the same width, and grounded sockets are less common there (Wikipedia, "AC power
+// plugs and sockets", read 27 October 2026).
+const TWO_PIN = 'AC';
 export function plugsFor(home, dest) {
   const h = PLUGS[home], d = PLUGS[dest];
   if (!d) return null;
-  const fits = !h || h.types.some(p => d.types.some(s => FITS[p].includes(s)));
+  const fit = h ? h.types.filter(p => d.types.some(s => FITS[p].includes(s))) : [];
+  const fits = !h || fit.length > 0;
   const volts = !h ? false : (h.volts <= 127) !== (d.volts <= 127);
-  return { need: !fits, types: d.types, volts: d.volts, voltsDiffer: volts };
+  const unfit = h ? h.types.filter(p => !fit.includes(p)) : [];
+  const two = h ? h.types.filter(p => TWO_PIN.includes(p)) : [];
+  const some = !h || !fits ? ''
+    : dest === 'JP' && home !== 'JP' && h.types.includes('A') ? 'Two-pin plugs with blades the same width fit; others may need an adapter'
+      : !unfit.length ? ''
+        : two.length && two.every(p => fit.includes(p)) && fit.every(p => TWO_PIN.includes(p)) ? 'Two-pin plugs fit; grounded ones may need an adapter'
+          : `Type ${fit.join('/')} plugs fit; type ${unfit.join('/')} may need an adapter`;
+  return { need: !fits, types: d.types, volts: d.volts, voltsDiffer: volts, some };
 }
 
 // "Type G, 230 V"

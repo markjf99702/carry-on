@@ -995,6 +995,10 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   assert.equal(await page.locator('.seg.mode [aria-pressed="true"]').innerText(), 'Coming home');
   assert.equal(await page.locator('.progress p').innerText(), onTag, 'the tag and the trip agree');
   assert.equal(await page.locator('.pass .when').innerText(), 'NOW · BACK TODAY');
+  // Japan's sockets take US plugs, but older ones only those whose blades are the same width: the Abroad line says
+  // so, and no adapter comes on its own.
+  assert.equal(await page.locator('.needs .chip', { has: page.locator('b', { hasText: /^Abroad$/ }) }).locator('small').innerText(), 'Japan · Two-pin plugs with blades the same width fit; others may need an adapter');
+  assert.ok(!(await page.locator('.needs .chip').allInnerTexts()).some(x => x.includes('Different plugs')), 'no Different plugs');
   assert.equal(await page.locator('.pass .when').evaluate(el => getComputedStyle(el).color), await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--accent-text').trim()).then(hex => `rgb(${hex.match(/\w\w/g).map(x => parseInt(x, 16)).join(', ')})`), 'red, under way');
   // Four days gone by, and today.
   const strip = page.locator('.wx-days:not(.wait)');

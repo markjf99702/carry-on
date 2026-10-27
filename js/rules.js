@@ -92,11 +92,13 @@ export const legDays = trip => legs(trip).map(l => ({ ...l, days: tripDays(l.wx,
 
 // Every condition for this trip: what the place and weather say (auto), what the person set (set), the
 // result (on), a few words on why for each one that's on (why), and for one the place or weather says no to, why
-// not (no). A trip with stops is abroad when any of its places is, has every country's plugs, and is hot, rainy and
-// so on when any place's own days are; its reasons name the place.
+// not (no), and where only some of your plugs fit, which (plugNote). A trip with stops is abroad when any of its
+// places is, has every country's plugs, and is hot, rainy and so on when any place's own days are; its reasons name
+// the place.
 export function conditions(doc, trip) {
   const u = units(doc), from = home(doc), ls = legDays(trip), multi = ls.length > 1;
   const auto = { [trip.travel]: true }, why = {}, no = {};
+  let plugNote = '';
   why[trip.travel] = BY_KEY[trip.travel].name;
   // At home only when every place is known to be. A place in another country that counts as home (Puerto Rico from
   // the US) isn't abroad, but its plugs are its own.
@@ -115,7 +117,11 @@ export function conditions(doc, trip) {
     const said = new Map();
     for (const x of need.length ? need : plugs) said.set(plugText(x.p), [...(said.get(plugText(x.p)) || []), x.name]);
     if (said.size) why.plug = [...said].map(([text, names]) => (named ? `${and(names)}: ` : '') + text).join('; ') + ((need.length ? need : plugs).some(x => x.p.voltsDiffer) ? ' · check anything that heats up' : '');
-    if (plugs.length && !need.length) no.plug = plugs.length > 1 ? `Your plugs fit in ${and(plugs.map(x => x.name))}` : 'Your plugs fit there';
+    // Where only some of your plugs fit, a note (plugNote) for the Abroad line and the plug's no: the adapter stays
+    // for you to bring by hand.
+    const some = plugs.filter(x => !x.p.need && x.p.some), full = plugs.filter(x => !x.p.need && !x.p.some);
+    if (some.length) plugNote = some.map(x => (named ? `${x.name}: ${x.p.some[0].toLowerCase()}${x.p.some.slice(1)}` : x.p.some)).join(' · ');
+    if (plugs.length && !need.length) no.plug = [full.length ? (plugs.length > 1 ? `Your plugs fit in ${and(full.map(x => x.name))}` : 'Your plugs fit there') : '', plugNote].filter(Boolean).join(' · ');
   }
   const w = summarize({ days: ls.flatMap(l => l.days) });
   // With stops, each place's days on their own: what the first place that calls for something says.
@@ -155,7 +161,7 @@ export function conditions(doc, trip) {
     if (m.v && auto[k] !== true) why[k] = BY_KEY[k] ? 'You turned this on' : condInfo(doc, k)?.name || '';
   }
   for (const g of M.tags(doc)) if (on[g.id]) why[g.id] = g.name;
-  return { auto, on, why, no, weather: w, units: u };
+  return { auto, on, why, no, plugNote, weather: w, units: u };
 }
 
 // Whether a rule (when/unless) lets something come along, and the conditions that brought it.
