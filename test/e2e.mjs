@@ -55,7 +55,8 @@ async function until(fn, what, ms = 8000) {
   while (Date.now() - t0 < ms) { if (await fn()) return; await wait(80); }
   throw new Error('timed out waiting for ' + what);
 }
-const fits = async (page, where) => assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${where} scrolls sideways on a phone`);
+// Against the page's own width, not innerWidth: on a phone (isMobile) innerWidth grows to whatever is too wide.
+const fits = async (page, where) => assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), true, `${where} scrolls sideways on a phone`);
 const day = (page, n) => page.evaluate(n => window.carryOn.D.add(window.carryOn.D.today(), n), n);
 const rowsText = page => page.locator('main .bag .name').allInnerTexts();
 const row = (page, name) => page.locator('main .bag li.row', { has: page.locator('.name', { hasText: new RegExp(`^${name}( ×\\d+)?$`) }) });
