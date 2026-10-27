@@ -1659,6 +1659,36 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   await ctx.close();
 }
 
+// ================= Erase everything, with Google Drive on =================
+// Erasing a phone leaves the Drive copy alone, and says so before and after; the cloud goes from the top bar.
+{
+  const g = fakeGoogle();
+  const { ctx, page } = await phone({ google: g });
+  await page.click('text=Start with a starter list');
+  await page.goto(base + '#/settings');
+  await page.click('text=Save to Google Drive');
+  await until(async () => g.files().some(f => f.appProperties?.carryon === 'sync' && f.body), 'the file in Drive');
+  assert.equal(await page.locator('#cloud').isVisible(), true);
+  assert.equal(await page.locator('.danger-zone p').innerText(), 'To remove it from Drive too, delete the Carry On folder there.');
+  const erase = page.locator('.danger-zone .btn');
+  await erase.click();
+  assert.equal(await erase.innerText(), 'Tap again: your Google Drive copy stays');
+  await erase.click();
+  await until(async () => (await page.locator('#toast span').innerText()) === 'Erased from this device. Your Google Drive copy is still there.', 'the toast');
+  await page.waitForSelector('.welcome');
+  assert.equal(await page.locator('#cloud').isVisible(), false, 'the cloud goes');
+  assert.ok(g.files().some(f => f.appProperties?.carryon === 'sync' && f.body), 'the Drive file stays');
+  // With Drive off, the words are as they were.
+  await page.click('text=Start with a starter list');
+  await page.goto(base + '#/settings');
+  assert.equal(await page.locator('.danger-zone p').count(), 0);
+  await erase.click();
+  assert.equal(await erase.innerText(), 'Tap again to erase it all');
+  await erase.click();
+  await until(async () => (await page.locator('#toast span').innerText()) === 'Erased.', 'the toast');
+  await ctx.close();
+}
+
 // ================= Two phones, one Google Drive =================
 {
   const g = fakeGoogle();

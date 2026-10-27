@@ -1315,6 +1315,26 @@ function settingsView() {
       driveHost.querySelector('button')?.focus({ preventScroll: true });
     });
   });
+  // Erasing this device leaves the Google Drive copy alone, so with Drive on it says so, before and after. Drive can
+  // be turned on or off while this is on screen.
+  const zone = h('div', { class: 'danger-zone' });
+  let zoneOn = null;
+  const drawZone = () => {
+    const on = drive.isOn();
+    if (on === zoneOn) return;
+    zoneOn = on;
+    zone.replaceChildren(
+      confirmBtn('Erase everything on this device', on ? 'Tap again: your Google Drive copy stays' : 'Tap again to erase it all', () => {
+        const kept = drive.isOn();
+        drive.stop();
+        store.erase();
+        go('#/');
+        toast(kept ? 'Erased from this device. Your Google Drive copy is still there.' : 'Erased.');
+      }),
+      on ? h('p', { class: 'muted small' }, 'To remove it from Drive too, delete the Carry On folder there.') : '');
+  };
+  drawZone();
+  queueMicrotask(() => drive.watch(() => { if (!zone.isConnected) return false; drawZone(); }));
   let file;
   return [
     h('a', { class: 'crumb', href: '#/' }, h('span', { html: ICONS.back }), 'Trips'),
@@ -1368,12 +1388,7 @@ function settingsView() {
       h('p', { class: 'small' }, 'Forecasts, past weather and place search come from ', h('a', { href: 'https://open-meteo.com/', target: '_blank', rel: 'noopener' }, 'Open-Meteo'), `. Looking up a trip sends its place and dates there; nothing else leaves this browser${drive.ready ? ' unless you turn on Google Drive' : ''}. Plug types are from the IEC’s list of world plugs.`),
       // Every rule in weather.js summarize(), with no break between a number and its unit.
       h('p', { class: 'small muted' }, 'Hot means a high of 28\u00a0°C (82\u00a0°F) or more; cool, a low of 13\u00a0°C (55\u00a0°F) or less; cold, a low of 4\u00a0°C (39\u00a0°F) or less, or highs that average 10\u00a0°C (50\u00a0°F) or less. Rain means a 50% chance of rain or more, or 3\u00a0mm (0.1\u00a0in) or more, on any day; for typical weather, rain on 3 days in 10. Snow means 0.5\u00a0cm (0.2\u00a0in) or more on any day; for typical weather, snow on 3 days in 20. Strong sun means a UV index of 6 or more; for typical weather, it’s estimated from how much sunshine those days had.')),
-    h('div', { class: 'danger-zone' }, confirmBtn('Erase everything on this device', 'Tap again to erase it all', () => {
-      drive.stop();
-      store.erase();
-      go('#/');
-      toast('Erased.');
-    })),
+    zone,
   ];
 }
 

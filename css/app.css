@@ -222,6 +222,7 @@ main > h1 + .card { margin-top: 14px; }
 .lede { font-size: 17px; }
 .hint { margin: -4px 0 12px; }
 .danger-zone { margin: 26px 0 0; text-align: center; }
+.danger-zone p { margin: 8px 0 0; }
 
 /* ---------- welcome ---------- */
 .welcome { padding: 14px 0 0; }
