@@ -349,6 +349,20 @@ main > h1 + .card { margin-top: 14px; }
 .progress p.all { display: flex; align-items: center; gap: 4px; color: var(--ok); }
 .progress p.all svg { display: block; width: 18px; height: 18px; }
 
+/* Chips that go straight to a bag: one row that scrolls sideways on a phone, as the weather does, and wraps where
+   there's room. */
+.jump { margin: 0 -16px 14px; }
+.jump ul { display: flex; gap: 6px; margin: 0; padding: 0 16px 4px; list-style: none; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
+.jump .chip { gap: 4px; padding: 4px 11px 4px 9px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.jump .chip > span:last-child:not(.jump-icon) { display: inline-flex; align-items: center; gap: 2px; }
+.jump .chip.all { color: var(--ok); background: color-mix(in srgb, var(--ok-soft) 45%, var(--paper)); }
+.jump .chip svg { width: 15px; height: 15px; }
+.jump-icon { font-size: 19px; line-height: 1; }
+@media (min-width: 720px) {
+  .jump { margin: 0 0 14px; }
+  .jump ul { flex-wrap: wrap; padding: 0; }
+}
+
 /* ---------- bags ---------- */
 .bag { background: var(--paper); border: 1px solid var(--line); border-radius: 16px; margin-bottom: 12px; box-shadow: var(--shadow); overflow: hidden; }
 .bag-head { display: flex; align-items: center; gap: 10px; padding: 10px 8px 10px 14px; border-bottom: 1px solid var(--line); }

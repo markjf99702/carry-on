@@ -500,6 +500,11 @@ function tripView(t) {
       h('div', { class: 'meter', 'aria-hidden': 'true' }, meter(t.id + ':' + mode, p.done, p.total)),
       h('p', { class: complete ? 'all' + (finished ? ' just' : '') : null }, complete ? h('span', { html: ICONS.check }) : null, h('b', {}, complete ? (mode === 'go' ? 'All packed' : 'All back in the bags') : `${p.done} of ${p.total}`), complete ? '' : mode === 'go' ? ' packed' : ' back in the bags'),
       complete ? null : h('label', { class: 'switch' }, h('input', { type: 'checkbox', 'data-key': 'hide', checked: hide, onchange: e => { store.hide = e.target.checked; render(); } }), h('span', {}, 'Hide done'))),
+    // Each bag, in the order they come, with how much of it is done, to go straight to it on a long list.
+    oneLine ? null : jumpRow((mode === 'back' ? [...p.tasks, ...p.groups] : [...p.groups, ...p.tasks]).map(g => {
+      const done = g.rows.filter(r => r.done).length, jobs = g.bag.kind !== 'bag';
+      return { bag: g.bag, count: `${done}/${g.rows.length}`, all: done === g.rows.length, said: `${done} of ${g.rows.length} ${jobs ? 'done' : mode === 'go' ? 'packed' : 'back in'}` };
+    })),
     mode === 'back' && !Object.keys(t.marks || {}).some(k => k.startsWith('p:') && t.marks[k].v === 1)
       ? h('p', { class: 'muted small hint' }, 'Nothing was ticked going, so this is everything that was on the list.') : null,
     M.hasList(doc()) ? null : h('p', { class: 'muted small hint' }, 'Your list is empty, so nothing from it is on this trip. ', h('a', { href: '#/' }, 'Start a list'), ' and it fills in.'),
@@ -562,6 +567,26 @@ function holdStill(y, redraw) {
 // a note of your own always shows.
 const AIRPORT_NOTE = starterList().bags.find(b => b.id === 's-liquids')?.note;
 
+// A row of chips, one for each bag and list of jobs on the screen, that goes straight to it: on a trip, each with its
+// icon and how much of it is done, ticked when it's all done; on My list, icons alone. With one bag, there's nowhere
+// to go. Each is { bag, count ('3/8'), all (all done), said (in words: '3 of 8 packed') }.
+function jumpRow(list) {
+  if (list.length < 2) return null;
+  return h('nav', { class: 'jump', 'aria-label': 'Go to a bag' }, h('ul', {}, list.map(({ bag: b, count, all, said }) => h('li', {},
+    h('button', { type: 'button', class: 'chip' + (all ? ' all' : ''), 'data-key': 'jump:' + b.id, 'aria-label': said ? `${b.name}, ${said}` : b.name, title: said ? null : b.name, onclick: () => jumpTo(b.id) },
+      h('span', { class: 'jump-icon', 'aria-hidden': 'true' }, b.icon),
+      count ? h('span', { 'aria-hidden': 'true' }, all ? h('span', { html: ICONS.check }) : null, count) : null)))));
+}
+// The bag's top just under the top bar, gliding there unless less motion is asked for, and the focus on its name, so
+// a screen reader carries on from there.
+function jumpTo(id) {
+  const bag = main.querySelector(`.bag[data-bag="${CSS.escape(id)}"]`);
+  if (!bag) return;
+  const top = bag.getBoundingClientRect().top + scrollY - (document.querySelector('.bar')?.offsetHeight || 0) - 8;
+  window.scrollTo({ top, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  bag.querySelector('h2')?.focus({ preventScroll: true });
+}
+
 function bagCard(t, g, mode, hide, why, jobs = false) {
   const b = g.bag, done = g.rows.filter(r => r.done).length, all = done === g.rows.length;
   const held = linger.has(mode + ':' + b.id);
@@ -569,7 +594,7 @@ function bagCard(t, g, mode, hide, why, jobs = false) {
   const rows = g.rows.filter(r => !hide || !r.done || linger.has(r.key));
   const head = h('header', { class: 'bag-head' },
     h('span', { class: 'bag-icon', 'aria-hidden': 'true' }, b.icon),
-    h('h2', {}, b.name),
+    h('h2', { tabindex: '-1', 'data-key': 'head:' + b.id }, b.name),
     b.when?.length ? h('span', { class: 'bag-cond' }, b.when.map(k => R.condInfo(doc(), k)?.icon).join('')) : null,
     h('span', { class: 'count' + (all ? ' all' : '') }, all ? h('span', { html: ICONS.check }) : null,
       h('span', { 'aria-hidden': 'true' }, `${done}/${g.rows.length}`), h('span', { class: 'sr-only' }, `${done} of ${g.rows.length} ${jobs ? 'done' : mode === 'go' ? 'packed' : 'back in'}`)),
@@ -1127,6 +1152,7 @@ function listView() {
     M.trips(doc()).length ? null : h('section', { class: 'card ready' },
       h('p', {}, 'Your list is ready. Plan a trip and it picks what this one calls for.'),
       h('a', { class: 'btn primary', href: '#/new' }, h('span', { html: ICONS.plus }), 'Plan a trip')),
+    jumpRow(kinds.flatMap(([kind]) => all.filter(b => b.kind === kind)).map(b => ({ bag: b }))),
     kinds.map(([kind, label]) => {
       const bs = all.filter(b => b.kind === kind);
       return [
@@ -1166,7 +1192,7 @@ function listBag(b) {
   return h('section', { class: 'bag edit' + (b.kind !== 'bag' ? ' jobs' : ''), 'data-bag': b.id },
     h('header', { class: 'bag-head' },
       h('span', { class: 'bag-icon', 'aria-hidden': 'true' }, b.icon),
-      h('h2', {}, b.name),
+      h('h2', { tabindex: '-1', 'data-key': 'head:' + b.id }, b.name),
       h('button', { type: 'button', class: 'btn small', 'data-key': 'bagmore:' + b.id, onclick: () => bagEditor(b), 'aria-label': `Change ${b.name}` }, 'Change')),
     condChips(b) ? h('p', { class: 'bag-note' }, condChips(b)) : null,
     b.note ? h('p', { class: 'bag-note' }, b.note) : null,

@@ -1606,6 +1606,44 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   await ctx.close();
 }
 
+// ================= Jump to a bag =================
+// Under the progress line, a chip for each bag and list of jobs, with how much of it is done, goes straight to it.
+// My list has the same row, icons alone.
+{
+  const { ctx, page } = await phone();
+  await page.click('text=Start with a starter list');
+  await planTrip(page, { where: 'Chic', from: 2, to: 4, by: 'Driving' });
+  const chips = page.locator('main .jump .chip');
+  const bar = await page.locator('.bar').evaluate(el => el.offsetHeight);
+  const atTop = name => until(async () => Math.abs((await page.locator('main .bag', { has: page.locator('h2', { hasText: new RegExp(`^${name}$`, 'i') }) }).boundingBox()).y - bar - 8) <= 1, `${name} under the top bar`);
+  assert.deepEqual(await chips.evaluateAll(cs => cs.map(c => c.getAttribute('aria-label'))), ['Liquids bag, 0 of 6 packed', 'Toiletries bag, 0 of 8 packed', 'Electronics, 0 of 5 packed', 'Documents and money, 0 of 4 packed', 'Clothes, 0 of 8 packed', 'Day bag, 0 of 4 packed', 'Leaving the house, 0 of 4 done']);
+  assert.equal(await chips.first().textContent(), '🧴0/6');
+  assert.equal(await page.locator('main .jump').evaluate(el => el.previousElementSibling.className), 'progress', 'under the progress line');
+  await chips.filter({ hasText: '👕' }).click();
+  await atTop('Clothes');
+  assert.equal(await page.evaluate(() => document.activeElement.textContent), 'Clothes', 'the focus on its name');
+  await row(page, 'Belt').locator('.tick').click();
+  assert.equal(await chips.filter({ hasText: '👕' }).getAttribute('aria-label'), 'Clothes, 1 of 8 packed');
+  // A bag all packed is ticked.
+  await page.locator('.bag', { hasText: 'Electronics' }).locator('.bag-head .icon-btn').click();
+  await page.click('text=It’s all packed already');
+  const electronics = chips.filter({ hasText: '🔌' });
+  assert.equal(await electronics.textContent(), '🔌5/5');
+  assert.equal(await electronics.locator('svg').count(), 1, 'with a check');
+  await fits(page, 'the trip with its bag chips');
+  // Coming home, in the order the bags come: the hotel checklist first.
+  await page.click('text=Coming home');
+  assert.match(await chips.first().getAttribute('aria-label'), /^Leaving the hotel, 0 of 4 done$/);
+  // My list: icons alone, named for a screen reader.
+  await page.goto(base + '#/list');
+  await page.waitForSelector('.bag.edit');
+  assert.deepEqual(await chips.evaluateAll(cs => cs.map(c => [c.textContent, c.getAttribute('aria-label')])).then(x => x.slice(-3)), [['💼', 'Work bag'], ['🏠', 'Leaving the house'], ['🏨', 'Leaving the hotel']]);
+  await chips.last().click();
+  await atTop('Leaving the hotel');
+  await fits(page, 'My list with its bag chips');
+  await ctx.close();
+}
+
 // ================= Everything packed: one line =================
 // Once the moment after the last tick has passed, the bags fold into one line, and Hide done goes. Tapping the line
 // shows the bags; unticking something opens them, and the next time it's all packed they fold again.
