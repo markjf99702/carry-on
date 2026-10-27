@@ -328,15 +328,19 @@ function maybeWeather(t, force = false) {
 // what's on it now and what's off: "Reykjavík: Warm coat, Gloves and hat and Snow boots are on now; Sunscreen, Rain
 // jacket and Umbrella are off." When the change needs a new forecast (a new place or new dates), it waits for it, so
 // it says what the list settles on; leaving the trip meanwhile lets it go. Nothing changed, nothing's said.
-let change = null; // { id, before: [[thing's id, name], …] in the list's order }
+// While What this trip calls for is open, the page redraws under it after every tap there, so what changed waits
+// (held) until it closes, and says everything changed in it at once.
+let change = null; // { id, before: [[thing's id, name], …] in the list's order, held }
 const onList = t => { const p = R.plan(doc(), t, 'go'); return [...p.groups, ...p.tasks].flatMap(g => g.rows.map(r => [r.id, r.name])); };
 // Before a change: what's on the list. A change still waiting for its forecast keeps what was on it before that one.
-function watchChange(id) {
+function watchChange(id, { held = false } = {}) {
   const t = doc().trips[id];
   if (change?.id !== id) change = t ? { id, before: onList(t) } : null;
+  if (change) change.held = held;
 }
 function sayChange({ now = false } = {}) {
-  if (!change) return;
+  if (!change || (change.held && !now)) return;
+  change.held = false;
   const t = doc().trips[change.id];
   if (!t || M.gone(t)) { change = null; return; }
   if (!now) {
@@ -925,7 +929,7 @@ function extraSheet(t, bagId, { home = false } = {}) {
 // What the trip calls for: the occasions, how you're getting there, and the weather and place by hand. Opened from
 // a chip, at that one's row (at: its key), with the focus on its choice.
 function condSheet(id, at = '') {
-  watchChange(id);
+  watchChange(id, { held: true });
   const draw = () => {
     const t = doc().trips[id];
     const c = R.conditions(doc(), t);

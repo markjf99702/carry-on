@@ -962,12 +962,17 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   assert.ok(calls.slice(lookups).some(c => c.startsWith('forecast')), 'after the new forecast');
   assert.deepEqual(await toasts(), ['Reykjavík: Warm coat, Gloves and hat and Snow boots are on now; Sunscreen, Swimsuit, Sandals and 2 more are off.']);
   assert.ok(await row(page, 'Snow boots').count() && !(await row(page, 'Sunscreen').count()), 'as the list says');
-  // From What this trip calls for, on closing it.
+  // From What this trip calls for, on closing it, with everything changed there.
   await page.click('.needs .btn');
   await until(() => sheetOpen(page), 'the conditions sheet');
+  const said = (await toasts()).length;
   await page.locator('.sheet .chip', { hasText: /Working out$/ }).click();
+  await wait(300);
+  assert.equal((await toasts()).length, said, 'nothing said while the sheet is open');
+  await page.locator('.sheet .chip', { hasText: /Dressing up$/ }).click();
   await closeSheet(page);
-  assert.equal((await toasts()).at(-1), 'Reykjavík: Workout clothes is on now.');
+  // Said from the sheet's close event, which comes a moment after it's closed.
+  await until(async () => (await toasts()).at(-1) === 'Reykjavík: Workout clothes and Something dressy are on now.', 'what changed in the sheet, on closing it');
   // Nothing changed: nothing said.
   const n = (await toasts()).length;
   await page.click('[aria-label="Edit this trip"]');
