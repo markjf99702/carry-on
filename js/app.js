@@ -812,6 +812,15 @@ function itemSheet(t, r, mode, jobs) {
           } }, gone ? 'It’s coming back after all' : 'Not bringing it back'))];
     }
     const cur = t.marks?.['b:' + id]?.v || (r.extra ? t.extras[id].bag : doc().items[id]?.bag);
+    // Packed in the morning this trip, or with the rest: picked for this trip, unless it's what My list says anyway.
+    const lastNow = R.packedLast(doc(), t, id), byList = !r.extra && !!doc().items[id]?.last?.v;
+    const packLast = () => {
+      done();
+      const was = t.marks?.['l:' + id]?.v ?? null, b = doc().bags[cur];
+      apply(d => M.mark(d, t.id, 'l:' + id, !lastNow === byList ? null : !lastNow));
+      toast(lastNow ? `${r.name} is back in ${b ? theBag(b) : 'its bag'}.` : `${r.name} waits for the morning, with the last things out the door.`,
+        { label: 'Undo', run: () => apply(d => M.mark(d, t.id, 'l:' + id, was)) });
+    };
     // The bags coming on this trip, and the one it's in.
     const on = R.conditions(doc(), t).on;
     const bagsList = M.bags(doc()).filter(b => b.kind === 'bag' && (b.id === cur || R.bagComing(t, b, on)));
@@ -825,6 +834,7 @@ function itemSheet(t, r, mode, jobs) {
         r.extra
           ? h('button', { type: 'button', class: 'btn', onclick: () => { done(); apply(d => M.removeExtra(d, t.id, id)); toast(`${r.name} is off this trip.`, { label: 'Undo', run: () => apply(d => M.putExtra(d, t.id, { id: `${id}`, name: r.name, bag: cur })) }); } }, 'Take it off this trip')
           : h('button', { type: 'button', class: 'btn', onclick: () => { done(); apply(d => M.mark(d, t.id, 'x:' + id, 'skip')); toast(`${r.name} is off this trip.`, { label: 'Undo', run: () => apply(d => M.mark(d, t.id, 'x:' + id, pick || 0)) }); } }, 'Leave it off this trip'),
+        jobs ? null : h('button', { type: 'button', class: 'btn', onclick: packLast }, lastNow ? 'Pack it with the rest' : 'Pack it in the morning'),
         jobs ? null : h('label', { class: 'field' }, h('span', {}, 'Which bag, this trip'),
           h('select', {
             onpointerdown: () => { keyed = false; },

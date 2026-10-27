@@ -2183,6 +2183,27 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   await last.locator('.tick').click();
   assert.equal(await page.locator('.progress p').innerText(), `All packed but ${jobs} for the morning`);
   await fits(page, 'the trip with the last things out the door');
+  // For one trip, from a thing's ⋯: in the morning, or with the rest, and Undo.
+  const said = () => page.locator('#toast span').innerText();
+  await page.locator('main .bag', { has: page.locator('h2', { hasText: 'Electronics' }) }).locator('.bag-done').click();
+  await more(page, 'Headphones');
+  await page.click('#sheet >> text=Pack it in the morning');
+  assert.equal(await said(), 'Headphones waits for the morning, with the last things out the door.');
+  // Both packed already, so the group is folded: what's in it, from the trip itself.
+  const lastNames = () => page.evaluate(() => { const { store, R } = window.carryOn, t = Object.values(store.doc.trips)[0]; return R.plan(store.doc, t, 'go').last?.rows.map(r => r.name) || []; });
+  assert.equal(await last.locator('.bag-done').innerText(), 'All 2 packed · show');
+  assert.deepEqual(await lastNames(), ['Phone charger', 'Headphones']);
+  await last.locator('.bag-done').click();
+  await more(page, 'Phone charger');
+  await page.click('#sheet >> text=Pack it with the rest');
+  assert.equal(await said(), 'Phone charger is back in Electronics.');
+  assert.deepEqual(await lastNames(), ['Headphones']);
+  await toastUndo(page);
+  assert.deepEqual(await lastNames(), ['Phone charger', 'Headphones']);
+  // Only this trip: My list still has Headphones with the rest.
+  const marks = await page.evaluate(() => Object.values(window.carryOn.store.doc.trips)[0].marks);
+  assert.equal(marks['l:s-electronics-headphones'].v, true);
+  assert.equal(marks['l:s-electronics-phone-charger'].v, null, 'back to what My list says');
   await ctx.close();
 }
 
