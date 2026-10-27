@@ -269,12 +269,16 @@ function tagCard(t) {
 
 // A lookup that failed waits a minute before the next try, so a redraw doesn't ask again at once. One that worked
 // doesn't hold the next back: weather cleared since (the trip's dates changed on another phone, say) is looked up
-// again straight away.
-const wxBusy = {}, wxErr = {}, wxTried = {};
+// again straight away. But only once a minute (wxQuick): another phone whose clock runs ahead stamps what it saves
+// later than this phone's lookups, so its cleared weather, or its lookup of the trip's old place, wins every sync
+// until this clock catches up, and the trip would be looked up again every few seconds.
+const wxBusy = {}, wxErr = {}, wxTried = {}, wxQuick = {};
 function maybeWeather(t, force = false) {
   if (!t.place || t.place.lat === undefined || wxBusy[t.id]) return;
   if (!force && !W.stale(t.wx, t.start, t.end, today(), undefined, t.place)) return;
-  if (!force && wxErr[t.id] && Date.now() - (wxTried[t.id] || 0) < 60000) return;
+  const soon = Date.now() - (wxTried[t.id] || 0) < 60000;
+  if (!force && soon && (wxErr[t.id] || wxQuick[t.id])) return;
+  wxQuick[t.id] = !force && soon;
   wxTried[t.id] = Date.now();
   wxBusy[t.id] = W.tripWeather(t.place, t.start, t.end, today()).then(wx => {
     delete wxErr[t.id];

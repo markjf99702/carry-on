@@ -655,6 +655,15 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await page.evaluate(id => { const { store, M, render } = window.carryOn; store.apply(d => M.clearWx(d, id)); render(); }, id);
   assert.equal(await page.locator('.wx-days:not(.wait) li').count(), 0);
   await page.waitForSelector('.wx-days:not(.wait) li', { timeout: 5000 });
+  // But not over and over: weather that keeps coming back cleared (from a phone whose clock runs ahead, its stamps
+  // win every sync) waits a minute after that quick second lookup.
+  const asked = calls.length;
+  await page.evaluate(id => { const { store, M, render } = window.carryOn; store.apply(d => M.clearWx(d, id)); render(); }, id);
+  await wait(1500);
+  await page.evaluate(() => window.carryOn.render());
+  await wait(500);
+  assert.equal(calls.length, asked, 'no third lookup within the minute');
+  assert.equal(await page.locator('.wx-days:not(.wait) li').count(), 0);
   await ctx.close();
 }
 
