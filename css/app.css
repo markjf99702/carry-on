@@ -1,6 +1,5 @@
 /* Carry On. Fonts are served from here so nothing loads from elsewhere. */
 @font-face { font-family: 'Figtree'; src: url(../fonts/figtree.woff2) format('woff2'); font-weight: 400 700; font-display: swap; }
-@font-face { font-family: 'Barlow Condensed'; src: url(../fonts/barlow-condensed-600.woff2) format('woff2'); font-weight: 600; font-display: swap; }
 @font-face { font-family: 'Barlow Condensed'; src: url(../fonts/barlow-condensed-700.woff2) format('woff2'); font-weight: 700; font-display: swap; }
 
 :root {

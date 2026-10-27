@@ -317,6 +317,9 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await page.goto(base + '#/settings');
   await page.locator('.seg button', { hasText: '°C' }).click();
   await fits(page, 'settings');
+  // Every font face the page declares has been used by now: one that isn't would still be kept for offline use and
+  // built into the one-file copy.
+  assert.deepEqual(await page.evaluate(async () => { await document.fonts.ready; return [...document.fonts].filter(f => f.status !== 'loaded').map(f => `${f.family} ${f.weight}`); }), [], 'font faces never used');
   await page.goto(base + '#/trip/' + await page.evaluate(() => Object.values(window.carryOn.store.doc.trips).find(t => t.place?.cc === 'PT').id));
   assert.match(await page.locator('.wx-days:not(.wait)').innerText(), /2[6-8]°/, 'Celsius now');
 
@@ -1045,6 +1048,8 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   const backup = page.locator('.card', { has: page.locator('h2', { hasText: 'Backup' }) });
   assert.equal(await backup.locator('p').innerText(), 'Bring in a backup saved at carry-on.junkdrawer.works. This copy can’t save one; send your list as a link from My list instead.');
   assert.deepEqual(await backup.locator('.btn').allInnerTexts(), ['Restore from a backup']);
+  // Its two fonts are inside it, and both load.
+  assert.deepEqual(await page.evaluate(async () => { await document.fonts.ready; return [...document.fonts].map(f => `${f.family} ${f.weight} ${f.status}`).sort(); }), ['Barlow Condensed 700 loaded', 'Figtree 400 700 loaded']);
   await ctx.close();
 }
 
