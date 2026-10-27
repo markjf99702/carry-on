@@ -2206,6 +2206,13 @@ if (existsSync(join(root, 'node_modules', 'esbuild'))) {
   const marks = await page.evaluate(() => Object.values(window.carryOn.store.doc.trips)[0].marks);
   assert.equal(marks['l:s-electronics-headphones'].v, true);
   assert.equal(marks['l:s-electronics-phone-charger'].v, null, 'back to what My list says');
+  // Bought there, then packed after all: it says it's back with the last things out the door.
+  await more(page, 'Phone charger');
+  await page.click('#sheet >> text=Buy it there');
+  await wait(500);
+  await page.locator('main .aside').getByRole('button', { name: 'Pack it after all, Phone charger' }).click();
+  assert.equal(await said(), 'Phone charger is on the list, with the last things out the door.');
+  assert.deepEqual(await lastNames(), ['Phone charger', 'Headphones']);
   await ctx.close();
 }
 

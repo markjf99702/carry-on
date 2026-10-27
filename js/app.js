@@ -638,7 +638,9 @@ function saidWhere(t, id, name, mode, undo) {
   const p = R.plan(doc(), doc().trips[t.id], mode);
   const g = goingGroups(p).find(x => x.bag.id === id || x.rows.some(r => r.id === id));
   const still = !g && (p.left.find(l => l.item.id === id) || p.leftBags.find(l => l.bag.id === id));
-  toast(still ? `${name} is still off: ${still.why.charAt(0).toLowerCase() + still.why.slice(1)}.` : g && g.bag.id !== id ? `${name} is on the list, in ${theBag(g.bag)}.` : `${name} is on the list.`,
+  // Packed last, it's with the last things out the door rather than in a bag.
+  const where = g?.bag.id === R.LAST.id ? 'with the last things out the door' : g && `in ${theBag(g.bag)}`;
+  toast(still ? `${name} is still off: ${still.why.charAt(0).toLowerCase() + still.why.slice(1)}.` : g && g.bag.id !== id ? `${name} is on the list, ${where}.` : `${name} is on the list.`,
     { label: 'Undo', run: undo });
 }
 
