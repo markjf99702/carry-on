@@ -23,6 +23,7 @@ const TAG_ICONS = ['🏷️', '💼', '🏋️', '🏊', '👔', '🥾', '💍',
 // ---------- drawing ----------
 
 let current = '';
+let drawn = 0; // how many times the page has been drawn, for redraw()
 // What's been changed on Plan a trip, Edit trip or Go again but not saved yet. The page redraws underneath it
 // (back from another app, a forecast arriving, a sync landing, another tab saving), and the form is rebuilt from
 // this. It holds only what was changed, so the rest still follows the trip, and it goes when the screen changes,
@@ -40,6 +41,7 @@ let shownTrip = '', tripY = 0;
 try { history.scrollRestoration = 'manual'; } catch { /* the browser keeps its own */ }
 addEventListener('scroll', () => { if (shownTrip) tripY = scrollY; }, { passive: true });
 function render() {
+  drawn++;
   const hash = location.hash || '#/';
   if (hash.startsWith('#list=')) { takeLink(hash.slice(6)); return; }
   // Back to a trip that Delete stepped back to: it goes, and Trips takes its place.
@@ -260,10 +262,20 @@ function maybeWeather(t, force = false) {
 
 // A redraw that comes on its own (a forecast arriving, a sync landing, another tab saving). On a trip scrolled down
 // to its list, the row in the middle of the screen stays where it is: the forecast's days, chips and rows appearing
-// above would otherwise push the list down under a tap that's on its way.
+// above would otherwise push the list down under a tap that's on its way. It waits for the next frame, so ten
+// forecasts landing together draw the page once, and if a tap has drawn it since, with what's new, it isn't drawn
+// again. A tap's own redraw comes at once.
+let redrawSoon = false;
 function redraw() {
-  if (document.body.dataset.page === 'trip' && scrollY > 0) holdStill(innerHeight / 2, render);
-  else render();
+  if (redrawSoon) return;
+  redrawSoon = true;
+  const at = drawn;
+  requestAnimationFrame(() => {
+    redrawSoon = false;
+    if (drawn !== at) return;
+    if (document.body.dataset.page === 'trip' && scrollY > 0) holdStill(innerHeight / 2, render);
+    else render();
+  });
 }
 
 const ago = t => {

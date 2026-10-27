@@ -943,6 +943,7 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
     const was = await saved();
     await other.evaluate(fn, arg);
     await until(async () => (await saved()) !== was, 'the other tab’s change');
+    await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))); // drawn on the next frame
   };
   const redraws = async () => {
     await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
@@ -1002,6 +1003,16 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await elsewhere(id => window.carryOn.store.apply(d => window.carryOn.M.removeTrip(d, id)), id);
   assert.match(await page.locator('main h1').innerText(), /That trip isn’t here/i);
   assert.ok(await page.evaluate(id => window.carryOn.M.gone(window.carryOn.store.doc.trips[id]), id));
+  // Several saves from elsewhere at once (or forecasts landing together) draw the page once, on the next frame.
+  assert.equal(await page.evaluate(async () => {
+    let n = 0;
+    const seen = new MutationObserver(changes => { n += changes.length; });
+    seen.observe(document.getElementById('app'), { childList: true });
+    for (let i = 0; i < 5; i++) window.dispatchEvent(new StorageEvent('storage', { key: 'carry-on' }));
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    seen.disconnect();
+    return n;
+  }), 1, 'five saves elsewhere, drawn once');
 
   // My list: half-typed into a bag's add box.
   await page.goto(base + '#/list');

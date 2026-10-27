@@ -6,7 +6,7 @@ export function h(tag, props, ...kids) {
   for (const [k, v] of Object.entries(props || {})) {
     if (v === null || v === undefined || v === false) continue;
     if (k === 'class') el.setAttribute('class', v);
-    else if (k === 'html') el.innerHTML = v;
+    else if (k === 'html') { const icon = iconCopy(v); if (icon) el.append(icon); else el.innerHTML = v; }
     else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2), v);
     else if (k === 'value' || k === 'checked' || k === 'selected' || k === 'indeterminate') el[k] = v;
     else if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
@@ -37,6 +37,14 @@ export const ICONS = {
   down: icon('<path d="M6 9l6 6 6-6"/>', 'stroke-width="2.4"'),
   close: icon('<path d="M6 6l12 12M18 6L6 18"/>', 'stroke-width="2.4"'),
 };
+// A trip draws a tick and a ⋯ for every row, every time: each icon is read from its text once, and copied after that.
+const iconsRead = new Map(Object.values(ICONS).map(v => [v, null]));
+function iconCopy(v) {
+  if (!iconsRead.has(v)) return null;
+  let t = iconsRead.get(v);
+  if (!t) { t = document.createElement('template'); t.innerHTML = v; iconsRead.set(v, t); }
+  return t.content.cloneNode(true);
+}
 
 // ---------- toast ----------
 // It goes after a few seconds, or about eight with an Undo, but waits while the pointer is on it or it has the
