@@ -304,14 +304,22 @@ function weatherStrip(t, c) {
   const fc = days.some(d => !d.typ), ty = days.some(d => d.typ);
   const label = !days.length ? 'Weather' : fc && ty ? 'Forecast, then typical' : fc ? 'Forecast' : 'Typical weather';
   const u = c.units;
-  // Each day as a sentence for a screen reader, in place of the short words and numbers shown: "Friday: rain, high
-  // 81°, low 63°, 70% chance of rain"; "Saturday, typical for these dates: often wet, high 64°, low 52°".
-  // A forecast's chance is of rain or snow (Open-Meteo's chance of precipitation): on a snow day, it's snow.
+  // Each day as a sentence for a screen reader, in place of the short words and numbers shown: "Friday, October 30:
+  // rain, high 81°, low 63°, 70% chance of rain"; "Saturday, October 31, typical for these dates: often wet, high
+  // 64°, low 52°". A forecast's chance is of rain or snow (Open-Meteo's chance of precipitation): on a snow day, it's
+  // snow.
   const chanceOf = d => (W.snowCode(d.code) ? 'snow' : 'rain');
   const said = d => {
     const words = W.dayWords(d), wet = d.typ ? (d.wet >= 0.3 ? `rain in ${Math.round(d.wet * 100)}% of recent years` : '') : d.pop >= 30 ? `${d.pop}% chance of ${chanceOf(d)}` : '';
-    return `${D.weekdayLong(d.d)}${d.typ ? ', typical for these dates' : ''}: ${[words, `high ${W.temp(d.hi, u)}`, `low ${W.temp(d.lo, u)}`, wet].filter(Boolean).join(', ')}`;
+    return `${D.dayLong(d.d)}${d.typ ? ', typical for these dates' : ''}: ${[words, `high ${W.temp(d.hi, u)}`, `low ${W.temp(d.lo, u)}`, wet].filter(Boolean).join(', ')}`;
   };
+  // Each day's weekday, and on a trip of more than a week, where a weekday comes round again, its date under it: "MON"
+  // over "2", the first day and each 1st of the month with the month, "NOV 1".
+  const dated = D.nights(t.start, t.end) > 6;
+  const dayHead = (k, i) => [
+    h('span', { class: 'wd', 'aria-hidden': 'true' }, D.weekday(k)),
+    dated ? h('span', { class: 'dm', 'aria-hidden': 'true' }, i === 0 || k.endsWith('-01') ? D.short(k) : String(+k.slice(8))) : null,
+  ];
   // What the blue % means, which is different on typical days.
   const fcPct = days.filter(d => !d.typ && d.pop >= 30), pctTy = days.some(d => d.typ && d.wet >= 0.3);
   const of = [...new Set(fcPct.map(chanceOf))].sort().join(' or ');
@@ -334,11 +342,11 @@ function weatherStrip(t, c) {
     err ? h('p', { class: days.length ? 'muted small' : 'err small' }, navigator.onLine === false ? 'No connection right now. The forecast comes in when you’re back online.' : err, ' ', days.length ? 'Showing the last lookup.' : 'You can set the weather by hand under Change.') : null,
     // While the first lookup is on its way, the days' room is kept, so they don't push everything down when they come,
     // with a faint tile for each day (as far as the forecast reaches) waiting for its numbers.
-    !days.length && busy ? h('ol', { class: 'wx-days wait', 'aria-hidden': 'true' }, D.range(t.start, t.end).slice(0, W.AHEAD + 1).map(k => h('li', { class: 'typ' },
-      h('span', { class: 'wd' }, D.weekday(k)), h('span', { class: 'wi' }, '\u00a0'), h('span', { class: 'hi' }, '…'), h('span', { class: 'lo' }, '…'), h('span', { class: 'rp' })))) : null,
-    days.length ? h('ol', { class: 'wx-days', 'aria-labelledby': 'wxHead' }, days.map(d => h('li', { class: d.typ ? 'typ' : '' },
+    !days.length && busy ? h('ol', { class: 'wx-days wait', 'aria-hidden': 'true' }, D.range(t.start, t.end).slice(0, W.AHEAD + 1).map((k, i) => h('li', { class: 'typ' },
+      dayHead(k, i), h('span', { class: 'wi' }, '\u00a0'), h('span', { class: 'hi' }, '…'), h('span', { class: 'lo' }, '…'), h('span', { class: 'rp' })))) : null,
+    days.length ? h('ol', { class: 'wx-days', 'aria-labelledby': 'wxHead' }, days.map((d, i) => h('li', { class: d.typ ? 'typ' : '' },
       h('span', { class: 'sr-only' }, said(d)),
-      h('span', { class: 'wd', 'aria-hidden': 'true' }, D.weekday(d.d)),
+      dayHead(d.d, i),
       h('span', { class: 'wi', 'aria-hidden': 'true' }, W.dayIcon(d)),
       h('span', { class: 'hi', 'aria-hidden': 'true' }, W.temp(d.hi, u)),
       h('span', { class: 'lo', 'aria-hidden': 'true' }, W.temp(d.lo, u)),

@@ -1,7 +1,7 @@
 // What a trip needs: which conditions apply to it, and so which bags and things go on its list.
 // No page code, so the tests run it in Node.
 import * as M from './model.js';
-import { nights, weekday } from './days.js';
+import { nights, weekday, num } from './days.js';
 import { summarize, temp, tripDays, LIMITS } from './weather.js';
 import { plugsFor, plugText, countryName, localCountry } from './plugs.js';
 
@@ -37,10 +37,12 @@ const FAHRENHEIT = ['US', 'PR', 'GU', 'VI', 'AS', 'MP', 'PW', 'FM', 'MH', 'KY', 
 export const units = doc => M.pref(doc, 'units', '') || (FAHRENHEIT.includes(home(doc)) ? 'F' : 'C');
 export const laundry = doc => M.pref(doc, 'laundry', 7);
 
-// "Thu, Fri and Sat"; more than three days becomes "on 5 days".
+// "Thu, Fri and Sat"; more than three days becomes "on 5 days". Days more than a week apart have their dates, as
+// a weekday alone could be either of two: "Mon 2 and Mon 9".
 function dayList(list) {
   if (list.length > 3) return `on ${list.length} days`;
-  const names = list.map(weekday);
+  const dated = num(list.at(-1)) - num(list[0]) > 6;
+  const names = list.map(k => (dated ? `${weekday(k)} ${+k.slice(8)}` : weekday(k)));
   return names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
 }
 

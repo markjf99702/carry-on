@@ -103,8 +103,9 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   assert.equal(await page.locator('.wx-head h2').innerText(), 'FORECAST');
   // A screen reader hears each day as a sentence, and the short words and numbers shown are hidden from it.
   const wet = page.locator('.wx-days:not(.wait) li').nth(1);
-  assert.match(await wet.locator('.sr-only').textContent(), /^[A-Z][a-z]+day: rain, high \d+°, low \d+°, 70% chance of rain$/);
+  assert.match(await wet.locator('.sr-only').textContent(), /^[A-Z][a-z]+day, [A-Z][a-z]+ \d+: rain, high \d+°, low \d+°, 70% chance of rain$/);
   assert.equal(await wet.locator('[aria-hidden="true"]').count(), 5);
+  assert.equal(await page.locator('.wx-days .dm').count(), 0, 'a short trip: weekdays alone');
   assert.match(await page.locator('.wx').innerText(), /Blue % is the chance of rain\./);
   let names = await rowsText(page);
   for (const n of ['Passport', 'Plug adapter', 'Umbrella', 'Rain jacket', 'Swimsuit', 'Sunscreen', 'Badge', 'Toothbrush', 'Eye mask and earplugs']) assert.ok(names.includes(n), `${n} is on the list`);
@@ -260,7 +261,7 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await planTrip(page, { where: 'Reyk', from: 40, to: 43, by: 'Flying' });
   await page.waitForSelector('.wx-days:not(.wait) li.typ');
   assert.equal(await page.locator('.wx-head h2').innerText(), 'TYPICAL WEATHER');
-  assert.match(await page.locator('.wx-days:not(.wait) li .sr-only').first().textContent(), /^[A-Z][a-z]+day, typical for these dates: snowy, high \d+°, low -?\d+°/);
+  assert.match(await page.locator('.wx-days:not(.wait) li .sr-only').first().textContent(), /^[A-Z][a-z]+day, [A-Z][a-z]+ \d+, typical for these dates: snowy, high \d+°, low -?\d+°/);
   assert.match(await page.locator('.wx').innerText(), /Blue % is how many recent years had rain that day\./);
   assert.equal(calls.filter(c => c.startsWith('archive')).length, 3, 'three past years');
   names = await rowsText(page);
@@ -598,6 +599,10 @@ async function planTrip(page, { where, pick = 0, from, to, by = 'Flying', on = [
   await fits(page, 'a trip with ten days of weather');
   assert.match(await page.locator('.wx-days:not(.wait) li .sr-only').first().textContent(), /: snow, high \d+°, low -?\d+°, 40% chance of snow$/);
   assert.match(await page.locator('.wx').innerText(), /Blue % is the chance of snow\./);
+  // More than a week: each day has its date under its weekday, the first and each 1st of the month with the month.
+  const dates = await page.evaluate(() => { const { D } = window.carryOn, a = D.add(D.today(), 2); return D.range(a, D.add(a, 9)).map((k, i) => (i === 0 || k.endsWith('-01') ? D.short(k).toUpperCase() : String(+k.slice(8)))); });
+  assert.deepEqual(await page.locator('.wx-days:not(.wait) li .dm').allInnerTexts(), dates);
+  assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('.wx-days')).overscrollBehaviorX), 'contain', 'a swipe at its end stays in the strip');
   await ctx.close();
 }
 

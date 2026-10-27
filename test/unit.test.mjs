@@ -9,7 +9,7 @@ import { plugsFor, plugText, localCountry } from '../js/plugs.js';
 import { parsePaste, encodeList, decodeList, guess, bagIcon, bagKind } from '../js/share.js';
 import { starterList } from '../js/starter.js';
 import { store } from '../js/store.js'; // in Node there's no localStorage, so it keeps the doc in memory only
-import { add, span, yearsBack, range, weekday, short, long } from '../js/days.js';
+import { add, span, yearsBack, range, weekday, short, long, dayLong } from '../js/days.js';
 
 const T = '2026-11-02';
 const starter = () => M.startWith(M.blankDoc(), starterList());
@@ -127,6 +127,11 @@ test('the reasons say what the rules saw', () => {
   assert.equal(why([day('2026-11-02', 15, 8, { pop: 20, mm: 4 }), day('2026-11-03', 15, 8, { pop: 10 })]).rain, 'Rain forecast Mon');
   assert.equal(why([day('2026-11-02', 15, 8, { pop: 70, mm: 4 }), day('2026-11-03', 15, 8, { pop: 20, mm: 5 })]).rain, 'Rain forecast Mon and Tue');
   assert.equal(why([day('2026-11-02', 15, 8, { pop: 70, mm: 4 }), day('2026-11-03', 15, 8, { pop: 60 })]).rain, 'Rain likely Mon and Tue');
+  // Over more than a week a weekday could be either of two, so it has its date: two weeks from Sun 1 Nov.
+  const wet = d => (d === '2026-11-02' || d === '2026-11-09' ? { pop: 70, mm: 4 } : {});
+  assert.equal(why(range('2026-11-01', '2026-11-15').map(d => day(d, 15, 8, wet(d)))).rain, 'Rain likely Mon 2 and Mon 9');
+  assert.equal(why(range('2026-11-01', '2026-11-15').map(d => day(d, 15, 8, d === '2026-11-02' || d === '2026-11-08' ? { pop: 70 } : {}))).rain, 'Rain likely Mon and Sun', 'a week or less: weekdays alone');
+  assert.equal(why(range('2026-11-01', '2026-11-15').map(d => day(d, 15, 8, d < '2026-11-05' ? { pop: 70 } : {}))).rain, 'Rain likely on 4 days');
   // Typical weather that's wet or snowy nearly every day.
   assert.equal(why([typ('2027-01-10', -2, -8, { wet: 0.9, sn: 0.95 })]).rain, 'Rain most days this time of year');
   assert.equal(why([typ('2027-01-10', -2, -8, { wet: 0.9, sn: 0.95 })]).snow, 'Snow most days this time of year');
@@ -579,6 +584,7 @@ test('days: the same words as toLocaleDateString, a year of days', () => {
     assert.equal(weekday(k), was(k, { weekday: 'short' }));
     assert.equal(short(k), was(k, { month: 'short', day: 'numeric' }));
     assert.equal(long(k), was(k, { weekday: 'short', month: 'short', day: 'numeric' }));
+    assert.equal(dayLong(k), was(k, { weekday: 'long', month: 'long', day: 'numeric' }));
     assert.equal(span(k, add(k, 400), '2026'), `${was(k, { month: 'short', day: 'numeric', year: 'numeric' })} – ${was(add(k, 400), { month: 'short', day: 'numeric', year: 'numeric' })}`);
   }
 });
